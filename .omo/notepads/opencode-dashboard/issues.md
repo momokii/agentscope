@@ -333,3 +333,7 @@
 - Read-only audit confirmed: 5/5 commits in order, branch main, tree clean open+close, 5/5 ignore checks, zero secret hits, .gitignore intent matches behavior.
 - Cross-checked against orchestrator's own earlier git verification — agreement on all points. No files changed (read-only by design), nothing to commit.
 - Subagent path fully operational after the earlier OAuth/usage-limit outages.
+## 2026-10-24 DEPLOY BLOCKER: healthy-but-unreachable (bridge netns vs container-lo bind)
+- Deploy worker proved with 3-point evidence: published-port curl → RST; container-eth0 → refused; in-netns lo → 200. Root cause: server binds container-lo 127.0.0.1:8080 in a BRIDGE netns; DNAT targets container eth0 IP; in-netns HEALTHCHECK blind to it. W4-1's host-path proof was void (sandbox-blocked curl misread).
+- Orchestrator decision: host network mode (network_mode: host, drop ports:, PORT flows through as actual listen port). Rejected: 0.0.0.0-in-container (weakens assertLoopback invariant, needs env-override machinery the codebase bans). pid:host precedent supports it; exposure boundary unchanged (nothing off-loot except via tailscale serve).
+- Fix re-dispatched to same session (ses_e90b34799...): compose + Dockerfile comments + 3 docs + deploy.sh + README + FULL live proof incl. screen endpoint + suites green.
