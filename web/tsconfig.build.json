@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src"],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/testutils/**",
+    "vitest.config.ts",
+    "vite.config.ts"
+  ],
+  "compilerOptions": {
+    "declarationMap": false,
+    "sourceMap": false
+  }
+}

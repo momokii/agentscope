@@ -1,0 +1,29 @@
+{
+  "name": "opencode-dashboard-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Embedded SPA for opencode mission control (Wave 2: fleet UI). W2-3 ships transport-only sse.ts; views land in W2-1/W2-2.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview --port 18082",
+    "test": "vitest run",
+    "lint": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "jsdom": "^30.1.3",
+    "typescript": "5.6.3",
+    "vite": "^6.4.5",
+    "vitest": "3.2.4"
+  },
+  "dependencies": {
+    "lucide-react": "^1.61.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}

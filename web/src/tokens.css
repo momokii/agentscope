@@ -1,0 +1,92 @@
+/**
+ * Token contract — opencode mission control (DESIGN.md section 2, verbatim).
+ *
+ * TRACEABILITY RULE (binding): this is the ONLY file under web/src permitted
+ * to contain 6-digit hex literals. Every other stylesheet/module consumes
+ * these tokens via var(). Wave gate:
+ *   grep -rE '#[0-9a-f]{6}' web/src --include='*.css' --include='*.tsx' --include='*.ts' | grep -v 'src/tokens.css'
+ * must return empty.
+ */
+:root {
+  /* ONE neutral ink ramp (zinc-flavored, cool) — 8 steps */
+  --ink-950: #0a0c10; /* app background (near-black) */
+  --ink-900: #11141a; /* panel background (fleet table, CmdBar, inspector rail) */
+  --ink-800: #1a1f28; /* raised surface (cards, chips, kbd, table header) */
+  --ink-700: #2a313d; /* hover wash base, chart track, ProgressCircle track */
+  --ink-600: #3f4756; /* hairline borders, 1px, all tables/cards/rails */
+  --ink-400: #8b94a3; /* secondary text, footer keymap, axis ticks */
+  --ink-200: #d4d9e0; /* primary text */
+  --ink-100: #f0f3f7; /* emphasized text, KPI values, chart stacked segment */
+
+  /* ONE accent (cyan) */
+  --accent: #22d3ee; /* active/running emphasis, cost series, LIVE-on, links */
+
+  /* Semantic set — fixed meanings, do not reassign */
+  --ok: #34d399; /* healthy / idle-ok */
+  --warn: #fbbf24; /* waiting-input / stale */
+  --err: #f87171; /* error */
+  --run: var(--accent); /* running / active — resolves to the single accent */
+  --mute: #71717a; /* archived / paused chrome */
+}
+
+:root {
+  /* Tonal state washes: color-mix over transparent, never a second literal */
+  --wash-run: color-mix(in oklch, var(--run) 14%, transparent);
+  --wash-ok: color-mix(in oklch, var(--ok) 14%, transparent);
+  --wash-warn: color-mix(in oklch, var(--warn) 14%, transparent);
+  --wash-err: color-mix(in oklch, var(--err) 14%, transparent);
+  --wash-mute: color-mix(in oklch, var(--mute) 16%, transparent);
+  --wash-accent: color-mix(in oklch, var(--accent) 12%, transparent);
+
+  /* Type */
+  --font-mono: "JetBrains Mono", "IBM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: "Geist", "Geist Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --tnum: tabular-nums; /* apply via font-variant-numeric on ALL --font-mono data text */
+
+  /* Type scale (px) — titles capped at 20 */
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-24: 24px; /* reserved: single oversized fleet-total figure ONLY, never section titles */
+  --fs-table: var(--fs-12);
+  --lh-table: 16px;
+  --label-tracking: 0.08em; /* stat-card / badge labels: 11px uppercase + this tracking */
+
+  /* Spacing & rhythm (4px base) */
+  --space-base: 4px;
+  --gap: 12px; /* the single grid gap */
+  --row-fleet: 32px; /* fleet row height */
+  --row-dense: 28px; /* dense tables, ticker rows */
+  --spark-w: 72px; /* inline sparkline width */
+  --spark-h: 24px; /* inline sparkline height, never full charts in rows */
+
+  /* Borders & radius */
+  --border: 1px solid var(--ink-600);
+  --radius-table: 0;
+  --radius-card: 6px;
+  --radius-chip: 4px;
+
+  /* Focus (only permitted colored edge) */
+  --focus-ring: 0 0 0 2px var(--ink-950), 0 0 0 4px var(--accent);
+
+  /* Motion */
+  --dur-fast: 150ms; /* ceiling for ALL transitions */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Warn-tone text utility (DESIGN §6/§8: waiting-input/stale, NEAR LIMIT chip).
+   No hex — consumes var(--warn), so the traceability gate still passes. */
+.tok-warn { color: var(--warn); }
+
+/* Motion rule (DESIGN section 7): reduced motion disables the running-pulse,
+   SSE-dot pulse, and all transitions. Static state colors remain. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none;
+    transition: none;
+  }
+}
