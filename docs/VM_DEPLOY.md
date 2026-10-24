@@ -34,12 +34,14 @@ Also record once (TO-RUN-on-VM): `go version` (want `go1.27.x` — matches
 `Dockerfile` `golang:1.27.3-bookworm` and `go.mod`) and `ls
 ~/.local/share/opencode/opencode.db` (must exist; the actual data dir).
 
-**VERIFIED-here** (quoted from W4-1, do not re-tune): image
-`opencode-dashboard:0.1.0`; `pid: "host"`; `restart: unless-stopped`;
-container `PORT` fixed at `"8080"` (`EXPOSE 8080`, `HEALTHCHECK …
-CMD ["/app/dashboard", "-healthcheck"]`, healthcheck `interval: 30s,
-timeout: 5s, retries: 3, start_period: 15s`); publish
-`"127.0.0.1:${PORT:-8080}:8080"`; mounts
+**VERIFIED-here** (quoted from the host-network revision, do not re-tune):
+image `opencode-dashboard:0.1.0`; `network_mode: "host"` (NO `ports:`
+stanza — the bridge-publish model is SUPERSEDED, see
+`docs/DOCKER_VERIFY.md` header); `pid: "host"`; `restart: unless-stopped`;
+`PORT: "${PORT:-8080}"` (host mode: the ACTUAL listen port on host
+loopback, no mapping); healthcheck
+`CMD ["/app/dashboard", "-healthcheck"]`, `interval: 30s, timeout: 5s,
+retries: 3, start_period: 15s`; mounts
 `${HOME:-/home/hostuser}/.local/share/opencode:/data/opencode:ro`,
 `${HOME:-/home/hostuser}/.cache/zellij:/data/zellij-cache:ro`,
 `/run/user/${UID:-1000}/zellij:/run/user/${UID:-1000}/zellij:ro`;
@@ -55,10 +57,13 @@ Full proof log: `docs/DOCKER_VERIFY.md`.
   export UID                # re-exports bash's readonly $UID (equals `id -u`); do NOT assign it
   export GID="$(id -g)"     # GID is not special — set it explicitly (P2)
   export HOME="$HOME"       # expands the ${HOME:-/home/hostuser} volume sources to YOUR home
-  export PORT=18081         # host-side port. 8080 was squatted on the laptop dev host;
-                            # the same may apply here — any free 18xxx works. Container side stays 8080.
-  docker compose config     # VERIFIED-here shape; TO-RUN: must exit 0 and show pid: host,
-                            # 127.0.0.1:18081->8080, the three :ro mounts, the -healthcheck test
+   export PORT=18081         # THE listen port (host mode: the binary binds host
+                             # 127.0.0.1:$PORT directly — no container/host split).
+                             # 8080 was squatted on the laptop dev host;
+                             # the same may apply here — any free 18xxx works.
+   docker compose config     # VERIFIED-here shape; TO-RUN: must exit 0 and show network_mode: host,
+                             # pid: host, NO ports: stanza, PORT: "18081", the three :ro mounts,
+                             # the -healthcheck test
   ```
 - [ ] **D2. Bring it up and wait out the warm-up.**
   ```bash
@@ -84,11 +89,12 @@ Full proof log: `docs/DOCKER_VERIFY.md`.
   # empty sessions array is FINE on a host with no opencode sessions yet
   ```
 - [ ] **D6. Loopback-only proof (paste both lines).**
-  ```bash
-  ss -tlnp | grep $PORT
-  # want:  tcp  LISTEN  0  4096  127.0.0.1:18081  0.0.0.0:*  users:(...)
-  # and NO line with 0.0.0.0:18081 — compose publishes 127.0.0.1 ONLY (SECURITY.md §4)
-  ```
+   ```bash
+   ss -tlnp | grep $PORT
+   # want:  tcp  LISTEN  0  4096  127.0.0.1:18081  0.0.0.0:*  users:(("dashboard",...))
+   # (host mode: the dashboard binary itself holds host loopback — NO docker-proxy line)
+   # and NO line with 0.0.0.0:18081 — compose has no ports: stanza (SECURITY.md §4)
+   ```
 - [ ] **D7 (optional). Gate with Basic auth.** `docs/SECURITY.md` §3 owns
   this: `export DASHBOARD_AUTH='user:pass'` (split on the FIRST colon)
   before `up` (or add to compose `environment:` + `up` again). Empty/unset
@@ -175,7 +181,7 @@ available"}`).
 |---|---|---|
 | Blind dashboard (fleet empty / zero panes despite live sessions) | 1. `id -u` vs `docker exec <ctr> id -u` (must match; sockets 0700) 2. `echo $XDG_RUNTIME_DIR` vs `docker exec <ctr> printenv XDG_RUNTIME_DIR` (path parity; socket source must equal) 3. host `zellij --version` major vs image `docker exec <ctr> zellij --version` major (both `0`; socket dir `contract_version_1` is version-sensitive) 4. `ls $XDG_RUNTIME_DIR/zellij/contract_version_1/` (live names = liveness signal #1) | UID/XDG/major skew or wrong socket-dir mount. Any mismatch → `docker compose down`, fix env, `up -d --build` again. If majors differ, rebuild with matching `ZELLIJ_VERSION`. Startup FATALs for the loud cases: `DATA_DIR … unreadable … UID parity …`, `opencode.db missing at … mount the parent opencode/ dir …`, `zellij binary not found in PATH … blind to panes`, `XDG_RUNTIME_DIR is empty …` (§0 table) |
 | Stale frames (`stale:true` persists, old data) | `docker inspect <ctr> --format '{{json .Mounts}}'` (want ONLY the §0 allowlist mounts, every one `:ro`); confirm the opencode mount is the **parent dir** (`…/opencode:/data/opencode:ro`), NOT the bare `opencode.db` file (else `-wal`/`-shm` sidecars are hidden → blind-but-healthy staleness, compose header WAL decision) | WAL sidecars invisible, or DB-budget pressure: the dev host DB hit **8.2 GB** (1953 sessions) where full `part.data LIKE` scans exceed 60 s — queries must stay indexed/sliced per `internal/db` allowlist (plan data strategy rule 5). Never fix by widening mounts. |
-| Port taken (`address already in use`) | `ss -tlnp \| grep <PORT>` (find the squatter) | Host-side variance only: pick another free 18xxx (`PORT=18082 docker compose up -d --build`). Container side stays `8080` — never change it. (The laptop's own 8080 was squatted; same may apply on the VM.) |
+| Port taken (`address already in use`) | `ss -tlnp \| grep <PORT>` (find the squatter) | No variance split in host mode: the listen port IS `$PORT` — pick another free 18xxx (`PORT=18082 docker compose up -d --build`). (The laptop's own 8080 was squatted; same may apply on the VM.) |
 | Screen 503 (`GET /api/sessions/:id/screen` → 503) | Expected pre-drill-down or wiring fault | 503 = `SetScreenSource` never wired (nil backend serves 503 `screen-unavailable`, `internal/hub/screen.go`); in this binary `main.go` wires `srv.SetScreenSource(source)` — a 503 here means the build predates wiring or the route hit an unwired test server. Orphan panes instead return **409** DB-only (not 503) — see T4. |
 
 ## 5. Teardown (TO-RUN-on-VM)

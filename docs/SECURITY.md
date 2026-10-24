@@ -58,8 +58,14 @@ request bodies, or any other input.
    override by design. `hub.Server.Run` listens on `cfg.Addr()` only.
    `grep -rn '0\.0\.0\.0' --include='*.go' internal/` must show only
    comments/tests asserting its absence.
-2. **Compose publish:** `ports: ["127.0.0.1:PORT:PORT"]` — never `0.0.0.0`
-   (W4-1 owns the file; this row is the review gate).
+2. **No published ports to misconfigure:** compose sets
+   `network_mode: "host"` and carries NO `ports:` stanza (ignored under
+   host mode — its absence is the review gate). The 127.0.0.1 bind lands
+   on host loopback with no NAT hop, so there is no publish line that
+   could ever read `0.0.0.0`. Proof: `docker compose config` shows
+   `network_mode: host` and no `ports:`; `ss -tlnp | grep $PORT` shows
+   the dashboard binary itself on `127.0.0.1:$PORT` with no
+   `docker-proxy` line.
 3. **Tailnet exposure:** `tailscale serve` fronts localhost. **`funnel`
    (public internet) is banned.** Rationale: Basic auth is base64
    (reversible, not encryption) and tailnet identity/ACLs are the actual
@@ -90,6 +96,21 @@ owners/admins; adjust to your tailnet):
 With `DASHBOARD_AUTH` set, a tailnet peer still passes the browser Basic
 prompt (§6) — ACLs and the gate are independent layers; either may be
 the tighter one.
+
+Deliberate trade (stated, not hidden): the container shares the host
+network namespace. This extends the already-accepted `pid: "host"` pattern
+(research-runtime-observability §4) for a monitoring agent that already
+joins host PID and `:ro` host mounts — the blast-radius delta is nil
+beyond what those grants imply, and it removes the NAT hop that made the
+service unreachable.
+
+Rejected alternative (recorded, do NOT implement): binding `0.0.0.0`
+inside a bridge-netns container. It would weaken the in-code
+`assertLoopback` invariant (`cmd/dashboard/selfcheck.go`) and require
+`BIND_ADDR`-style env-override machinery the codebase deliberately bans
+(no env override by design); a future refactor could then silently expose
+the dashboard. Host mode keeps every loopback guarantee intact with zero
+code changes.
 
 ## 5. Security Gate checklist (reviewer runs verbatim)
 
@@ -139,9 +160,11 @@ docker inspect <container> --format '{{json .Mounts}}' | python3 -m json.tool
 docker history --no-trunc <image> | grep -i 'auth\|pass\|secret\|token\|credential'
 # EXPECTED: (no output) exit 1
 
-# 8. Loopback-only publish + refused from 0.0.0.0
-docker port <container>
-# EXPECTED: 127.0.0.1:PORT->PORT/tcp (never 0.0.0.0)
+# 8. Loopback-only listen, no publish to misconfigure (host mode)
+docker compose config | grep -E 'network_mode|ports:'
+# EXPECTED: `network_mode: host` — and NO `ports:` line (grep finds only the network_mode hit)
+ss -tlnp | grep $PORT
+# EXPECTED: one 127.0.0.1:$PORT line owned by the dashboard binary, NO docker-proxy line, NO 0.0.0.0:$PORT line
 curl -s --max-time 5 http://127.0.0.1:$PORT/api/healthz
 # EXPECTED: {"healthy":true,...}
 ```

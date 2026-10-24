@@ -40,8 +40,9 @@ FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/dashboard /app/dashboard
 COPY --from=zellij-fetch /tmp/zellij /usr/local/bin/zellij
 ENV PATH="/usr/local/bin:${PATH}"
-# EXPOSE is documentation only: the actual publish (127.0.0.1-bound) happens
-# in docker-compose.yml ports. Never publish this port on 0.0.0.0.
+# EXPOSE is documentation only: under network_mode: host the binary binds
+# host 127.0.0.1:$PORT directly (PORT env, default 8080) — no publish step
+# exists to misconfigure. Never listen on 0.0.0.0 (asserted in-code).
 EXPOSE 8080
 ENTRYPOINT ["/app/dashboard"]
 # Exec-form HEALTHCHECK (no shell in distroless): the binary probes its own

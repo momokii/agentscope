@@ -26,8 +26,14 @@
 # read-only; abort/resurrect are deferred to a later wave — see
 # docs/ACTIONS_DEFERRED.md).
 #
-# Network: 127.0.0.1 ONLY on both ends (Go asserts loopback at startup and
-# refuses anything else; publish below binds the host side to 127.0.0.1).
+# Network: HOST mode (network_mode: "host") — the Go binary binds 127.0.0.1
+# (asserted in-code at startup, never 0.0.0.0), which in the host netns IS
+# host loopback. There is NO publish/NAT hop: the old
+# "127.0.0.1:${PORT:-8080}:8080" bridge-publish model is SUPERSEDED —
+# bridge DNAT targets the container eth0 IP, which a container-loopback
+# bind never answers ("healthy but unreachable": green in-netns
+# healthcheck, RST from the host). Host mode removes the NAT hop entirely.
+# Exposure boundary unchanged: nothing listens on non-loopback.
 # Tailnet exposure is via `tailscale serve <port>` — `funnel` is BANNED
 # (public internet). Optional basic-auth + tailnet ACLs are W4-2's.
 
@@ -38,6 +44,12 @@ services:
     # Share the host PID namespace: /proc/<pid> liveness reads host PIDs 1:1
     # (Netdata pattern). Lets the runtime join see host opencode procs.
     pid: "host"
+    # Share the host NETWORK namespace: the 127.0.0.1 bind lands on HOST
+    # loopback directly (same pattern as pid:host, extended — this IS a
+    # monitoring agent: it already joins host PID + :ro host mounts).
+    # No `ports:` stanza: it is IGNORED under host mode, so none exists
+    # (a commented-out block would be misleading clutter — deleted, not hidden).
+    network_mode: "host"
     # MUST match the host user at RUNTIME (zellij sockets are 0700 —
     # same-user is effectively mandatory). Never baked into the image.
     user: "${UID:-1000}:${GID:-1000}"
@@ -52,9 +64,10 @@ services:
       HOME: ${HOME:-/home/hostuser}
       DATA_DIR: /data/opencode
       POLL_INTERVAL: ${POLL_INTERVAL:-10s}
-      # Container port is FIXED at 8080 (EXPOSE + HEALTHCHECK agree).
-      # Vary only the host side via ${PORT} in `ports` below.
-      PORT: "8080"
+      # Host mode has NO port mapping — the container's listen port IS the
+      # host port, so the operator's $PORT must flow through here (the old
+      # "container side fixed at 8080" model is gone with the `ports:` stanza).
+      PORT: "${PORT:-8080}"
     volumes:
       # WAL decision (see header): parent dir :ro keeps -wal/-shm visible.
       - ${HOME:-/home/hostuser}/.local/share/opencode:/data/opencode:ro
@@ -63,14 +76,11 @@ services:
       # Live zellij sockets (0700 — requires user: parity above). Source
       # path must equal $XDG_RUNTIME_DIR/zellij on the host.
       - /run/user/${UID:-1000}/zellij:/run/user/${UID:-1000}/zellij:ro
-    # Host side varies (${PORT}), container side fixed (8080).
-    # NEVER bare "PORT:PORT" / 0.0.0.0 — grep must show 127.0.0.1 here.
-    ports:
-      - "127.0.0.1:${PORT:-8080}:8080"
     restart: unless-stopped
     healthcheck:
       # Exec-form: the binary probes its own /api/healthz (no shell/curl in
-      # the distroless runtime). Uses container $PORT (8080).
+      # the distroless runtime). Probes host 127.0.0.1:$PORT (host mode:
+      # container $PORT IS the host listen port).
       test: ["CMD", "/app/dashboard", "-healthcheck"]
       interval: 30s
       timeout: 5s
