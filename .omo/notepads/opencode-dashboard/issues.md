@@ -329,3 +329,7 @@
 ## 2026-10-24 continuation: F2 [~] holding, awaiting operator
 - Plan state confirmed: 19 [x], F2 [~] (human-gated VM matrix). No agent-actionable work; no spawns.
 - Unblock path stands: user runs docs/VM_DEPLOY.md §0-3 T1-T7 on the VM and pastes results.
+## 2026-10-24 Agent-lane probe: LANE HEALTHY (bg_7a442c2a)
+- Read-only audit confirmed: 5/5 commits in order, branch main, tree clean open+close, 5/5 ignore checks, zero secret hits, .gitignore intent matches behavior.
+- Cross-checked against orchestrator's own earlier git verification — agreement on all points. No files changed (read-only by design), nothing to commit.
+- Subagent path fully operational after the earlier OAuth/usage-limit outages.
