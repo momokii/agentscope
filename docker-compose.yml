@@ -1,0 +1,78 @@
+# opencode mission control — plug-n-play single-container deployment (W4-1).
+#
+# Host prerequisites (verify on the TARGET machine before `up`):
+#   echo $XDG_RUNTIME_DIR        # socket source path below must match
+#   id -u                        # UID/GID below default from the host env
+#   zellij --version              # major must match the baked CLI (see Dockerfile)
+#
+# Mount allowlist (NOTHING else enters the container):
+#   - opencode/ parent dir :ro  -> /data/opencode   (DB + storage; WAL decision below)
+#   - zellij socket dir   :ro  -> same path         (CLI liveness + dump-screen)
+#   - zellij cache dir    :ro  -> /data/zellij-cache (EXITED-session metadata)
+#   NEVER mounted: auth.json, credential/account* tables, the whole home dir.
+#   The dashboard needs no opencode credentials for read-only monitoring.
+#
+# WAL-MOUNT DECISION (binding): mount the PARENT .../opencode/ directory
+# read-only — NOT the opencode.db file alone. SQLite WAL mode keeps live
+# state in opencode.db-wal / -shm SIDECARS next to the main file; mounting
+# only the file hides the sidecars from the reader, so the dashboard would
+# serve stale snapshots (blind dashboard) while looking healthy. The parent
+# mount keeps db+wal+shm siblings visible together. :ro keeps the live TUI
+# writers undisturbed (reader opens mode=ro + query_only=ON).
+#
+# EXITED-session semantics: EXITED zellij sessions are serialized metadata
+# only — "resurrecting" RE-RUNS the recorded commands, it never resumes the
+# old processes. The dashboard reports them; it never resurrects (v1 is
+# read-only; abort/resurrect are deferred to a later wave — see
+# docs/ACTIONS_DEFERRED.md).
+#
+# Network: 127.0.0.1 ONLY on both ends (Go asserts loopback at startup and
+# refuses anything else; publish below binds the host side to 127.0.0.1).
+# Tailnet exposure is via `tailscale serve <port>` — `funnel` is BANNED
+# (public internet). Optional basic-auth + tailnet ACLs are W4-2's.
+
+services:
+  dashboard:
+    build: .
+    image: opencode-dashboard:0.1.0
+    # Share the host PID namespace: /proc/<pid> liveness reads host PIDs 1:1
+    # (Netdata pattern). Lets the runtime join see host opencode procs.
+    pid: "host"
+    # MUST match the host user at RUNTIME (zellij sockets are 0700 —
+    # same-user is effectively mandatory). Never baked into the image.
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      # MUST equal the host value (`echo $XDG_RUNTIME_DIR`): the zellij CLI
+      # resolves its sockets from this variable, so path parity matters.
+      # If the host value differs, change BOTH this and the socket volume
+      # source below to that exact path.
+      XDG_RUNTIME_DIR: /run/user/${UID:-1000}
+      # Substituted from the host env; used only for XDG fallback
+      # resolution — the home dir itself is NEVER mounted (see allowlist).
+      HOME: ${HOME:-/home/hostuser}
+      DATA_DIR: /data/opencode
+      POLL_INTERVAL: ${POLL_INTERVAL:-10s}
+      # Container port is FIXED at 8080 (EXPOSE + HEALTHCHECK agree).
+      # Vary only the host side via ${PORT} in `ports` below.
+      PORT: "8080"
+    volumes:
+      # WAL decision (see header): parent dir :ro keeps -wal/-shm visible.
+      - ${HOME:-/home/hostuser}/.local/share/opencode:/data/opencode:ro
+      # EXITED/resurrect metadata (read-only).
+      - ${HOME:-/home/hostuser}/.cache/zellij:/data/zellij-cache:ro
+      # Live zellij sockets (0700 — requires user: parity above). Source
+      # path must equal $XDG_RUNTIME_DIR/zellij on the host.
+      - /run/user/${UID:-1000}/zellij:/run/user/${UID:-1000}/zellij:ro
+    # Host side varies (${PORT}), container side fixed (8080).
+    # NEVER bare "PORT:PORT" / 0.0.0.0 — grep must show 127.0.0.1 here.
+    ports:
+      - "127.0.0.1:${PORT:-8080}:8080"
+    restart: unless-stopped
+    healthcheck:
+      # Exec-form: the binary probes its own /api/healthz (no shell/curl in
+      # the distroless runtime). Uses container $PORT (8080).
+      test: ["CMD", "/app/dashboard", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

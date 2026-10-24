@@ -1,0 +1,16 @@
+# Build-context excludes (keep the context lean; NEVER exclude web/dist —
+# the single binary embeds it, and the Dockerfile build FAILS without it).
+.git/
+.omo/
+.claude/
+scratch-embedtest/
+node_modules/
+web/node_modules/
+web/dist-ssr/
+*.log
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
