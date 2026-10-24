@@ -1,0 +1,52 @@
+# Secrets — never commit real credentials
+.env
+.env.local
+.env.development
+.env.staging
+.env.production
+.env.test
+!.env.example
+
+# Local Claude overrides (personal, per-machine)
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Secrets and keys
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Certificates
+*.crt
+*.cer
+*.der
+
+# Stack-specific (Go 1.27 + React/Vite SPA)
+# NOTE: web/dist/ stays TRACKED on purpose — the Dockerfile embeds it via
+# go:embed and the image build FAILS without it (see .dockerignore header).
+node_modules/
+web/node_modules/
+coverage/
+coverage.out
+*.test
+*.out
+dist-ssr/
+
+# Editor dirs
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Ephemeral orchestrator runtime state (machine-local, churns every run —
+# research notes, plan, and issues ledger stay tracked as decision record)
+.omo/boulder.json
+.omo/run-continuation/
