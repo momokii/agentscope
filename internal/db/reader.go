@@ -6,7 +6,9 @@
 // part.data LIKE scans are BANNED: a single unindexed scan was observed to
 // take >60s against the 8.2GB live WAL database and to disturb live TUIs.
 // Do NOT add a query that scans message/part/event without a per-session
-// equality predicate and a LIMIT, and do NOT add LIKE/JSON scans over data.
+// equality predicate and a LIMIT — the sole exception is Q4c, whose rowid
+// high-water bound (plus small overlap) keeps every tick O(delta); and do
+// NOT add LIKE/JSON scans over data.
 //
 // Allowed queries:
 //
@@ -32,9 +34,19 @@
 //	   Q3; replaces ~1970 queries with ~120.
 //	Q4 fresh events: WHERE aggregate_id=? ORDER BY seq DESC LIMIT 10
 //	   (uses event_aggregate_seq_idx). On-demand detail path only.
-//	Q4b batched fresh events: one ordered scan (aggregate_id,seq,rowid —
-//	   no blobs) with per-aggregate 10-row caps and first-wins dedupe in
-//	   Go; same semantics as Q4, one query instead of ~1970.
+//	Q4b batched fresh events (full scan; detail path + first fleet tick):
+//	   one ordered scan (aggregate_id,seq,rowid — no blobs) with
+//	   per-aggregate 10-row caps and first-wins dedupe in Go; same semantics
+//	   as Q4, one query instead of ~1970.
+//	Q4c incremental fresh events (fleet tick only): after one Q4b-shaped seed
+//	   scan, each tick fetches only rows newer than the last tick's
+//	   high-water mark (WHERE rowid > ?, a rowid PK range scan, plus a small
+//	   overlap so a write racing the seed snapshot cannot slip a row) and
+//	   merges them into a per-aggregate top-10 cache. The merge is exact:
+//	   truncation composes (top-10(A∪B) == top-10(top-10(A) ∪ B)) and new rows
+//	   carry higher rowids, so first-wins dedupe by (aggregate_id,seq) is
+//	   preserved. A regressed MAX(rowid) (db swapped under a running
+//	   process) reseeds from scratch.
 //	Q5/Q6 poll watermarks: MAX(session.time_updated), MAX(event.rowid).
 //	Q7 session one/children: same scalar columns as Q1 with WHERE s.id=?
 //	   (PK) / WHERE s.parent_id=? (session_parent_idx), children capped by
@@ -60,6 +72,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"opencode-dashboard/internal/model"
@@ -92,6 +105,15 @@ var (
 type Reader struct {
 	db  *sql.DB
 	now func() time.Time
+
+	// Event-tail cache for the fleet tick (see Q4c in the allowlist and
+	// batchEventSignalsIncremental): per-aggregate newest-first tails plus
+	// the highest event rowid incorporated. Guarded by mu; Sessions drives
+	// it sequentially, detail paths never touch it.
+	mu             sync.Mutex
+	eventCache     map[string]*eventTail
+	eventWatermark int64
+	eventSeeded    bool
 }
 
 // Compile-time seam check: Reader must satisfy the frozen contract exactly.
@@ -134,7 +156,7 @@ func New(dataDir string) (*Reader, error) {
 		}
 		return nil, fmt.Errorf("ping %s: %w: %w", path, err, ErrOpen)
 	}
-	return &Reader{db: db, now: time.Now}, nil
+	return &Reader{db: db, now: time.Now, eventCache: make(map[string]*eventTail)}, nil
 }
 
 // Close releases the read-only handle.
@@ -186,16 +208,18 @@ func withBusyRetry(ctx context.Context, op string, fn func() error) error {
 // roll-up via parent_id, cost) and status derived via model.DeriveStatus.
 // Pane/orphan fields are left zero for RuntimeSource (W1-2) to fill.
 //
-// Signals come from one batched pass (Q2b+Q3b+Q4b, ~200 indexed queries)
-// instead of per-session N+1 (~5900). Same capped slices, same orderings,
-// same pure decoders as the singular path — DeriveStatus inputs are
-// unchanged, only the query shape differs.
+// Signals come from one batched pass: messages and parts are scanned in
+// full every tick (Q2b+Q3b), while the event tail is incremental after the
+// first tick (Q4c delta + merge — same flags as the Q4b full scan, O(delta)
+// instead of O(table)). Same capped slices, same orderings, same pure
+// decoders as the singular path — DeriveStatus inputs are unchanged, only
+// the query shape changed (N+1 → batched + incremental events).
 func (r *Reader) Sessions(ctx context.Context) ([]model.SessionRow, error) {
 	base, err := r.sessionScalars(ctx)
 	if err != nil {
 		return nil, err
 	}
-	batch, err := r.batchSignals(ctx)
+	batch, err := r.fleetBatchSignals(ctx, base)
 	if err != nil {
 		return nil, err
 	}

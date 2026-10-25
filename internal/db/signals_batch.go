@@ -6,11 +6,13 @@ import (
 	"strings"
 )
 
-// Batched fleet signal pass (Q2b+Q3b+Q4b, see the allowlist in reader.go).
-// Two phases per table: an index-only id scan (no blobs — fully covered by
-// the session/time/id indexes: 0.06s/0.56s/1.17s against the live 8.2GB
-// WAL db), then chunked PK blob fetches decoded immediately into small
-// structs (blob bytes are never retained).
+// Batched fleet signal pass (Q2b+Q3b, plus events in signals_events.go —
+// see the allowlist in reader.go). Two phases per table: an index-only id
+// scan (no blobs — fully covered by the session/time indexes), then chunked
+// PK blob fetches decoded immediately into small structs (blob bytes are
+// never retained). The part pass skips the JSON parse for blobs that cannot
+// be running tools (maybeRunningTool: exact prefilter, ~13x decode win
+// measured live).
 //
 // Per-session subsequences are byte-identical to the singular Q2/Q3/Q4
 // orderings, and the same pure decoders from signals.go run over the same
@@ -37,11 +39,6 @@ SELECT session_id, id
 SELECT session_id, id
   FROM part
  ORDER BY session_id, time_updated DESC, id DESC`
-
-	queryBatchEvents = `
-SELECT aggregate_id, seq, type
-  FROM event
- ORDER BY aggregate_id, seq DESC, rowid ASC`
 )
 
 // fleetSignals is the batched DeriveStatus input set for every session:
@@ -55,6 +52,9 @@ type fleetSignals struct {
 
 // batchSignals collects DeriveStatus inputs for ALL sessions in batched
 // form. Same capped slices, same orderings, same decoders as sessionSignals.
+// Stateless (full scan every call): used by the on-demand detail path for
+// huge families. The fleet tick uses fleetBatchSignals, which shares the
+// message/tool passes and swaps the event pass for the incremental cache.
 func (r *Reader) batchSignals(ctx context.Context) (*fleetSignals, error) {
 	out := &fleetSignals{
 		msgs:  make(map[string][]messagePayload),
@@ -68,6 +68,32 @@ func (r *Reader) batchSignals(ctx context.Context) (*fleetSignals, error) {
 		return nil, err
 	}
 	if err := r.batchEventSignals(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// fleetBatchSignals is the per-tick fleet pass: same message/tool scans as
+// batchSignals, but the event tail comes from the incremental cache
+// (one full seed scan, then O(delta) ticks). sessionIDs prunes aggregates
+// of deleted sessions from the cache. Output is identical to batchSignals.
+func (r *Reader) fleetBatchSignals(ctx context.Context, base []sessionScalars) (*fleetSignals, error) {
+	out := &fleetSignals{
+		msgs:  make(map[string][]messagePayload),
+		tools: make(map[string]int),
+		fresh: make(map[string]bool),
+	}
+	if err := r.batchMessageSignals(ctx, out); err != nil {
+		return nil, err
+	}
+	if err := r.batchToolSignals(ctx, out); err != nil {
+		return nil, err
+	}
+	ids := make(map[string]struct{}, len(base))
+	for i := range base {
+		ids[base[i].id] = struct{}{}
+	}
+	if err := r.batchEventSignalsIncremental(ctx, out, ids); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -154,6 +180,9 @@ func (r *Reader) batchToolSignals(ctx context.Context, out *fleetSignals) error 
 		return err
 	}
 	return r.foldBlobsByID(ctx, "batch part blobs", "part", fetchOrder, func(id, data string) {
+		if !maybeRunningTool(data) {
+			return
+		}
 		part, ok := decodePartPayload(data)
 		if !ok {
 			return
@@ -161,44 +190,6 @@ func (r *Reader) batchToolSignals(ctx context.Context, out *fleetSignals) error 
 		if part.Type == "tool" && part.State != nil && part.State.Status == "running" {
 			out.tools[owner[id]]++
 		}
-	})
-}
-
-// batchEventSignals fills out.fresh: per-session fresh-event flags over the
-// newest eventScanLimit rows per aggregate with first-wins dedupe (same
-// semantics as the singular path; the rowid ASC tiebreak matches the
-// engine's typical return order for seq ties). No blobs involved; the
-// single ordered scan replaces ~1970 per-session queries.
-func (r *Reader) batchEventSignals(ctx context.Context, out *fleetSignals) error {
-	return withBusyRetry(ctx, "batch events", func() error {
-		rows, err := r.db.QueryContext(ctx, queryBatchEvents)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		taken := make(map[string]int)
-		seen := make(map[eventKey]struct{})
-		for rows.Next() {
-			var aggID string
-			var seq int64
-			var typ string
-			if err := rows.Scan(&aggID, &seq, &typ); err != nil {
-				return err
-			}
-			if taken[aggID] >= eventScanLimit {
-				continue
-			}
-			taken[aggID]++
-			key := eventKey{aggregateID: aggID, seq: seq}
-			if _, dup := seen[key]; dup {
-				continue
-			}
-			seen[key] = struct{}{}
-			if typ == freshEventType {
-				out.fresh[aggID] = true
-			}
-		}
-		return rows.Err()
 	})
 }
 

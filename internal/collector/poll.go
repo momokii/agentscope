@@ -16,9 +16,10 @@
 //   - Enrich failure degrades, it does not blank: fresh DB rows publish with
 //     zero Pane values and Stale=true. Sessions failure publishes the last
 //     good frame (or an empty frame when none exists) with Stale=true.
-//   - Per-source context timeouts (DB 5s, runtime 8s) bound every tick; the
-//     publish path has its own timeout so a wedged sink marks the frame stale
-//     instead of stalling the loop. dump-screen is never called per tick.
+//   - Per-source context timeouts (DB via cfg.DBTimeout, runtime 8s) bound
+//     every tick; the publish path has its own timeout so a wedged sink
+//     marks the frame stale instead of stalling the loop. dump-screen is
+//     never called per tick.
 //   - main() is deliberately NOT provided here: Wave 4 owns the runnable
 //     binary path (bind addr, signal handling, hub wiring). This package
 //     exposes NewCollector/Run/Tick only.
@@ -47,8 +48,11 @@ var (
 const (
 	// defaultPollInterval applies when cfg.PollInterval <= 0 (plan default).
 	defaultPollInterval = 10 * time.Second
-	// dbTimeout bounds each DBReader call per tick.
-	dbTimeout = 5 * time.Second
+	// defaultDBTimeout applies when cfg.DBTimeout <= 0: the batched fleet
+	// pass costs ~2s steady-state (~4s cold on the 8.2GB live WAL db), so
+	// 10s leaves headroom while staying under the 2x-interval staleness
+	// line. Operators tune it via the DB_TIMEOUT env knob (see ports.Config).
+	defaultDBTimeout = 10 * time.Second
 	// runtimeTimeout bounds the RuntimeSource call per tick.
 	runtimeTimeout = 8 * time.Second
 	// freshnessFactor scales the poll interval into the staleness budget: a
@@ -73,6 +77,7 @@ type Collector struct {
 	cfg  ports.Config
 
 	clock          Clock
+	dbTimeout      time.Duration
 	publishTimeout time.Duration
 
 	seq           uint64
@@ -105,12 +110,23 @@ func NewCollector(db ports.DBReader, rt ports.RuntimeSource, sink ports.Snapshot
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = defaultPollInterval
 	}
+	dbTimeout := cfg.DBTimeout
+	if dbTimeout <= 0 {
+		dbTimeout = defaultDBTimeout
+	}
+	// Logged (not magic): the per-source DB budget is operator-visible at
+	// startup and tunable via DB_TIMEOUT without a rebuild.
+	slog.Info("collector config",
+		slog.Duration("db_timeout", dbTimeout),
+		slog.Duration("poll_interval", cfg.PollInterval),
+	)
 	return &Collector{
 		db:             db,
 		rt:             rt,
 		sink:           sink,
 		cfg:            cfg,
 		clock:          realClock{},
+		dbTimeout:      dbTimeout,
 		publishTimeout: clampPublishTimeout(cfg.PollInterval),
 		prevTotals:     make(map[string]int64),
 		sparks:         make(map[string]*tokenRing),
@@ -246,7 +262,7 @@ func (c *Collector) publishStaleFrame(ctx context.Context, start time.Time) (boo
 }
 
 func (c *Collector) pollState(ctx context.Context) (int64, int64, error) {
-	ctx, cancel := context.WithTimeout(ctx, dbTimeout)
+	ctx, cancel := context.WithTimeout(ctx, c.dbTimeout)
 	defer cancel()
 	updMs, evID, err := c.db.PollState(ctx)
 	if err != nil {
@@ -256,7 +272,7 @@ func (c *Collector) pollState(ctx context.Context) (int64, int64, error) {
 }
 
 func (c *Collector) sessions(ctx context.Context) ([]model.SessionRow, error) {
-	ctx, cancel := context.WithTimeout(ctx, dbTimeout)
+	ctx, cancel := context.WithTimeout(ctx, c.dbTimeout)
 	defer cancel()
 	rows, err := c.db.Sessions(ctx)
 	if err != nil {

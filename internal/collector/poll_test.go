@@ -703,3 +703,79 @@ func Test_Collector_Status_canonicalized_through_derive(t *testing.T) {
 		}
 	}
 }
+
+// Given: a config without an explicit DBTimeout.
+// When: the collector is built.
+// Then: the 10s default applies (headroom past the old 5s constant that
+// starved every tick on the 8.2GB live db).
+func Test_Collector_DBTimeout_defaults_when_unset(t *testing.T) {
+	c, err := NewCollector(&fakeDB{}, &fakeRuntime{}, &fakeSink{}, testConfig())
+	if err != nil {
+		t.Fatalf("NewCollector: %v", err)
+	}
+	if c.dbTimeout != 10*time.Second {
+		t.Errorf("dbTimeout = %v, want 10s default", c.dbTimeout)
+	}
+}
+
+// deadlineProbeDB blocks until the caller's context expires and records the
+// budget it observed, proving the configured knob reaches the DB calls.
+type deadlineProbeDB struct {
+	mu       sync.Mutex
+	observed []time.Duration
+}
+
+func (d *deadlineProbeDB) PollState(context.Context) (int64, int64, error) {
+	return 0, 0, nil
+}
+
+func (d *deadlineProbeDB) Sessions(ctx context.Context) ([]model.SessionRow, error) {
+	if dl, ok := ctx.Deadline(); ok {
+		d.mu.Lock()
+		d.observed = append(d.observed, time.Until(dl))
+		d.mu.Unlock()
+	}
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (d *deadlineProbeDB) SessionDetail(_ context.Context, id string) (model.SessionDetail, error) {
+	return model.SessionDetail{}, fmt.Errorf("deadlineProbeDB: no detail for %s", id)
+}
+
+// Given: DBTimeout set to 60ms with a DB that never answers.
+// When: a tick runs.
+// Then: the Sessions call carries a sub-second deadline (the knob, not the
+// old 5s constant) and the tick degrades to a stale frame instead of
+// stalling the loop.
+func Test_Collector_DBTimeout_flows_to_db_calls(t *testing.T) {
+	// Given
+	db := &deadlineProbeDB{}
+	sink := &fakeSink{}
+	cfg := testConfig()
+	cfg.DBTimeout = 60 * time.Millisecond
+	c, err := NewCollector(db, &fakeRuntime{}, sink, cfg)
+	if err != nil {
+		t.Fatalf("NewCollector: %v", err)
+	}
+
+	// When
+	published, _ := c.Tick(context.Background())
+
+	// Then
+	if !published {
+		t.Error("tick with expired DB budget must still publish a stale frame")
+	}
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if len(db.observed) != 1 {
+		t.Fatalf("Sessions calls = %d, want 1", len(db.observed))
+	}
+	if db.observed[0] >= time.Second {
+		t.Errorf("Sessions budget = %v, want the configured ~60ms (old 5s constant?)", db.observed[0])
+	}
+	got := sink.published()
+	if len(got) != 1 || !got[0].Stale {
+		t.Errorf("published %d frames, want exactly 1 stale frame", len(got))
+	}
+}

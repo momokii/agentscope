@@ -47,6 +47,46 @@ func Test_Sessions_live_budget(t *testing.T) {
 	}
 }
 
+const (
+	// liveRepeatedTicks mirrors the collector's per-tick proof: the first
+	// tick seeds the incremental event cache, steady ticks fetch only the
+	// delta. Bounds are deliberately loose (flake-free on unknown hardware);
+	// the strict budget proof is the timed manual run pasted in the notepad.
+	liveRepeatedTicks = 6
+	liveTickBound     = 30 * time.Second
+)
+
+// Test_Sessions_live_repeated_ticks calls Sessions repeatedly against the
+// REAL db and requires every tick to complete non-empty: the production
+// regression surfaced as `context deadline exceeded` on every 10s tick,
+// permanently blanking the fleet. Env-gated:
+// OPENDASH_LIVE=1 go test ./internal/db/ -run Test_Sessions_live_repeated_ticks -v.
+func Test_Sessions_live_repeated_ticks(t *testing.T) {
+	if os.Getenv("OPENDASH_LIVE") == "" {
+		t.Skip("OPENDASH_LIVE unset: live budget probe stays off the real db")
+	}
+	cfg := ports.LoadConfigFromEnv()
+	r, err := New(cfg.DataDir)
+	if err != nil {
+		t.Fatalf("open live db: %v", err)
+	}
+	defer func() { _ = r.Close() }()
+
+	for i := 0; i < liveRepeatedTicks; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), liveTickBound)
+		start := time.Now()
+		rows, err := r.Sessions(ctx)
+		elapsed := time.Since(start)
+		cancel()
+		if err != nil {
+			t.Fatalf("live repeated tick %d: %v", i, err)
+		}
+		if len(rows) == 0 {
+			t.Fatalf("live repeated tick %d returned zero sessions (fleet would blank)", i)
+		}
+		t.Logf("PROBE tick=%d sessions=%d elapsed=%s", i, len(rows), elapsed)
+	}
+}
 // Test_SessionDetail_live_probe prints counts-only SessionDetail rows for the
 // F1 export-vs-seam diff: OPENDASH_SEAM_SES=ses_a,ses_b selects sessions,
 // `opencode export <ses> --sanitize` is the other side. Env-gated and
