@@ -77,6 +77,10 @@ services:
       # host — full transcripts are readable by anyone who can reach the
       # port. Prefer `tailscale serve` (HTTPS + identity) when possible.
       BIND_ADDR: "${BIND_ADDR:-127.0.0.1}"
+      # Empty = open tailnet-trust mode (unchanged default; only meaningful
+      # paired with non-loopback BIND_ADDR). Value never logged — see
+      # internal/auth no-log pin.
+      DASHBOARD_AUTH: "${DASHBOARD_AUTH:-}"
     volumes:
       # WAL decision (see header): parent dir :ro keeps -wal/-shm visible.
       - ${HOME:-/home/hostuser}/.local/share/opencode:/data/opencode:ro
