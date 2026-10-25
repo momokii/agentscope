@@ -30,6 +30,7 @@ import { ArrowDown, ArrowLeft, ChevronDown } from "lucide-react";
 
 import StatusBadge from "../components/StatusBadge";
 import RelativeTime from "../components/RelativeTime";
+import SubagentPanel from "../components/SubagentPanel";
 import { formatCompact, formatUSD } from "../lib/format";
 import { isTypingTarget } from "../lib/useCommandPalette";
 import { buildFleetHash, buildSessionHash } from "../lib/routing";
@@ -506,9 +507,14 @@ export interface SessionDetailProps {
   paletteOpen: boolean;
   /** W3-2 additive: Raw-tab deep-link target (`?m=`); null = no target. */
   messageId?: string | null;
+  /**
+   * Snapshot rows for the Subagents panel: each child's TRUE status is
+   * rendered from its matching row — never inferred from the parent.
+   */
+  sessions?: readonly SessionRow[];
 }
 
-export default function SessionDetail({ id, tab, row, paletteOpen, messageId = null }: SessionDetailProps) {
+export default function SessionDetail({ id, tab, row, paletteOpen, messageId = null, sessions = [] }: SessionDetailProps) {
   const data = useMemo(() => fixtureProvider.getSessionDetail(id), [id]);
   const [jumpTo, setJumpTo] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -607,6 +613,7 @@ export default function SessionDetail({ id, tab, row, paletteOpen, messageId = n
           </div>
         )}
       </dl>
+      <SubagentPanel children={data.children} sessions={sessions} />
       <DetailTabBar id={id} active={tab} />
       <div
         className={tab === "transcript" ? undefined : "detail-parked"}

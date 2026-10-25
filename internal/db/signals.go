@@ -41,7 +41,7 @@ SELECT s.id, s.project_id, s.parent_id, s.title, s.directory, s.model,
  ORDER BY s.time_updated DESC`
 
 	queryMessageSignals = `
-SELECT data
+SELECT time_created, data
   FROM message
  WHERE session_id = ?
  ORDER BY time_created DESC, id DESC
@@ -67,7 +67,10 @@ SELECT aggregate_id, seq, type
 
 // messagePayload is the decoded subset of one message.data blob used for
 // status signals. Completed is a pointer so absent/null (still generating)
-// is distinguishable from a set timestamp.
+// is distinguishable from a set timestamp. Recent is NOT decoded: the
+// caller stamps it from the time_created column against the active window,
+// so an ancient aborted message (completed never set, e.g. a killed TUI)
+// cannot count as in flight.
 type messagePayload struct {
 	Role string `json:"role"`
 	Time struct {
@@ -78,6 +81,7 @@ type messagePayload struct {
 	} `json:"error"`
 	ProviderID string `json:"providerID"`
 	ModelID    string `json:"modelID"`
+	Recent     bool   `json:"-"`
 }
 
 // partPayload is the decoded subset of one part.data blob: tool running
@@ -103,12 +107,15 @@ func decodeMessagePayload(data string) (messagePayload, bool) {
 // applyMessagePayload folds one decoded message (newest indicates whether
 // it is the session's newest row, ordering newest-first) into the
 // DeriveStatus inputs. Shared by the singular and batched paths so both
-// compute byte-identical signals.
+// compute byte-identical signals. An in-flight candidate counts only when
+// the message itself is recent (msg.Recent, stamped by the caller from
+// time_created): a still-generating flag on a 70-day-old aborted message is
+// stale, not work.
 func applyMessagePayload(msg messagePayload, newest bool, signals *model.StatusSignals, modelFallback *string) {
 	if newest {
 		signals.LatestRole = msg.Role
 	}
-	if msg.Role == "assistant" && msg.Time.Completed == nil {
+	if msg.Role == "assistant" && msg.Time.Completed == nil && msg.Recent {
 		signals.InFlightAssistant = true
 	}
 	if msg.Error != nil && msg.Error.Name != "" {
@@ -178,16 +185,19 @@ func (r *Reader) sessionSignals(ctx context.Context, sessionID string) (model.St
 			return err
 		}
 		defer rows.Close()
+		nowMs := r.now().UnixMilli()
 		first := true
 		for rows.Next() {
+			var createdMs int64
 			var data string
-			if err := rows.Scan(&data); err != nil {
+			if err := rows.Scan(&createdMs, &data); err != nil {
 				return err
 			}
 			msg, ok := decodeMessagePayload(data)
 			if !ok {
 				continue
 			}
+			msg.Recent = nowMs-createdMs <= r.activeWindowMs
 			applyMessagePayload(msg, first, &signals, &modelFallback)
 			first = false
 		}

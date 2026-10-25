@@ -59,6 +59,24 @@ function DeltaIcon({ direction }: { direction: Delta["direction"] }) {
   return <Minus aria-hidden="true" />;
 }
 
+/**
+ * Live runtime probes are OPTIONAL until the backend lands them. A finite
+ * number renders like any counter; anything else renders "—" with a title
+ * explaining the runtime is not reporting yet — never a fabricated zero.
+ */
+function liveValue(raw: number | undefined): string {
+  return typeof raw === "number" && Number.isFinite(raw) ? `${raw}` : "—";
+}
+
+function liveDelta(raw: number | undefined, prev: number | undefined): Delta {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    return { tone: "mute", text: "—", direction: "flat" };
+  }
+  return infoDelta(raw, typeof prev === "number" ? prev : null);
+}
+
+const LIVE_ABSENT_TITLE = "runtime not yet reporting";
+
 function DeltaLine({ delta }: { delta: Delta }) {
   return (
     <div className={`kpi-delta kpi-delta-${delta.tone}`}>
@@ -143,6 +161,28 @@ export default function KpiStrip({ kpis, prevKpis, phase, lastSeq }: KpiStripPro
         <div className="kpi-label">Errors</div>
         <div className="kpi-value">{kpis.errors}</div>
         <DeltaLine delta={errorDelta(kpis.errors, prev?.errors ?? null)} />
+      </div>
+      <div className="kpi-card">
+        <div className="kpi-label">Live procs</div>
+        <div
+          className="kpi-value"
+          title={kpis.live_processes === undefined ? LIVE_ABSENT_TITLE : undefined}
+        >
+          {liveValue(kpis.live_processes)}
+        </div>
+        <DeltaLine
+          delta={liveDelta(kpis.live_processes, prev?.live_processes)}
+        />
+      </div>
+      <div className="kpi-card">
+        <div className="kpi-label">Live panes</div>
+        <div
+          className="kpi-value"
+          title={kpis.live_panes === undefined ? LIVE_ABSENT_TITLE : undefined}
+        >
+          {liveValue(kpis.live_panes)}
+        </div>
+        <DeltaLine delta={liveDelta(kpis.live_panes, prev?.live_panes)} />
       </div>
       <div className="kpi-card">
         <div className="kpi-label">SSE stream</div>

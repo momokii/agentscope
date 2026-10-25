@@ -140,7 +140,13 @@ Set up each row, then check what the dashboard shows at the tailnet URL
 `status | pane{CWD,exited} | orphan` (`SessionRow` per plan §"Collector API
 contract"; orphan rows serve screen as **409** `{"error":…,"db_only":true,
 "hint":"session has no live zellij pane; transcript and DB data remain
-available"}`).
+available"}`). Status is recency-gated (`ACTIVE_WINDOW`, default 2m):
+only a session with `time_updated` inside the window may show
+running/waiting-input/error. Pane join is newest-per-directory: at most the
+directory's most recently updated session claims the live pane (or the
+orphan); older sessions in the same directory stay DB-only and are NOT
+marked orphan (orphan still means exactly one thing: an opencode process
+running outside zellij).
 
 - [ ] **T1–T3. Three live zellij panes.** Setup: `zellij --session
   f2check` (new session), open 3 panes (`Ctrl-O n` ×2), run `opencode` in

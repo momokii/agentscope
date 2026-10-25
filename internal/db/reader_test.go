@@ -63,7 +63,11 @@ func openFixture(t *testing.T) *sql.DB {
 }
 
 func fixtureReader(db *sql.DB) *Reader {
-	return &Reader{db: db, now: func() time.Time { return fixedNow }}
+	return &Reader{
+		db:             db,
+		now:            func() time.Time { return fixedNow },
+		activeWindowMs: ports.DefaultActiveWindow.Milliseconds(),
+	}
 }
 
 func seedProject(t *testing.T, db *sql.DB, id, worktree, name string) {
@@ -183,7 +187,7 @@ func Test_Sessions_status(t *testing.T) {
 			seed: func(t *testing.T, db *sql.DB) {
 				seedProject(t, db, "global", "/", "")
 				seedSession(t, db, base)
-				seedMessage(t, db, "msg_1", "ses_base", 1, assistantInflight)
+				seedMessage(t, db, "msg_1", "ses_base", fixedNow.UnixMilli()-1000, assistantInflight)
 			},
 			want: model.SessionRunning, session: "ses_base",
 		},
@@ -198,15 +202,16 @@ func Test_Sessions_status(t *testing.T) {
 			want: model.SessionRunning, session: "ses_base",
 		},
 		{
-			name: "running on fresh part-update events",
+			name: "idle on seed tick with no fresh events",
 			seed: func(t *testing.T, db *sql.DB) {
 				seedProject(t, db, "global", "/", "")
 				seedSession(t, db, base)
 				seedMessage(t, db, "msg_1", "ses_base", 1, assistantDone)
 				seedPart(t, db, "prt_1", "msg_1", "ses_base", 2, toolCompleted)
-				seedEvent(t, db, "ev_1", "ses_base", 7, "message.part.updated.1")
+				// No event rows: the seed tick reports no fresh events
+				// (delta-only semantics), so a quiet session derives idle.
 			},
-			want: model.SessionRunning, session: "ses_base",
+			want: model.SessionIdle, session: "ses_base",
 		},
 		{
 			name: "idle when turn completed and no signals",
@@ -336,15 +341,27 @@ func Test_Sessions_dedupes_duplicate_event_rows(t *testing.T) {
 	}
 	r := fixtureReader(db)
 
-	// When
+	// When: the seed tick runs (delta-only: pre-existing tails are history)
 	rows, err := r.Sessions(context.Background())
 
-	// Then: tail still resolves to running, duplicates harmless
+	// Then: seed tick carries no fresh events, duplicates harmless
+	if err != nil {
+		t.Fatalf("Sessions: %v", err)
+	}
+	if got := findRow(t, rows, "ses_dup"); got.Status != model.SessionIdle {
+		t.Errorf("seed status = %q, want idle (no fresh events on seed tick)", got.Status)
+	}
+
+	// When: genuinely new fresh rows arrive and the tick re-runs
+	seedEvent(t, db, "ev_d", "ses_dup", 5, "message.part.updated.1")
+	rows, err = r.Sessions(context.Background())
+
+	// Then: the delta tick marks the touched aggregate running
 	if err != nil {
 		t.Fatalf("Sessions: %v", err)
 	}
 	if got := findRow(t, rows, "ses_dup"); got.Status != model.SessionRunning {
-		t.Errorf("status = %q, want running", got.Status)
+		t.Errorf("delta status = %q, want running", got.Status)
 	}
 }
 

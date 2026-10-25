@@ -93,7 +93,7 @@ func run(ctx context.Context) error {
 		slog.Duration("poll_interval", cfg.PollInterval),
 	)
 
-	reader, err := db.New(cfg.DataDir)
+	reader, err := db.NewWithWindow(cfg.DataDir, cfg.ActiveWindow.Milliseconds())
 	if err != nil {
 		return fmt.Errorf("open DATA_DIR %s read-only: %w — check the :ro mount and UID parity (container UID=%d vs host UID from `id -u`)", cfg.DataDir, err, os.Getuid())
 	}

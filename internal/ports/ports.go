@@ -47,7 +47,15 @@ type RuntimeSource interface {
 	// Enrich overlays pane liveness onto rows in place order: fills Pane and
 	// Orphan per session. Union of zellij panes (EXITED suffix aware) plus
 	// /proc cmdline orphans; zombie (State Z) pids count as exited.
+	// Directory-scoped honesty: at most the directory's most recently
+	// updated session claims the pane (or the orphan); the rest pass
+	// through DB-only.
 	Enrich(ctx context.Context, rows []model.SessionRow) ([]model.SessionRow, error)
+	// LiveCounts reports the last observed ground truth: live (non-exited)
+	// zellij panes and alive opencode processes. Last-known on infra
+	// faults (the tick's Stale flag marks the uncertainty); zero before
+	// the first successful Enrich.
+	LiveCounts() (panes int, procs int)
 }
 
 // SnapshotSink receives fully joined snapshots (W1-3 hub owns the
@@ -75,6 +83,13 @@ type Config struct {
 	// old 5s constant that starved every tick. Env: DB_TIMEOUT (Go duration
 	// string, e.g. "15s"); malformed or non-positive falls back to default.
 	DBTimeout time.Duration
+	// ActiveWindow is the recency gate for session status: only sessions
+	// with time_updated inside this window may report running, waiting-input
+	// or error; anything older reports idle (archived still wins). Default
+	// 2m. Env: ACTIVE_WINDOW (Go duration string, e.g. "2m"); malformed or
+	// non-positive falls back to default. opencode bumps time_updated on
+	// every message/part event, so a quiet window means a dead session.
+	ActiveWindow time.Duration
 	// BindAddr is the listen address. Default 127.0.0.1 (loopback-only).
 	// Env: BIND_ADDR. Any non-loopback value (e.g. 0.0.0.0, ::, a LAN IP)
 	// is an explicit operator opt-in and the binary refuses to serve it
@@ -91,12 +106,17 @@ type Config struct {
 	DataDir string
 }
 
+// DefaultActiveWindow is the default status recency gate: a session quiet
+// for a full 2m cannot be generating (see Config.ActiveWindow).
+const DefaultActiveWindow = 2 * time.Minute
+
 // DefaultConfig returns the plan defaults: 10s poll, 127.0.0.1 bind,
 // PORT/8080, and $HOME/.local/share/opencode as the data root.
 func DefaultConfig() Config {
 	return Config{
 		PollInterval: 10 * time.Second,
 		DBTimeout:    10 * time.Second,
+		ActiveWindow: DefaultActiveWindow,
 		BindAddr:     "127.0.0.1",
 		Port:         "8080",
 		DataDir:      defaultDataDir(),
@@ -104,10 +124,10 @@ func DefaultConfig() Config {
 }
 
 // LoadConfigFromEnv returns DefaultConfig overlaid with PORT, DATA_DIR,
-// POLL_INTERVAL, DB_TIMEOUT, and BIND_ADDR from the environment. Malformed
-// POLL_INTERVAL or DB_TIMEOUT falls back to the 10s default; empty
-// PORT/DATA_DIR/BIND_ADDR keep their defaults (unset BIND_ADDR behaves
-// exactly as before: loopback-only).
+// POLL_INTERVAL, DB_TIMEOUT, ACTIVE_WINDOW, and BIND_ADDR from the
+// environment. Malformed POLL_INTERVAL, DB_TIMEOUT, or ACTIVE_WINDOW falls
+// back to its default; empty PORT/DATA_DIR/BIND_ADDR keep their defaults
+// (unset BIND_ADDR behaves exactly as before: loopback-only).
 func LoadConfigFromEnv() Config {
 	cfg := DefaultConfig()
 	if v := os.Getenv("PORT"); v != "" {
@@ -127,6 +147,11 @@ func LoadConfigFromEnv() Config {
 	if v := os.Getenv("DB_TIMEOUT"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			cfg.DBTimeout = d
+		}
+	}
+	if v := os.Getenv("ACTIVE_WINDOW"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.ActiveWindow = d
 		}
 	}
 	return cfg

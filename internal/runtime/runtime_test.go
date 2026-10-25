@@ -42,6 +42,10 @@ func row(id, dir string) model.SessionRow {
 	return model.SessionRow{ID: id, Directory: dir, Status: model.SessionIdle}
 }
 
+func rowAge(id, dir string, updatedRelativeMs int64) model.SessionRow {
+	return model.SessionRow{ID: id, Directory: dir, Status: model.SessionIdle, UpdatedRelativeMs: updatedRelativeMs}
+}
+
 func errBoom() error {
 	return errors.New("boom: zellij exploded")
 }
@@ -312,5 +316,74 @@ func Test_Enrich_preserves_row_order(t *testing.T) {
 		if got[i].ID != want {
 			t.Errorf("row %d = %q, want %q", i, got[i].ID, want)
 		}
+	}
+}
+
+func Test_Enrich_newest_session_per_directory_claims_pane(t *testing.T) {
+	// Given: two sessions sharing one directory with a single live pane —
+	// the old directory-scoped join attached it to both (1963 rows claiming
+	// a handful of panes live). Only the most recently updated session (the
+	// one the process would be acting on) may claim it.
+	f := &fakeZellij{
+		sessionsOut: "main\n",
+		panes:       map[string]string{"main": fixturePanesJSON},
+	}
+	src := testSource(t, f, []string{"main"}, func(root string) {
+		writeFixtureProc(t, root, 100, "opencode", "S (sleeping)", 10, "/proj/alpha")
+	})
+	rows := []model.SessionRow{
+		rowAge("ses-old", "/proj/alpha", 90_000),
+		rowAge("ses-new", "/proj/alpha", 1_000),
+	}
+
+	// When
+	got, err := src.Enrich(context.Background(), rows)
+
+	// Then
+	if err != nil {
+		t.Fatalf("Enrich: %v", err)
+	}
+	byID := map[string]model.SessionRow{got[0].ID: got[0], got[1].ID: got[1]}
+	if byID["ses-new"].Pane.CWD == "" {
+		t.Errorf("newest session must claim the pane: %+v", byID["ses-new"])
+	}
+	if byID["ses-old"].Pane.CWD != "" || byID["ses-old"].Pane.Exited || byID["ses-old"].Orphan {
+		t.Errorf("older session must stay DB-only: %+v", byID["ses-old"])
+	}
+	if panes, procs := src.LiveCounts(); panes != 2 || procs != 1 {
+		t.Errorf("LiveCounts = (%d,%d), want (2,1)", panes, procs)
+	}
+}
+
+func Test_Enrich_orphan_claimed_by_newest_only(t *testing.T) {
+	// Given: no zellij pane, but an opencode proc outside zellij at the
+	// directory. Orphan keeps its meaning (proc without pane) and the
+	// newest-first rule: the older sibling is neither pane-claimed nor
+	// orphan-marked.
+	f := &fakeZellij{sessionsOut: "\n", panes: map[string]string{}}
+	src := testSource(t, f, nil, func(root string) {
+		writeFixtureProc(t, root, 200, "opencode", "S (sleeping)", 1, "/proj/orphan")
+	})
+	rows := []model.SessionRow{
+		rowAge("ses-old", "/proj/orphan", 90_000),
+		rowAge("ses-new", "/proj/orphan", 1_000),
+	}
+
+	// When
+	got, err := src.Enrich(context.Background(), rows)
+
+	// Then
+	if err != nil {
+		t.Fatalf("Enrich: %v", err)
+	}
+	byID := map[string]model.SessionRow{got[0].ID: got[0], got[1].ID: got[1]}
+	if !byID["ses-new"].Orphan || byID["ses-new"].Pane.CWD != "" {
+		t.Errorf("newest session must read orphan with empty CWD: %+v", byID["ses-new"])
+	}
+	if byID["ses-old"].Orphan || byID["ses-old"].Pane.CWD != "" || byID["ses-old"].Pane.Exited {
+		t.Errorf("older session must stay DB-only: %+v", byID["ses-old"])
+	}
+	if panes, procs := src.LiveCounts(); panes != 0 || procs != 1 {
+		t.Errorf("LiveCounts = (%d,%d), want (0,1)", panes, procs)
 	}
 }

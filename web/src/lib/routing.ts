@@ -9,8 +9,11 @@
  * serializable so back/forward works via the existing hashchange wiring.
  */
 
+import type { StatusFilter } from "./fleetSort";
+import { STATUS_FILTERS } from "./fleetSort";
+
 export type Route =
-  | { view: "fleet" }
+  | { view: "fleet"; status?: StatusFilter; liveOnly?: boolean }
   | { view: "session"; id: string; tab: SessionTab; messageId?: string }
   | { view: "compare"; ids: string[] }
   | { view: "timeline" };
@@ -76,7 +79,41 @@ export function parseHash(hash: string): Route {
   const [path, query] = splitQuery(clean);
   if (path === COMPARE_PATH) return { view: "compare", ids: parseIds(query) };
   if (path === TIMELINE_PATH) return { view: "timeline" };
+  if (path === "/" || path === "") return fleetRoute(query);
   return { view: "fleet" };
+}
+
+/**
+ * Fleet query params (additive, shareable): `status=<filter>` pins a status
+ * chip, `live=1` pins the live-only toggle. Unknown values fall back to the
+ * unfiltered fleet so hand-typed URLs never strand the operator. Defaults
+ * are omitted from the Route so `{ view: "fleet" }` equality holds.
+ */
+function fleetRoute(query: string): Route {
+  if (query === "") return { view: "fleet" };
+  const status = parseStatusParam(query);
+  const liveOnly = parseLiveParam(query);
+  return {
+    view: "fleet",
+    ...(status === "all" ? {} : { status }),
+    ...(liveOnly ? { liveOnly: true } : {}),
+  };
+}
+
+/** `status=running|waiting-input|idle|error|archived|all` (`waiting` alias). */
+export function parseStatusParam(query: string): StatusFilter {
+  const raw =
+    new URLSearchParams(query).get("status")?.trim().toLowerCase() ?? "";
+  if (raw === "waiting") return "waiting-input";
+  return (STATUS_FILTERS as readonly string[]).includes(raw)
+    ? (raw as StatusFilter)
+    : "all";
+}
+
+/** `live=1` (or `live=true`) pins the live-only toggle. */
+export function parseLiveParam(query: string): boolean {
+  const raw = new URLSearchParams(query).get("live")?.trim().toLowerCase() ?? "";
+  return raw === "1" || raw === "true";
 }
 
 /**
@@ -112,8 +149,15 @@ export function parseIds(query: string): string[] {
   return [...seen];
 }
 
-export function buildFleetHash(): string {
-  return "#/";
+export function buildFleetHash(
+  status: StatusFilter = "all",
+  liveOnly = false,
+): string {
+  const params = new URLSearchParams();
+  if (status !== "all") params.set("status", status);
+  if (liveOnly) params.set("live", "1");
+  const query = params.toString();
+  return query === "" ? "#/" : `#/?${query}`;
 }
 
 export function buildSessionHash(

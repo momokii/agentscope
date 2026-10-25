@@ -31,7 +31,7 @@ const blobFetchChunk = 500
 
 const (
 	queryBatchMessageIDs = `
-SELECT session_id, id
+SELECT session_id, id, time_created
   FROM message
  ORDER BY session_id, time_created DESC, id DESC`
 
@@ -102,8 +102,12 @@ func (r *Reader) fleetBatchSignals(ctx context.Context, base []sessionScalars) (
 // batchMessageSignals fills out.msgs: per-session newest-first payloads
 // capped at messageScanLimit. Phase 1 is an index-only id scan (no blobs);
 // phase 2 fetches the capped blobs by PK in chunks and decodes immediately.
+// The scan also carries time_created (free: the covering index already
+// orders by it) so each payload is stamped Recent against the active
+// window — ancient aborted in-flight rows die here, not in DeriveStatus.
 func (r *Reader) batchMessageSignals(ctx context.Context, out *fleetSignals) error {
 	ordered := make(map[string][]string)
+	created := make(map[string]int64)
 	var fetchOrder []string
 	err := withBusyRetry(ctx, "batch message ids", func() error {
 		rows, err := r.db.QueryContext(ctx, queryBatchMessageIDs)
@@ -113,13 +117,15 @@ func (r *Reader) batchMessageSignals(ctx context.Context, out *fleetSignals) err
 		defer rows.Close()
 		for rows.Next() {
 			var sessionID, id string
-			if err := rows.Scan(&sessionID, &id); err != nil {
+			var createdMs int64
+			if err := rows.Scan(&sessionID, &id, &createdMs); err != nil {
 				return err
 			}
 			if len(ordered[sessionID]) >= messageScanLimit {
 				continue
 			}
 			ordered[sessionID] = append(ordered[sessionID], id)
+			created[id] = createdMs
 			fetchOrder = append(fetchOrder, id)
 		}
 		return rows.Err()
@@ -131,6 +137,7 @@ func (r *Reader) batchMessageSignals(ctx context.Context, out *fleetSignals) err
 	if err != nil {
 		return err
 	}
+	nowMs := r.now().UnixMilli()
 	for sessionID, ids := range ordered {
 		payloads := make([]messagePayload, 0, len(ids))
 		for _, id := range ids {
@@ -142,6 +149,7 @@ func (r *Reader) batchMessageSignals(ctx context.Context, out *fleetSignals) err
 			if !ok {
 				continue
 			}
+			msg.Recent = nowMs-created[id] <= r.activeWindowMs
 			payloads = append(payloads, msg)
 		}
 		out.msgs[sessionID] = payloads

@@ -105,6 +105,11 @@ var (
 type Reader struct {
 	db  *sql.DB
 	now func() time.Time
+	// activeWindowMs is the status recency gate in milliseconds
+	// (ports.Config.ActiveWindow): only sessions with time_updated inside
+	// the window may derive running/waiting-input/error. Non-positive
+	// means the default (see toRow).
+	activeWindowMs int64
 
 	// Event-tail cache for the fleet tick (see Q4c in the allowlist and
 	// batchEventSignalsIncremental): per-aggregate newest-first tails plus
@@ -120,10 +125,18 @@ type Reader struct {
 var _ ports.DBReader = (*Reader)(nil)
 
 // New opens <dataDir>/opencode.db read-only (WAL-safe: mode=ro keeps the
-// -wal/-shm snapshot visible while forbidding writes) and returns a Reader.
+// -wal/-shm snapshot visible while forbidding writes) and returns a Reader
+// with the default status recency window (ports.DefaultActiveWindow). Use
+// NewWithWindow to override it (production wires ports.Config.ActiveWindow).
 // It never writes, never copies the database, and never reads anything
 // outside <dataDir>/opencode.db (+ its -wal/-shm sidecars).
 func New(dataDir string) (*Reader, error) {
+	return NewWithWindow(dataDir, ports.DefaultActiveWindow.Milliseconds())
+}
+
+// NewWithWindow is New with an explicit status recency window in
+// milliseconds. Non-positive falls back to the default.
+func NewWithWindow(dataDir string, activeWindowMs int64) (*Reader, error) {
 	path := filepath.Join(dataDir, "opencode.db")
 	// mode=ro: read-only VFS open. NOT immutable=1: immutable would ignore
 	// the WAL and serve stale pages; ro still applies the live WAL.
@@ -156,7 +169,10 @@ func New(dataDir string) (*Reader, error) {
 		}
 		return nil, fmt.Errorf("ping %s: %w: %w", path, err, ErrOpen)
 	}
-	return &Reader{db: db, now: time.Now, eventCache: make(map[string]*eventTail)}, nil
+	if activeWindowMs <= 0 {
+		activeWindowMs = ports.DefaultActiveWindow.Milliseconds()
+	}
+	return &Reader{db: db, now: time.Now, activeWindowMs: activeWindowMs, eventCache: make(map[string]*eventTail)}, nil
 }
 
 // Close releases the read-only handle.
@@ -227,17 +243,16 @@ func (r *Reader) Sessions(ctx context.Context) ([]model.SessionRow, error) {
 	nowMs := r.now().UnixMilli()
 	parents := make(map[string]string, len(base))
 	for i := range base {
-		var signals model.StatusSignals
-		modelFallback := ""
+		var in derivedInput
 		for j, msg := range batch.msgs[base[i].id] {
-			applyMessagePayload(msg, j == 0, &signals, &modelFallback)
+			applyMessagePayload(msg, j == 0, &in.signals, &in.modelFallback)
 		}
-		signals.RunningToolParts = batch.tools[base[i].id]
-		signals.HasFreshEvents = batch.fresh[base[i].id]
+		in.signals.RunningToolParts = batch.tools[base[i].id]
+		in.signals.HasFreshEvents = batch.fresh[base[i].id]
 		if base[i].parentID.Valid && base[i].parentID.V != "" {
 			parents[base[i].id] = base[i].parentID.V
 		}
-		rows = append(rows, base[i].toRow(signals, modelFallback, nowMs))
+		rows = append(rows, r.toRow(base[i], in, nowMs))
 	}
 	rollUpSubagents(rows, parents)
 	return rows, nil

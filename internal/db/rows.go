@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"opencode-dashboard/internal/model"
+	"opencode-dashboard/internal/ports"
 )
 
 // sessionScalars is one Q1 row: scalar session columns plus the joined
@@ -96,27 +97,44 @@ func projectLabel(projectID string, name sql.Null[string], worktree sql.Null[str
 	return projectID
 }
 
+// derivedInput bundles one row's DeriveStatus inputs with the model-label
+// fallback both the fleet and detail paths compute before toRow, keeping
+// the derivation call itself narrow.
+type derivedInput struct {
+	signals       model.StatusSignals
+	modelFallback string
+}
+
 // toRow builds the content side of one SessionRow. Pane/orphan stay zero
-// for RuntimeSource; Spark stays nil for the collector.
-func (s sessionScalars) toRow(signals model.StatusSignals, modelFallback string, nowMs int64) model.SessionRow {
+// for RuntimeSource; Spark stays nil for the collector. It stamps
+// RecentActivity from nowMs minus the session's time_updated against the
+// reader's active window, so DeriveStatus gates running/waiting-input/error
+// on real recency — the single place both fleet and detail paths derive.
+func (r *Reader) toRow(s sessionScalars, in derivedInput, nowMs int64) model.SessionRow {
+	signals := in.signals
 	signals.Compacting = s.compacting.Valid
 	signals.Archived = s.archived.Valid
 	relativeMs := nowMs - s.updatedMs
 	if relativeMs < 0 {
 		relativeMs = 0
 	}
-	in := s.tokensIn + s.tokensCr
+	windowMs := r.activeWindowMs
+	if windowMs <= 0 {
+		windowMs = ports.DefaultActiveWindow.Milliseconds()
+	}
+	signals.RecentActivity = relativeMs <= windowMs
+	tokensIn := s.tokensIn + s.tokensCr
 	return model.SessionRow{
 		ID:        s.id,
 		Title:     s.title,
 		Project:   projectLabel(s.projectID, s.projName, s.projWT),
 		Directory: s.directory,
-		Model:     formatModel(s.modelJSON.V, modelFallback),
+		Model:     formatModel(s.modelJSON.V, in.modelFallback),
 		Status:    model.DeriveStatus(signals),
 		Tokens: model.TokenCounts{
-			In:    in,
+			In:    tokensIn,
 			Out:   s.tokensOut,
-			Total: in + s.tokensOut + s.tokensReas,
+			Total: tokensIn + s.tokensOut + s.tokensReas,
 		},
 		Cost:              s.cost,
 		UpdatedRelativeMs: relativeMs,

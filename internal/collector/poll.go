@@ -78,6 +78,7 @@ type Collector struct {
 
 	clock          Clock
 	dbTimeout      time.Duration
+	activeWindow   time.Duration
 	publishTimeout time.Duration
 
 	seq           uint64
@@ -114,11 +115,17 @@ func NewCollector(db ports.DBReader, rt ports.RuntimeSource, sink ports.Snapshot
 	if dbTimeout <= 0 {
 		dbTimeout = defaultDBTimeout
 	}
-	// Logged (not magic): the per-source DB budget is operator-visible at
-	// startup and tunable via DB_TIMEOUT without a rebuild.
+	activeWindow := cfg.ActiveWindow
+	if activeWindow <= 0 {
+		activeWindow = ports.DefaultActiveWindow
+	}
+	// Logged (not magic): the per-source DB budget and the status recency
+	// gate are operator-visible at startup and tunable via DB_TIMEOUT and
+	// ACTIVE_WINDOW without a rebuild.
 	slog.Info("collector config",
 		slog.Duration("db_timeout", dbTimeout),
 		slog.Duration("poll_interval", cfg.PollInterval),
+		slog.Duration("active_window", activeWindow),
 	)
 	return &Collector{
 		db:             db,
@@ -127,6 +134,7 @@ func NewCollector(db ports.DBReader, rt ports.RuntimeSource, sink ports.Snapshot
 		cfg:            cfg,
 		clock:          realClock{},
 		dbTimeout:      dbTimeout,
+		activeWindow:   activeWindow,
 		publishTimeout: clampPublishTimeout(cfg.PollInterval),
 		prevTotals:     make(map[string]int64),
 		sparks:         make(map[string]*tokenRing),
@@ -192,8 +200,10 @@ func (c *Collector) Tick(ctx context.Context) (bool, error) {
 	if c.freshTicks == 0 {
 		c.windowStart = start
 	}
+	windowMs := c.activeWindow.Milliseconds()
 	for i := range enriched {
-		enriched[i].Status = model.DeriveStatus(projectSignals(enriched[i].Status))
+		recent := enriched[i].UpdatedRelativeMs <= windowMs
+		enriched[i].Status = model.DeriveStatus(projectSignals(enriched[i].Status, recent))
 		c.observeSpark(enriched[i].ID, enriched[i].Tokens.Total)
 		enriched[i].Spark = c.sparks[enriched[i].ID].rates(c.cfg.PollInterval)
 	}
@@ -202,7 +212,8 @@ func (c *Collector) Tick(ctx context.Context) (bool, error) {
 	elapsed := c.clock.Now().Sub(start)
 	stale := sessErr != nil || enrichErr != nil || wmErr != nil || c.publishStale ||
 		elapsed > freshnessFactor*interval
-	kpis := buildKPIs(enriched, c.tokensPerHour(interval, start))
+	livePanes, liveProcs := c.rt.LiveCounts()
+	kpis := buildKPIs(enriched, c.tokensPerHour(interval, start), livePanes, liveProcs)
 
 	snap := model.Snapshot{
 		Seq:        c.seq + 1,

@@ -162,14 +162,13 @@ func (r *Reader) detailFamilyRows(ctx context.Context, family []sessionScalars, 
 			return nil, nil, err
 		}
 		for i := range family {
-			var signals model.StatusSignals
-			modelFallback := ""
+			var in derivedInput
 			for j, msg := range batch.msgs[family[i].id] {
-				applyMessagePayload(msg, j == 0, &signals, &modelFallback)
+				applyMessagePayload(msg, j == 0, &in.signals, &in.modelFallback)
 			}
-			signals.RunningToolParts = batch.tools[family[i].id]
-			signals.HasFreshEvents = batch.fresh[family[i].id]
-			rows = append(rows, family[i].toRow(signals, modelFallback, nowMs))
+			in.signals.RunningToolParts = batch.tools[family[i].id]
+			in.signals.HasFreshEvents = batch.fresh[family[i].id]
+			rows = append(rows, r.toRow(family[i], in, nowMs))
 		}
 		rollUpSubagents(rows, parents)
 		return rows, parents, nil
@@ -179,7 +178,7 @@ func (r *Reader) detailFamilyRows(ctx context.Context, family []sessionScalars, 
 		if err != nil {
 			return nil, nil, err
 		}
-		rows = append(rows, family[i].toRow(signals, fallback, nowMs))
+		rows = append(rows, r.toRow(family[i], derivedInput{signals: signals, modelFallback: fallback}, nowMs))
 	}
 	rollUpSubagents(rows, parents)
 	return rows, parents, nil

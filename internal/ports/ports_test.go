@@ -67,3 +67,39 @@ func Test_LoadConfigFromEnv_DBTimeoutMalformedKeepsDefault(t *testing.T) {
 		}
 	}
 }
+
+// Given: no ACTIVE_WINDOW in the environment.
+// When: config loads.
+// Then: the 2m status recency default holds.
+func Test_LoadConfigFromEnv_DefaultActiveWindow(t *testing.T) {
+	t.Setenv("ACTIVE_WINDOW", "")
+	cfg := LoadConfigFromEnv()
+	if cfg.ActiveWindow != DefaultActiveWindow {
+		t.Fatalf("default ActiveWindow = %v, want %v", cfg.ActiveWindow, DefaultActiveWindow)
+	}
+}
+
+// Given: ACTIVE_WINDOW set to a valid duration.
+// When: config loads.
+// Then: the value flows through unchanged.
+func Test_LoadConfigFromEnv_ActiveWindowOverride(t *testing.T) {
+	t.Setenv("ACTIVE_WINDOW", "5m")
+	cfg := LoadConfigFromEnv()
+	if cfg.ActiveWindow != 300_000_000_000 {
+		t.Fatalf("ActiveWindow = %v, want 5m", cfg.ActiveWindow)
+	}
+}
+
+// Given: ACTIVE_WINDOW malformed or non-positive.
+// When: config loads.
+// Then: the 2m default holds (fail-safe, never a zero window that would
+// idle the whole fleet).
+func Test_LoadConfigFromEnv_ActiveWindowMalformedKeepsDefault(t *testing.T) {
+	for _, raw := range []string{"banana", "0s", "-2m"} {
+		t.Setenv("ACTIVE_WINDOW", raw)
+		cfg := LoadConfigFromEnv()
+		if cfg.ActiveWindow != DefaultActiveWindow {
+			t.Fatalf("ActiveWindow=%q -> %v, want 2m default", raw, cfg.ActiveWindow)
+		}
+	}
+}

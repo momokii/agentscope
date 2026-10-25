@@ -54,6 +54,8 @@ export interface SessionRow {
   project: string;
   directory: string;
   model: string;
+  /** Agent name when the backend reports one; absent → display the model. */
+  agent?: string;
   status: SessionStatus;
   tokens: TokenCounts;
   cost: number;
@@ -71,6 +73,12 @@ export interface KPIs {
   cost_today: number;
   errors: number;
   sse_connected: boolean;
+  /**
+   * Live runtime probes (collector R1 lane). OPTIONAL until the backend
+   * lands them — absent means "runtime not yet reporting", never zero.
+   */
+  live_processes?: number;
+  live_panes?: number;
 }
 
 export interface Snapshot {

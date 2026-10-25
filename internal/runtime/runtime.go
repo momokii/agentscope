@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"opencode-dashboard/internal/model"
@@ -58,6 +59,11 @@ type Source struct {
 	// a separate seam from Runner: zellij exits 0 on missing sessions, so
 	// stderr text — not the exit code — is the failure signal).
 	dump dumpRunner
+	// countsMu guards lastLivePanes/lastLiveProcesses: the most recent
+	// ground-truth observation, served via LiveCounts.
+	countsMu          sync.Mutex
+	lastLivePanes     int
+	lastLiveProcesses int
 }
 
 // NewSource builds a Source with real zellij exec.
@@ -96,8 +102,15 @@ func NewSourceWithRunner(cfg Config, run Runner) *Source {
 var _ ports.RuntimeSource = (*Source)(nil)
 
 // Enrich overlays pane liveness onto rows, preserving input order. Join key
-// is CWD/directory (filepath.Clean for matching; raw values reported):
+// is CWD/directory (filepath.Clean for matching; raw values reported).
+// Directory-scoped honesty: ONE process acts on ONE session, so at most the
+// directory's most recently updated session (smallest UpdatedRelativeMs)
+// claims the live pane; every other session in the same directory passes
+// through DB-only with no pane claim and is NOT marked orphan. Orphan keeps
+// its narrow meaning: an opencode process running outside zellij, claimed
+// by the same newest-first rule.
 //
+// Row outcomes for the chosen session per directory:
 //   - pane hit: Pane.CWD is the live pane CWD, Exited is the pane exited
 //     flag OR-ed with backing-proc death (zombie/missing opencode pid at the
 //     same CWD). SessionRow.Directory is never overwritten, so a pane-CWD vs
@@ -109,7 +122,7 @@ var _ ports.RuntimeSource = (*Source)(nil)
 //
 // Any infrastructure fault (zellij missing/timeout, unreadable socket dir or
 // /proc) degrades to DB-only rows with a nil error: a broken zellij must
-// never crash the collector.
+// never crash the collector. Successful observations refresh LiveCounts.
 func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.SessionRow, error) {
 	out := make([]model.SessionRow, len(rows))
 	copy(out, rows)
@@ -126,8 +139,12 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 	if err != nil {
 		return out, nil
 	}
+	liveCount := 0
 	panesByDir := make(map[string]Pane)
 	for _, np := range livePanes {
+		if !np.pane.Exited {
+			liveCount++
+		}
 		key := filepath.Clean(np.pane.CWD)
 		if existing, ok := panesByDir[key]; !ok || (existing.Exited && !np.pane.Exited) {
 			panesByDir[key] = np.pane
@@ -136,9 +153,14 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 
 	// Orphan scan: opencode procs with no zellij pane at their CWD.
 	var procsByDir map[string][]ProcInfo
+	procCount := -1
 	if procs, err := ScanOpencode(s.procRoot); err == nil {
+		procCount = 0
 		procsByDir = make(map[string][]ProcInfo)
 		for _, pr := range procs {
+			if pr.Alive() {
+				procCount++
+			}
 			if pr.CWD == "" {
 				continue
 			}
@@ -146,9 +168,36 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 			procsByDir[key] = append(procsByDir[key], pr)
 		}
 	}
+	s.countsMu.Lock()
+	s.lastLivePanes = liveCount
+	if procCount >= 0 {
+		s.lastLiveProcesses = procCount
+	}
+	s.countsMu.Unlock()
+
+	// Newest-first: only the directory's most recently updated session may
+	// claim presence. UpdatedRelativeMs is now-minus-time_updated, so the
+	// minimum wins; ties keep input order (strict less-than replaces).
+	claimant := make(map[string]int)
+	for i := range out {
+		if out[i].Directory == "" {
+			continue
+		}
+		key := filepath.Clean(out[i].Directory)
+		if j, ok := claimant[key]; !ok || out[i].UpdatedRelativeMs < out[j].UpdatedRelativeMs {
+			claimant[key] = i
+		}
+	}
+	claimed := make(map[int]struct{}, len(claimant))
+	for _, i := range claimant {
+		claimed[i] = struct{}{}
+	}
 
 	for i := range out {
 		if out[i].Directory == "" {
+			continue
+		}
+		if _, ok := claimed[i]; !ok {
 			continue
 		}
 		key := filepath.Clean(out[i].Directory)
@@ -164,6 +213,15 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 		}
 	}
 	return out, nil
+}
+
+// LiveCounts reports the last observed ground truth: live (non-exited)
+// zellij panes and alive opencode processes. Zero before the first
+// successful Enrich; last-known across infra faults.
+func (s *Source) LiveCounts() (panes int, procs int) {
+	s.countsMu.Lock()
+	defer s.countsMu.Unlock()
+	return s.lastLivePanes, s.lastLiveProcesses
 }
 
 // backingDead reports whether every opencode proc observed at a pane CWD is

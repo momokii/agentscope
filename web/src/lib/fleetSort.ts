@@ -100,3 +100,59 @@ export function filterSessions(
     ),
   );
 }
+
+/** Fleet-UX status filter: one session status, or all. */
+export type StatusFilter = "all" | SessionStatus;
+
+export const STATUS_FILTERS: readonly StatusFilter[] = [
+  "all",
+  "running",
+  "waiting-input",
+  "idle",
+  "error",
+  "archived",
+];
+
+/** Live = needs operator attention now: running or waiting-input. */
+export function isLiveStatus(status: SessionStatus): boolean {
+  return status === "running" || status === "waiting-input";
+}
+
+export interface StatusCounts {
+  counts: Record<SessionStatus, number>;
+  total: number;
+}
+
+/** One pass over the snapshot: per-status counts for the filter chips. */
+export function countByStatus(rows: readonly SessionRow[]): StatusCounts {
+  const counts: Record<SessionStatus, number> = {
+    running: 0,
+    "waiting-input": 0,
+    idle: 0,
+    error: 0,
+    archived: 0,
+  };
+  for (const row of rows) counts[row.status] += 1;
+  return { counts, total: rows.length };
+}
+
+/**
+ * Single-pass fleet filter: search query + status chip + live-only toggle
+ * compose (AND). Cheap at 1963 rows — one pass, no per-row allocation.
+ */
+export function applyFleetFilters(
+  rows: readonly SessionRow[],
+  query: string,
+  status: StatusFilter,
+  liveOnly: boolean,
+): SessionRow[] {
+  const needle = query.trim().toLowerCase();
+  return rows.filter((row) => {
+    if (status !== "all" && row.status !== status) return false;
+    if (liveOnly && !isLiveStatus(row.status)) return false;
+    if (needle === "") return true;
+    return [row.id, row.title, row.project, row.directory, row.model].some(
+      (field) => field.toLowerCase().includes(needle),
+    );
+  });
+}

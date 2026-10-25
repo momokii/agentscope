@@ -122,20 +122,22 @@ func (c *Collector) tokensPerHour(interval time.Duration, now time.Time) float64
 // lives. Why the round-trip: the frozen ports seam carries SessionRow, not
 // StatusSignals — W1-1 owns signal detection over the WAL db and ships the
 // derived status. Re-affirming through DeriveStatus canonicalizes any value
-// to the valid set instead of reimplementing precedence here. Every one of
-// the five contract statuses round-trips to itself.
-func projectSignals(status model.SessionStatus) model.StatusSignals {
+// to the valid set instead of reimplementing precedence. recent carries the
+// row's recency (UpdatedRelativeMs inside the active window): every one of
+// the five contract statuses round-trips to itself when recent; ancient rows
+// gate to idle (archived still wins) exactly as the db path derives.
+func projectSignals(status model.SessionStatus, recent bool) model.StatusSignals {
 	switch status {
 	case model.SessionRunning:
-		return model.StatusSignals{InFlightAssistant: true}
+		return model.StatusSignals{InFlightAssistant: true, RecentActivity: recent}
 	case model.SessionError:
-		return model.StatusSignals{HasError: true}
+		return model.StatusSignals{HasError: true, RecentActivity: recent}
 	case model.SessionArchived:
 		return model.StatusSignals{Archived: true}
 	case model.SessionWaitingInput:
-		return model.StatusSignals{LatestRole: "user"}
+		return model.StatusSignals{LatestRole: "user", RecentActivity: recent}
 	default:
-		return model.StatusSignals{}
+		return model.StatusSignals{RecentActivity: recent}
 	}
 }
 
@@ -182,11 +184,16 @@ func sortSessions(rows []model.SessionRow) {
 // approximation: SessionRow carries cumulative cost only, so the strip sums
 // it fleet-wide; true since-local-midnight attribution needs message-level
 // cost timestamps from the db layer (W1-1 follow-up). SSEConnected reports
-// the collector-to-sink path the collector itself owns.
-func buildKPIs(rows []model.SessionRow, tokensPerHour float64) model.KPIs {
+// the collector-to-sink path the collector itself owns. livePanes and
+// liveProcesses are the runtime source's ground truth (see
+// ports.RuntimeSource.LiveCounts) so the operator can compare sessions
+// running against processes actually alive.
+func buildKPIs(rows []model.SessionRow, tokensPerHour float64, livePanes, liveProcesses int) model.KPIs {
 	kpis := model.KPIs{
 		TokensPerHour: tokensPerHour,
 		SSEConnected:  true,
+		LivePanes:     livePanes,
+		LiveProcesses: liveProcesses,
 	}
 	for _, row := range rows {
 		switch row.Status {

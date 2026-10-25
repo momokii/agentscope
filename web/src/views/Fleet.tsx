@@ -14,16 +14,22 @@ import type { SessionRow, Snapshot } from "../lib/sse";
 import type { ConnectionPhase } from "../lib/sse";
 import {
   RECENCY_LABELS,
-  filterSessions,
+  applyFleetFilters,
+  countByStatus,
   groupFleetRows,
   isExited,
   sortFleetRows,
 } from "../lib/fleetSort";
+import type { StatusFilter } from "../lib/fleetSort";
 import { formatAge, formatCompact, formatUSD } from "../lib/format";
 import KpiStrip from "../components/KpiStrip";
 import RelativeTime from "../components/RelativeTime";
 import Sparkline from "../components/Sparkline";
 import StatusBadge from "../components/StatusBadge";
+import StatusDistribution from "../components/StatusDistribution";
+import StatusFilterBar, {
+  STATUS_FILTER_LABELS,
+} from "../components/StatusFilterBar";
 import type { KPIs } from "../lib/sse";
 
 export interface FleetProps {
@@ -45,6 +51,13 @@ export interface FleetProps {
   onSelect: (id: string) => void;
   /** Injectable clock for tests; defaults to Date.now(). */
   nowMs?: number;
+  /**
+   * Status chip + live-only toggle, hash-driven from App (shareable links,
+   * back/forward). Defaults keep the unfiltered fleet for existing callers.
+   */
+  statusFilter?: StatusFilter;
+  liveOnly?: boolean;
+  onFilterChange?: (status: StatusFilter, liveOnly: boolean) => void;
 }
 
 function zeroKpis(): KPIs {
@@ -110,17 +123,41 @@ export default function Fleet({
   onTogglePin,
   onSelect,
   nowMs,
+  statusFilter = "all",
+  liveOnly = false,
+  onFilterChange,
 }: FleetProps) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
 
+  /** Per-status counts over the FULL snapshot — one pass per tick. */
+  const statusCounts = useMemo(
+    () => countByStatus(snapshot?.sessions ?? []),
+    [snapshot],
+  );
+
   const rows = useMemo(() => {
     if (!snapshot) return [];
     const pinned = new Set(pins);
-    return sortFleetRows(filterSessions(snapshot.sessions, query)).filter(
-      (row) => !pinned.has(row.id),
-    );
-  }, [snapshot, query, pins]);
+    return sortFleetRows(
+      applyFleetFilters(snapshot.sessions, query, statusFilter, liveOnly),
+    ).filter((row) => !pinned.has(row.id));
+  }, [snapshot, query, statusFilter, liveOnly, pins]);
+
+  const resetFilters = () => {
+    setQuery("");
+    onFilterChange?.("all", false);
+  };
+
+  const activeFilterBits: string[] = [];
+  {
+    const needle = query.trim();
+    if (needle !== "") activeFilterBits.push(`“${needle}”`);
+    if (statusFilter !== "all")
+      activeFilterBits.push(`status ${STATUS_FILTER_LABELS[statusFilter]}`);
+    if (liveOnly) activeFilterBits.push("live only");
+  }
+  const filterActive = activeFilterBits.length > 0;
 
   /** Pinned section: pin-order slots 1–9, only ids present in the snapshot. */
   const pinnedRows = useMemo(() => {
@@ -275,11 +312,25 @@ export default function Fleet({
         </div>
       )}
 
+      <StatusFilterBar
+        counts={statusCounts.counts}
+        total={statusCounts.total}
+        value={statusFilter}
+        liveOnly={liveOnly}
+        onSelect={(status) => onFilterChange?.(status, liveOnly)}
+        onToggleLiveOnly={() => onFilterChange?.(statusFilter, !liveOnly)}
+      />
+
       <KpiStrip
         kpis={kpis}
         prevKpis={prevSnapshot?.kpis ?? null}
         phase={live ? phase : "closed"}
         lastSeq={snapshot?.seq ?? 0}
+      />
+
+      <StatusDistribution
+        counts={statusCounts.counts}
+        total={statusCounts.total}
       />
 
       {!snapshot ? (
@@ -288,9 +339,20 @@ export default function Fleet({
         </div>
       ) : rows.length === 0 ? (
         <div className="empty-state">
-          {query.trim() === ""
-            ? "No sessions in this fleet."
-            : `No sessions match “${query.trim()}”.`}
+          {filterActive ? (
+            <>
+              <p>No sessions match {activeFilterBits.join(" · ")}.</p>
+              <button
+                type="button"
+                className="empty-reset"
+                onClick={resetFilters}
+              >
+                Show all sessions
+              </button>
+            </>
+          ) : (
+            "No sessions in this fleet."
+          )}
         </div>
       ) : (
         <div className="fleet-table-wrap">

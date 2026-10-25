@@ -120,12 +120,14 @@ func (t *eventTail) add(row eventRow) {
 	}
 }
 
-// batchEventSignalsIncremental fills out.fresh exactly as batchEventSignals
-// would, but after one seed scan each tick fetches only newer rows and
-// merges them into the cache. Exactness: truncation composes, i.e.
-// top-10(A∪B) == top-10(top-10(A) ∪ B), and every delta row carries a higher
-// rowid than every cached row, so first-wins dedupe is preserved in both
-// directions (cached duplicates win by lower rowid; new keys merge by rank).
+// batchEventSignalsIncremental fills out.fresh with delta-only semantics:
+// an aggregate is fresh ONLY when genuinely new rows (rowid above the
+// previous watermark — overlap replays never count) arrived in this delta
+// AND its merged tail holds a fresh-type row. The seed tick therefore
+// reports no fresh events: pre-existing tail rows are history, not news.
+// Exactness note: the tail MERGE still equals the full scan (truncation
+// composes, first-wins dedupe preserved); only the flag derivation changed
+// from "tail mentions fresh" to "touched this delta with fresh in tail".
 func (r *Reader) batchEventSignalsIncremental(ctx context.Context, out *fleetSignals, sessionIDs map[string]struct{}) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -154,7 +156,9 @@ func (r *Reader) batchEventSignalsIncremental(ctx context.Context, out *fleetSig
 	if floor < 0 {
 		floor = 0
 	}
+	prevHigh := r.eventWatermark
 	high := r.eventWatermark
+	touched := make(map[string]struct{})
 	err := withBusyRetry(ctx, "batch events delta", func() error {
 		rows, err := r.db.QueryContext(ctx, queryBatchEventsDelta, floor)
 		if err != nil {
@@ -170,6 +174,9 @@ func (r *Reader) batchEventSignalsIncremental(ctx context.Context, out *fleetSig
 			}
 			if rowid > high {
 				high = rowid
+			}
+			if rowid > prevHigh {
+				touched[aggID] = struct{}{}
 			}
 			key := eventKey{aggregateID: aggID, seq: seq}
 			if _, dup := batchSeen[key]; dup {
@@ -194,7 +201,14 @@ func (r *Reader) batchEventSignalsIncremental(ctx context.Context, out *fleetSig
 			delete(r.eventCache, aggID)
 		}
 	}
-	for aggID, tail := range r.eventCache {
+	for aggID := range touched {
+		if _, ok := sessionIDs[aggID]; !ok {
+			continue
+		}
+		tail, ok := r.eventCache[aggID]
+		if !ok {
+			continue
+		}
 		for _, row := range tail.rows {
 			if row.typ == freshEventType {
 				out.fresh[aggID] = true

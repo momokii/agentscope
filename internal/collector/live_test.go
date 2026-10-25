@@ -149,6 +149,10 @@ func (l *liveDBReader) SessionDetail(_ context.Context, id string) (model.Sessio
 // Pane-title EXITED matching and the zellij join belong to W1-2.
 type liveRuntime struct{}
 
+// LiveCounts keeps liveRuntime satisfying ports.RuntimeSource. The Manual-QA
+// probe never asserts ground-truth counts; the db-reader path is the point.
+func (liveRuntime) LiveCounts() (int, int) { return 0, 0 }
+
 func (liveRuntime) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.SessionRow, error) {
 	liveCWDs := liveOpencodeCWDs()
 	self, _ := os.Readlink(fmt.Sprintf("/proc/%d/cwd", os.Getpid()))

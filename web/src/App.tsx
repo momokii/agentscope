@@ -26,11 +26,13 @@ import type { ActivityEvent } from "./lib/activity";
 import { usePins } from "./lib/pins";
 import {
   buildCompareHash,
+  buildFleetHash,
   buildSessionHash,
   buildTimelineHash,
 } from "./lib/routing";
 import { parseHash } from "./lib/routing";
 import type { Route } from "./lib/routing";
+import type { StatusFilter } from "./lib/fleetSort";
 import { isTypingTarget, useCommandPalette } from "./lib/useCommandPalette";
 import BottomBar from "./components/BottomBar";
 import CmdBar from "./components/CmdBar";
@@ -141,6 +143,19 @@ export default function App() {
 
   const selectedId = route.view === "session" ? route.id : null;
 
+  // Fleet-UX filter state lives in the hash (`#/?status=running&live=1`) so
+  // filtered views are shareable and back/forward works via hashchange.
+  const fleetStatus: StatusFilter =
+    route.view === "fleet" ? (route.status ?? "all") : "all";
+  const fleetLiveOnly = route.view === "fleet" && route.liveOnly === true;
+
+  const changeFleetFilter = useCallback(
+    (status: StatusFilter, liveOnly: boolean) => {
+      window.location.hash = buildFleetHash(status, liveOnly);
+    },
+    [],
+  );
+
   // Global quick-switch + live/pin keys. Ignored while typing; Esc closes
   // the palette first (hook), then drops back from stub/compare/timeline
   // to fleet.
@@ -231,6 +246,7 @@ export default function App() {
             row={selectedRow}
             paletteOpen={palette.open}
             messageId={route.messageId ?? null}
+            sessions={snapshot?.sessions ?? []}
           />
         ) : route.view === "compare" ? (
           <Compare
@@ -259,6 +275,9 @@ export default function App() {
             pins={pins}
             onTogglePin={togglePin}
             onSelect={selectSession}
+            statusFilter={fleetStatus}
+            liveOnly={fleetLiveOnly}
+            onFilterChange={changeFleetFilter}
           />
         )}
       </main>

@@ -55,9 +55,11 @@ func Test_MaybeRunningTool_prefilter_exact(t *testing.T) {
 // When: the incremental pass seeds, advances through inserts (new keys,
 // duplicate keys, backfills, a new aggregate, eviction flipping a flag),
 // and reseeds after the table regresses.
-// Then: every incremental result equals the stateless full scan on the same
-// rows. Reverting the fix fails this file to compile (incremental entry
-// points vanish) and any merge skew fails the equalities.
+// Then: the seed tick reports no fresh events (delta-only: history is not
+// news); every delta tick marks exactly the touched aggregates whose merged
+// tail holds a fresh row, and the tail MERGE still equals the stateless full
+// scan on the same rows. Reverting the fix fails this file to compile
+// (incremental entry points vanish) and any merge skew fails the equalities.
 func Test_BatchEventsIncremental_matches_fullscan(t *testing.T) {
 	// Given
 	db := openFixture(t)
@@ -86,16 +88,18 @@ func Test_BatchEventsIncremental_matches_fullscan(t *testing.T) {
 	if err := r.batchEventSignalsIncremental(ctx, inc, ids); err != nil {
 		t.Fatalf("incremental tick 1: %v", err)
 	}
-	// Then: identical to the full scan
+	// Then: the seed tick reports NO fresh events — pre-existing tail rows
+	// are history, not news (delta-only semantics). The tail merge itself
+	// still matches the full scan; only the flag derivation differs.
 	full := &fleetSignals{fresh: make(map[string]bool)}
 	if err := r.batchEventSignals(ctx, full); err != nil {
 		t.Fatalf("full scan: %v", err)
 	}
-	if !equalFresh(inc.fresh, full.fresh) {
-		t.Fatalf("tick 1 mismatch: incremental %v vs full %v", inc.fresh, full.fresh)
+	if len(inc.fresh) != 0 {
+		t.Fatalf("tick 1 (seed) flags = %v, want empty", inc.fresh)
 	}
-	if !inc.fresh["ses_a"] || inc.fresh["ses_b"] {
-		t.Fatalf("tick 1 flags = %v, want {ses_a:true}", inc.fresh)
+	if !full.fresh["ses_a"] || full.fresh["ses_b"] {
+		t.Fatalf("full scan tick 1 flags = %v, want {ses_a:true}", full.fresh)
 	}
 	if !r.eventSeeded || r.eventWatermark <= 0 {
 		t.Fatalf("seeded=%v watermark=%d, want seeded with positive watermark", r.eventSeeded, r.eventWatermark)

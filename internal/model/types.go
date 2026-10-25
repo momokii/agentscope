@@ -111,6 +111,13 @@ type KPIs struct {
 	CostToday float64 `json:"cost_today"`
 	// Errors is the count of sessions with status error.
 	Errors int `json:"errors"`
+	// LivePanes is the count of live (non-exited) zellij panes observed by
+	// the runtime source on the last tick. Compare against Active: running
+	// rows far above live panes means stale status, not hidden work.
+	LivePanes int `json:"live_panes"`
+	// LiveProcesses is the count of alive opencode processes observed via
+	// /proc on the last tick. Ground truth for "processes actually alive".
+	LiveProcesses int `json:"live_processes"`
 	// SSEConnected is true when the hub's event stream is healthy.
 	SSEConnected bool `json:"sse_connected"`
 }

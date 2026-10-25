@@ -118,7 +118,11 @@ func (f *fakeDB) watermarkCalls() int {
 type fakeRuntime struct {
 	log       *orderLog
 	enrichErr error
+	panes     int
+	procs     int
 }
+
+func (f *fakeRuntime) LiveCounts() (int, int) { return f.panes, f.procs }
 
 func (f *fakeRuntime) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.SessionRow, error) {
 	if f.log != nil {
@@ -667,6 +671,78 @@ func Test_NewCollector_rejects_nil_dependencies(t *testing.T) {
 		if _, err := NewCollector(args.db, args.rt, args.sink, testConfig()); !errors.Is(err, ErrNilDependency) {
 			t.Errorf("%s: err = %v, want ErrNilDependency", name, err)
 		}
+	}
+}
+
+func Test_Collector_Tick_gates_ancient_rows_to_idle(t *testing.T) {
+	// Given: recent and ancient rows across statuses (UpdatedRelativeMs is
+	// the db-owned now-minus-time_updated verdict; the 2m default window
+	// applies since testConfig leaves ActiveWindow unset)
+	ancientMs := int64((time.Hour).Milliseconds())
+	rows := []model.SessionRow{
+		rowFixture("run-recent", model.SessionRunning, 1, 0),
+		rowFixture("run-ancient", model.SessionRunning, 1, 0),
+		rowFixture("wait-ancient", model.SessionWaitingInput, 1, 0),
+		rowFixture("err-ancient", model.SessionError, 1, 0),
+		rowFixture("arch-ancient", model.SessionArchived, 1, 0),
+	}
+	rows[0].UpdatedRelativeMs = 1_000
+	for i := 1; i < len(rows); i++ {
+		rows[i].UpdatedRelativeMs = ancientMs
+	}
+	db := &fakeDB{rows: rows, updMs: 1, evID: 1}
+	sink := &fakeSink{}
+	c := newTestCollector(db, &fakeRuntime{}, sink)
+
+	// When
+	if _, err := c.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	// Then: only the recent running row survives; archived still wins
+	got := sink.published()
+	if len(got) != 1 {
+		t.Fatalf("published = %d, want 1", len(got))
+	}
+	want := map[string]model.SessionStatus{
+		"run-recent":   model.SessionRunning,
+		"run-ancient":  model.SessionIdle,
+		"wait-ancient": model.SessionIdle,
+		"err-ancient":  model.SessionIdle,
+		"arch-ancient": model.SessionArchived,
+	}
+	for _, s := range got[0].Sessions {
+		if w, ok := want[s.ID]; ok && s.Status != w {
+			t.Errorf("%s status = %q, want %q", s.ID, s.Status, w)
+		}
+	}
+	if got[0].KPIs.Active != 1 {
+		t.Errorf("kpis.active = %d, want 1", got[0].KPIs.Active)
+	}
+}
+
+func Test_Collector_KPI_reports_live_ground_truth(t *testing.T) {
+	// Given: a runtime source observing 3 live panes and 2 live procs
+	db := &fakeDB{rows: []model.SessionRow{rowFixture("r1", model.SessionRunning, 60, 1)}, updMs: 1, evID: 1}
+	sink := &fakeSink{}
+	c := newTestCollector(db, &fakeRuntime{panes: 3, procs: 2}, sink)
+
+	// When
+	if _, err := c.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	// Then: ground-truth counts flow into the KPI strip additively
+	got := sink.published()
+	if len(got) != 1 {
+		t.Fatalf("published = %d, want 1", len(got))
+	}
+	if got[0].KPIs.LivePanes != 3 || got[0].KPIs.LiveProcesses != 2 {
+		t.Errorf("kpis live = (%d,%d), want (3,2)",
+			got[0].KPIs.LivePanes, got[0].KPIs.LiveProcesses)
+	}
+	if got[0].KPIs.Active != 1 {
+		t.Errorf("kpis.active = %d, want 1 (existing fields unchanged)", got[0].KPIs.Active)
 	}
 }
 

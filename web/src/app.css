@@ -105,7 +105,7 @@ a:focus-visible {
 
 .kpi-strip {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: var(--gap);
 }
 
@@ -2281,4 +2281,205 @@ button.tools-row:hover {
 
 .raw-line {
   display: block;
+}
+
+/* ---------- fleet status filters (fleet-ux: chips + live-only) ---------- */
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: var(--border);
+}
+
+.filter-chip,
+.filter-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--ink-800);
+  border: var(--border);
+  border-radius: var(--radius-chip);
+  color: var(--ink-200);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  font-variant-numeric: var(--tnum);
+  padding: 4px 8px;
+  white-space: nowrap;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.filter-chip .count,
+.filter-live .count {
+  color: var(--ink-400);
+}
+
+.filter-chip-on,
+.filter-live-on {
+  background: var(--wash-accent);
+  color: var(--ink-100);
+}
+
+.filter-chip-on .count,
+.filter-live-on .count {
+  color: var(--ink-100);
+}
+
+/* ---------- status distribution (fleet-ux: stacked bar + legend) ---------- */
+
+.dist {
+  padding: 8px 12px;
+  border-bottom: var(--border);
+}
+
+.dist-track {
+  display: flex;
+  height: 8px;
+  background: var(--ink-700);
+  border-radius: var(--radius-chip);
+  overflow: hidden;
+}
+
+.dist-seg {
+  min-width: 0;
+}
+
+.dist-seg-run { background: var(--run); }
+.dist-seg-warn { background: var(--warn); }
+.dist-seg-ok { background: var(--ok); }
+.dist-seg-err { background: var(--err); }
+.dist-seg-mute { background: var(--mute); }
+
+.dist-legend {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  font-variant-numeric: var(--tnum);
+}
+
+.dist-legend-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--ink-200);
+}
+
+.dist-legend-item .count {
+  color: var(--ink-400);
+}
+
+.dist-legend-item[data-status="running"] .dist-glyph { color: var(--run); }
+.dist-legend-item[data-status="waiting-input"] .dist-glyph { color: var(--warn); }
+.dist-legend-item[data-status="idle"] .dist-glyph { color: var(--ok); }
+.dist-legend-item[data-status="error"] .dist-glyph { color: var(--err); }
+.dist-legend-item[data-status="archived"] .dist-glyph { color: var(--mute); }
+
+.dist-empty {
+  color: var(--ink-400);
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+}
+
+/* ---------- empty-state reset (fleet-ux) ---------- */
+
+.empty-reset {
+  margin-top: 8px;
+  background: var(--ink-800);
+  border: var(--border);
+  border-radius: var(--radius-chip);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  font-variant-numeric: var(--tnum);
+  padding: 4px 12px;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+/* ---------- subagents panel (fleet-ux: per-child ground truth) ---------- */
+
+.subagents {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subagents-head {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--ink-400);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  font-variant-numeric: var(--tnum);
+}
+
+.subagent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subagent-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--ink-800);
+  border: var(--border);
+  border-radius: var(--radius-card);
+  padding: 8px 12px;
+  text-decoration: none;
+  color: inherit;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.subagent-row:hover {
+  background: var(--wash-accent);
+}
+
+.subagent-title {
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  color: var(--ink-100);
+}
+
+.subagent-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: var(--fs-12);
+  color: var(--ink-400);
+}
+
+.subagent-model {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-nostatus {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--mute);
 }

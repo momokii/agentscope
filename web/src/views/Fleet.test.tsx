@@ -60,25 +60,29 @@ describe("Fleet", () => {
       "Old spike",
     ]);
 
-    // Status is glyph + label text, never color alone.
-    expect(screen.getByText("●")).toBeDefined();
-    expect(screen.getByText("RUNNING")).toBeDefined();
-    expect(screen.getByText("▲")).toBeDefined();
-    expect(screen.getByText("NEEDS INPUT")).toBeDefined();
-    expect(screen.getByText("◌")).toBeDefined();
-    expect(screen.getByText("IDLE")).toBeDefined();
-    expect(screen.getByText("✕")).toBeDefined();
-    expect(screen.getByText("ERROR")).toBeDefined();
-    expect(screen.getByText("▪")).toBeDefined();
-    expect(screen.getByText("ARCHIVED")).toBeDefined();
+    // Status is glyph + label text, never color alone (scoped to the table:
+    // the filter bar and distribution legend repeat the same signals).
+    const table = within(document.querySelector(".fleet-table") as HTMLElement);
+    expect(table.getByText("●")).toBeDefined();
+    expect(table.getByText("RUNNING")).toBeDefined();
+    expect(table.getByText("▲")).toBeDefined();
+    expect(table.getByText("NEEDS INPUT")).toBeDefined();
+    expect(table.getByText("◌")).toBeDefined();
+    expect(table.getByText("IDLE")).toBeDefined();
+    expect(table.getByText("✕")).toBeDefined();
+    expect(table.getByText("ERROR")).toBeDefined();
+    expect(table.getByText("▪")).toBeDefined();
+    expect(table.getByText("ARCHIVED")).toBeDefined();
   });
 
   it("keeps waiting-input visually distinct from idle by shape + label", () => {
     renderFleet();
+    // Scoped to the table: the legend repeats both labels by design.
+    const table = within(document.querySelector(".fleet-table") as HTMLElement);
     // Labels differ (NEEDS INPUT vs IDLE) and glyphs differ (▲ vs ◌):
     // an operator at grayscale can still tell them apart.
-    const waitingBadge = screen.getByText("NEEDS INPUT").closest(".badge");
-    const idleBadge = screen.getByText("IDLE").closest(".badge");
+    const waitingBadge = table.getByText("NEEDS INPUT").closest(".badge");
+    const idleBadge = table.getByText("IDLE").closest(".badge");
     expect(waitingBadge?.textContent).toContain("▲");
     expect(idleBadge?.textContent).toContain("◌");
     expect(waitingBadge?.className).not.toBe(idleBadge?.className);
