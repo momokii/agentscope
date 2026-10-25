@@ -337,3 +337,8 @@
 - Deploy worker proved with 3-point evidence: published-port curl → RST; container-eth0 → refused; in-netns lo → 200. Root cause: server binds container-lo 127.0.0.1:8080 in a BRIDGE netns; DNAT targets container eth0 IP; in-netns HEALTHCHECK blind to it. W4-1's host-path proof was void (sandbox-blocked curl misread).
 - Orchestrator decision: host network mode (network_mode: host, drop ports:, PORT flows through as actual listen port). Rejected: 0.0.0.0-in-container (weakens assertLoopback invariant, needs env-override machinery the codebase bans). pid:host precedent supports it; exposure boundary unchanged (nothing off-loot except via tailscale serve).
 - Fix re-dispatched to same session (ses_e90b34799...): compose + Dockerfile comments + 3 docs + deploy.sh + README + FULL live proof incl. screen endpoint + suites green.
+## 2026-10-26 BIND_ADDR opt-in landed + verified + deployed live
+- Feature: BIND_ADDR env (default 127.0.0.1, zero behavior change); non-loopback REQUIRES DASHBOARD_AUTH (fail-closed FATAL, no secret echo); compose passes it through; SECURITY + VM_DEPLOY document the opt-in vs serve trade.
+- Verified: full Go suite green (154/10, incl. 12 new guard tests); live matrix on high ports — default serves loopback / gated wildcard 401-then-200 / ungated wildcard refuses in <5s with FATAL naming both env vars; cleanup receipts clean.
+- Live deploy (new image): healthz 200 + non-empty fleet (1964 sessions), detail + honest screen-409 proven, single dashboard container, 127.0.0.1-only bind, other stacks untouched. Left RUNNING on :18083 for the operator.
+- Operator step (unchanged): run F2 VM matrix + choose serve-vs-BIND_ADDR for tailnet exposure.
