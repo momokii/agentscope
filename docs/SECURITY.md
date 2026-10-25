@@ -112,6 +112,15 @@ inside a bridge-netns container. It would weaken the in-code
 the dashboard. Host mode keeps every loopback guarantee intact with zero
 code changes.
 
+Opt-in non-loopback bind (guarded, tailnet-only): `BIND_ADDR` (default
+`127.0.0.1`, unset = posture unchanged) may be set to e.g. `0.0.0.0` to
+reach the dashboard directly at `http://<tailnet-ip>:$PORT` without
+`tailscale serve`, but ONLY with `DASHBOARD_AUTH=user:pass` set — any
+non-loopback bind without valid auth makes the binary refuse to start
+(fail closed, no secret in the FATAL text). Tailnet-only assumption holds:
+never use this on a publicly reachable host (full transcripts are readable
+by anyone who can reach the port); `funnel` stays banned.
+
 ## 5. Security Gate checklist (reviewer runs verbatim)
 
 Repo greps (runnable now — pasted outputs verified 2026-10-24):

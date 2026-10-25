@@ -100,6 +100,12 @@ Full proof log: `docs/DOCKER_VERIFY.md`.
   before `up` (or add to compose `environment:` + `up` again). Empty/unset
   = explicit open tailnet-trust mode. Malformed (no colon, empty user/pass)
   = fail-closed refuse-to-serve. TO-RUN only if you want the gate.
+- [ ] **D7b (optional). Bind directly on the tailnet IP (no `serve`
+  hop).** `BIND_ADDR=0.0.0.0 DASHBOARD_AUTH=user:pass docker compose up
+  -d`, then open `http://<tailnet-ip>:$PORT` (healthz first). Non-loopback
+  without valid auth refuses to start by design. Prefer `tailscale serve`
+  (D8: HTTPS + tailnet identity) whenever possible — use this opt-in only
+  for plain-HTTP convenience on a tailnet you trust.
 - [ ] **D8. Expose to the tailnet — `serve`, NEVER `funnel`.**
   ```bash
   curl -s 127.0.0.1:$PORT/api/healthz   # re-confirm {"healthy":true,...} FIRST

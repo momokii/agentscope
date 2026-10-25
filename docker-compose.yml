@@ -68,6 +68,15 @@ services:
       # host port, so the operator's $PORT must flow through here (the old
       # "container side fixed at 8080" model is gone with the `ports:` stanza).
       PORT: "${PORT:-8080}"
+      # Bind posture (default loopback-only — zero behavior change when
+      # unset). Opt-in ONLY: BIND_ADDR=0.0.0.0 exposes the dashboard on all
+      # interfaces (e.g. direct http://<tailnet-ip>:$PORT without
+      # `tailscale serve`) and the binary REFUSES to start unless HTTP
+      # Basic auth is also enabled (DASHBOARD_AUTH=user:pass). Tailnet-only
+      # assumption: never use a non-loopback bind on a publicly reachable
+      # host — full transcripts are readable by anyone who can reach the
+      # port. Prefer `tailscale serve` (HTTPS + identity) when possible.
+      BIND_ADDR: "${BIND_ADDR:-127.0.0.1}"
     volumes:
       # WAL decision (see header): parent dir :ro keeps -wal/-shm visible.
       - ${HOME:-/home/hostuser}/.local/share/opencode:/data/opencode:ro

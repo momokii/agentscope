@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"opencode-dashboard/internal/auth"
 	"opencode-dashboard/internal/ports"
 )
 
@@ -16,13 +17,24 @@ import (
 // loopback address. The dashboard must never listen on 0.0.0.0.
 var ErrNonLoopbackBind = errors.New("dashboard: bind address is not loopback")
 
-// assertLoopback refuses any bind address that is not loopback. Config has
-// no bind-addr env override by design; this is defense-in-depth so a future
-// refactor can never silently expose the dashboard on 0.0.0.0.
+// assertLoopback enforces the bind posture in ONE place: loopback binds
+// (127.0.0.1/::1) serve exactly as before (no new failure modes, auth is
+// not consulted here); any non-loopback BIND_ADDR is an explicit operator
+// opt-in that serves ONLY with HTTP Basic auth enabled
+// (DASHBOARD_AUTH=user:pass). Unset or malformed DASHBOARD_AUTH on a
+// non-loopback bind returns a fail-closed error naming both env vars —
+// never the credential value.
 func assertLoopback(cfg ports.Config) error {
 	ip := net.ParseIP(cfg.BindAddr)
-	if ip == nil || !ip.IsLoopback() {
-		return fmt.Errorf("bind %q: %w (127.0.0.1 ONLY — front with `tailscale serve`, never `funnel`)", cfg.BindAddr, ErrNonLoopbackBind)
+	if ip != nil && ip.IsLoopback() {
+		return nil
+	}
+	creds, err := auth.CredentialsFromEnv()
+	if err != nil {
+		return fmt.Errorf("bind %q is not loopback: non-loopback BIND_ADDR requires DASHBOARD_AUTH=user:pass (opt-in only with auth enabled) — set DASHBOARD_AUTH=user:pass or unset BIND_ADDR (default 127.0.0.1): %w: %w", cfg.BindAddr, ErrNonLoopbackBind, err)
+	}
+	if !creds.Enabled {
+		return fmt.Errorf("bind %q is not loopback: non-loopback BIND_ADDR requires DASHBOARD_AUTH=user:pass (opt-in only with auth enabled) — set DASHBOARD_AUTH=user:pass or unset BIND_ADDR (default 127.0.0.1): %w", cfg.BindAddr, ErrNonLoopbackBind)
 	}
 	return nil
 }

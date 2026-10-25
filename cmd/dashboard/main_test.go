@@ -42,9 +42,10 @@ func Test_AssertLoopback_AcceptsLoopback(t *testing.T) {
 }
 
 // Given: non-loopback bind addresses (including the catastrophic 0.0.0.0).
-// When: the loopback assertion runs.
+// When: the loopback assertion runs with auth disabled.
 // Then: it rejects each with ErrNonLoopbackBind (startup must refuse).
 func Test_AssertLoopback_RejectsNonLoopback(t *testing.T) {
+	t.Setenv(auth.EnvVar, "")
 	for _, addr := range []string{"", "0.0.0.0", "::", "192.168.1.10", "10.0.0.5", "example.com"} {
 		cfg := ports.DefaultConfig()
 		cfg.BindAddr = addr
@@ -53,6 +54,75 @@ func Test_AssertLoopback_RejectsNonLoopback(t *testing.T) {
 		}
 	}
 }
+
+// Given: the bind/auth guard matrix (BIND_ADDR x DASHBOARD_AUTH).
+// When: assertLoopback runs (the single guard decision site).
+// Then: loopback serves with or without auth; non-loopback serves only
+// with valid auth; unset or malformed auth on non-loopback refuses with
+// ErrNonLoopbackBind and never echoes credential values.
+func Test_AssertLoopback_NonLoopbackRequiresAuth(t *testing.T) {
+	tests := []struct {
+		name    string
+		bind    string
+		authRaw *string // nil = leave env alone; caller sets explicitly per row
+		wantErr bool
+	}{
+		{name: "loopback no-auth serves", bind: "127.0.0.1", authRaw: strPtr(""), wantErr: false},
+		{name: "loopback authed serves", bind: "127.0.0.1", authRaw: strPtr("op:throwaway-fixture-1"), wantErr: false},
+		{name: "wildcard authed serves", bind: "0.0.0.0", authRaw: strPtr("op:throwaway-fixture-2"), wantErr: false},
+		{name: "wildcard no-auth refuses", bind: "0.0.0.0", authRaw: strPtr(""), wantErr: true},
+		{name: "wildcard malformed-auth refuses", bind: "0.0.0.0", authRaw: strPtr("no-colon-fixture"), wantErr: true},
+		{name: "v6 wildcard no-auth refuses", bind: "::", authRaw: strPtr(""), wantErr: true},
+		{name: "hostname no-auth refuses", bind: "example.com", authRaw: strPtr(""), wantErr: true},
+		{name: "rfc1918 tailnet-range no-auth refuses", bind: "100.64.0.1", authRaw: strPtr(""), wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.authRaw != nil {
+				t.Setenv(auth.EnvVar, *tt.authRaw)
+			}
+			cfg := ports.DefaultConfig()
+			cfg.BindAddr = tt.bind
+			err := assertLoopback(cfg)
+			if tt.wantErr {
+				if !errors.Is(err, ErrNonLoopbackBind) {
+					t.Fatalf("bind %q auth %q must refuse with ErrNonLoopbackBind, got %v", tt.bind, *tt.authRaw, err)
+				}
+				if !strings.Contains(err.Error(), "BIND_ADDR") || !strings.Contains(err.Error(), "DASHBOARD_AUTH") {
+					t.Fatalf("refusal must name both env vars, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("bind %q must serve, got %v", tt.bind, err)
+			}
+		})
+	}
+}
+
+// Given: a non-loopback bind with malformed auth carrying a secret-like
+// fragment.
+// When: the guard refuses.
+// Then: the error text contains neither the raw value nor the password
+// fragment (no credential logging).
+func Test_AssertLoopback_MalformedAuth_NeverEchoesSecrets(t *testing.T) {
+	const secretPass = "onlypass-leakcheck-9c4e2b"
+	t.Setenv(auth.EnvVar, ":"+secretPass)
+	cfg := ports.DefaultConfig()
+	cfg.BindAddr = "0.0.0.0"
+	err := assertLoopback(cfg)
+	if !errors.Is(err, ErrNonLoopbackBind) {
+		t.Fatalf("must refuse with ErrNonLoopbackBind, got %v", err)
+	}
+	if !errors.Is(err, auth.ErrInvalidAuthConfig) {
+		t.Fatalf("malformed auth must chain ErrInvalidAuthConfig, got %v", err)
+	}
+	if strings.Contains(err.Error(), secretPass) {
+		t.Fatalf("refusal must never echo credential values: %v", err)
+	}
+}
+
+func strPtr(s string) *string { return &s }
 
 // Given: the real `zellij --version` output shape.
 // When: the major parser runs.

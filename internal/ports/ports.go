@@ -67,8 +67,14 @@ type Config struct {
 	// PollInterval is the collector tick period. Default 10s (plan allows
 	// 5–15s). Env: POLL_INTERVAL (Go duration string, e.g. "10s").
 	PollInterval time.Duration
-	// BindAddr is the listen address. Always 127.0.0.1 — never 0.0.0.0.
-	// No env override by design (tailscale serve fronts it).
+	// BindAddr is the listen address. Default 127.0.0.1 (loopback-only).
+	// Env: BIND_ADDR. Any non-loopback value (e.g. 0.0.0.0, ::, a LAN IP)
+	// is an explicit operator opt-in and the binary refuses to serve it
+	// unless HTTP Basic auth is enabled (DASHBOARD_AUTH=user:pass) —
+	// enforced at startup next to the loopback assert in
+	// cmd/dashboard/selfcheck.go. Tailnet-only assumption: never bind
+	// non-loopback on a publicly reachable host — full transcripts are
+	// readable by anyone who can reach the port.
 	BindAddr string
 	// Port is the listen port. Env: PORT (default "8080").
 	Port string
@@ -88,13 +94,18 @@ func DefaultConfig() Config {
 	}
 }
 
-// LoadConfigFromEnv returns DefaultConfig overlaid with PORT, DATA_DIR, and
-// POLL_INTERVAL from the environment. Malformed POLL_INTERVAL falls back to
-// the 10s default; empty PORT/DATA_DIR keep their defaults.
+// LoadConfigFromEnv returns DefaultConfig overlaid with PORT, DATA_DIR,
+// POLL_INTERVAL, and BIND_ADDR from the environment. Malformed
+// POLL_INTERVAL falls back to the 10s default; empty PORT/DATA_DIR/BIND_ADDR
+// keep their defaults (unset BIND_ADDR behaves exactly as before:
+// loopback-only).
 func LoadConfigFromEnv() Config {
 	cfg := DefaultConfig()
 	if v := os.Getenv("PORT"); v != "" {
 		cfg.Port = v
+	}
+	if v := os.Getenv("BIND_ADDR"); v != "" {
+		cfg.BindAddr = v
 	}
 	if v := os.Getenv("DATA_DIR"); v != "" {
 		cfg.DataDir = v
