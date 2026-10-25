@@ -124,3 +124,9 @@ Read-only v1: no prompt injection path, no shell exec from the UI. Four-path mou
 | Port taken (`address already in use`) | Squatted host port (8080 was squatted on the dev host): `./deploy.sh` auto-bumps and says so — or pin one: `./deploy.sh --port 18082` (host mode: `$PORT` IS the listen port, no container/host split) |
 | `0.0.0.0` confusion (bound/published openly) | Forbidden by design: Go asserts loopback at startup; compose has NO `ports:` stanza (host mode — nothing to misconfigure); `ss -tlnp \| grep $PORT` must show `127.0.0.1:$PORT` held by the dashboard binary (no `docker-proxy` line) and NO `0.0.0.0:$PORT` line |
 | zellij major skew, no loud FATAL | Socket contract dir (`contract_version_1`) is version-sensitive; skew has no dedicated FATAL — it surfaces as blindness (boot log line `zellij detected` shows baked version). Majors differ → rebuild image with matching `ZELLIJ_VERSION`, do not proceed |
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
+
+Bundled-dependency licenses live in their own packages (`go.mod` / `package-lock.json` record them; `web/dist/` is built output of already-listed deps).
