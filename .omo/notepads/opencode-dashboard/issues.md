@@ -342,3 +342,6 @@
 - Verified: full Go suite green (154/10, incl. 12 new guard tests); live matrix on high ports — default serves loopback / gated wildcard 401-then-200 / ungated wildcard refuses in <5s with FATAL naming both env vars; cleanup receipts clean.
 - Live deploy (new image): healthz 200 + non-empty fleet (1964 sessions), detail + honest screen-409 proven, single dashboard container, 127.0.0.1-only bind, other stacks untouched. Left RUNNING on :18083 for the operator.
 - Operator step (unchanged): run F2 VM matrix + choose serve-vs-BIND_ADDR for tailnet exposure.
+## 2026-10-26 Healthcheck-auth fix VERIFIED + COMMITTED (orchestrator)
+- Probe reads DASHBOARD_AUTH itself + attaches Basic auth; malformed behaves as unset (documented). deploy.sh proofs route through auth_curl (401-expectations updated). Full suite green on orchestrator rerun: 158 passed / 10 pkgs (was 142).
+- Disk at 96% (21G free on /) — worker's earlier /tmp no-space failure was transient; my full-suite rerun passed clean, no action taken (never delete user data to "fix" disk).

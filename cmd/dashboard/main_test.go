@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -123,6 +124,99 @@ func Test_AssertLoopback_MalformedAuth_NeverEchoesSecrets(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+func probePort(t *testing.T, srv *httptest.Server) string {
+	t.Helper()
+	_, port, err := net.SplitHostPort(srv.Listener.Addr().String())
+	if err != nil {
+		t.Fatalf("split test server addr: %v", err)
+	}
+	return port
+}
+
+// Given: an authed server gating /api/healthz behind Basic auth (password
+// carries colons to pin first-colon split) and the probe env carrying the
+// same DASHBOARD_AUTH value.
+// When: runHealthcheck probes the local port.
+// Then: it attaches Basic credentials and exits 0.
+func Test_ProbeWithAuth_AgainstAuthedServer_ReturnsExitZero(t *testing.T) {
+	const user = "op"
+	const pass = "p:a:ss-fixture-1"
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"healthy":true}`))
+	})
+	srv := httptest.NewServer(auth.Middleware(inner, user, pass))
+	defer srv.Close()
+	t.Setenv("PORT", probePort(t, srv))
+	t.Setenv(auth.EnvVar, user+":"+pass)
+	got := runHealthcheck()
+	if got != 0 {
+		t.Fatalf("authed probe against authed server = %d, want 0", got)
+	}
+}
+
+// Given: the same authed server but the probe env is empty (no creds).
+// When: runHealthcheck probes without credentials.
+// Then: the gate 401s and the probe exits non-zero.
+func Test_ProbeWithoutAuth_AgainstAuthedServer_ReturnsNonZero(t *testing.T) {
+	const user = "op"
+	const pass = "probe-noauth-fixture-2"
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"healthy":true}`))
+	})
+	srv := httptest.NewServer(auth.Middleware(inner, user, pass))
+	defer srv.Close()
+	t.Setenv("PORT", probePort(t, srv))
+	t.Setenv(auth.EnvVar, "")
+	got := runHealthcheck()
+	if got == 0 {
+		t.Fatal("unauthenticated probe against authed server = 0, want non-zero")
+	}
+}
+
+// Given: an open server (no gate) and empty probe env.
+// When: runHealthcheck probes.
+// Then: it exits 0 (default path untouched by the auth change).
+func Test_ProbeAgainstOpenServer_ReturnsExitZero(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, _, ok := r.BasicAuth(); ok {
+			t.Error("open-mode probe must not send credentials")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"healthy":true}`))
+	}))
+	defer srv.Close()
+	t.Setenv("PORT", probePort(t, srv))
+	t.Setenv(auth.EnvVar, "")
+	got := runHealthcheck()
+	if got != 0 {
+		t.Fatalf("open probe against open server = %d, want 0", got)
+	}
+}
+
+// Given: DASHBOARD_AUTH malformed (no colon / empty user / empty password)
+// against an open server.
+// When: runHealthcheck probes.
+// Then: it does not crash and behaves as unset (exit 0). The server would
+// have refused to start on malformed auth anyway, so the probe invents no
+// new failure mode.
+func Test_ProbeMalformedEnv_DoesNotCrash(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"healthy":true}`))
+	}))
+	defer srv.Close()
+	t.Setenv("PORT", probePort(t, srv))
+	for _, raw := range []string{"no-colon-fixture", ":onlypass", "someuser:"} {
+		t.Setenv(auth.EnvVar, raw)
+		got := runHealthcheck()
+		if got != 0 {
+			t.Errorf("malformed-env probe = %d, want 0 (treated as unset)", got)
+		}
+	}
+}
 
 // Given: the real `zellij --version` output shape.
 // When: the major parser runs.

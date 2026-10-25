@@ -164,8 +164,20 @@ for i in $(seq 1 90); do
 done
 
 # ---------------- live proof: real curl binary, pasted output ----------------
+# Auth-aware proof curls: when DASHBOARD_AUTH=user:pass is set the gate
+# covers EVERYTHING (API + SPA), so proofs must present the same creds.
+# curl -u splits on the first colon, mirroring the server/probe contract
+# (passwords may contain colons). The value is never echoed (banner below
+# prints set/unset only — that redaction invariant is load-bearing).
+auth_curl() { # usage: auth_curl <curl-args...>
+  if [ -n "${DASHBOARD_AUTH:-}" ]; then
+    curl -s -u "$DASHBOARD_AUTH" "$@"
+  else
+    curl -s "$@"
+  fi
+}
 log "--- proof: GET /api/healthz ---"
-HEALTHZ="$(curl -s "127.0.0.1:$PORT/api/healthz" || true)"
+HEALTHZ="$(auth_curl "127.0.0.1:$PORT/api/healthz" || true)"
 printf '%s\n' "$HEALTHZ"
 echo "$HEALTHZ" | grep -q '"healthy":true' \
   || {
@@ -173,16 +185,16 @@ echo "$HEALTHZ" | grep -q '"healthy":true' \
     # poll interval, then re-check rather than failing the deploy.
     log "healthz not healthy:true on first read (stale warm-up is normal) — waiting one POLL_INTERVAL and re-checking…"
     sleep "${POLL_INTERVAL:-10s}" 2>/dev/null || sleep 10
-    HEALTHZ="$(curl -s "127.0.0.1:$PORT/api/healthz" || true)"
+    HEALTHZ="$(auth_curl "127.0.0.1:$PORT/api/healthz" || true)"
     printf '%s\n' "$HEALTHZ"
     echo "$HEALTHZ" | grep -q '"healthy":true' \
       || { docker logs --tail 30 "$CID" >&2 || true
            fail "healthz never reached healthy:true (empty/reset = app unreachable on host loopback, NOT warm-up). Logs tailed above. Fix: docker compose logs dashboard | tail -100"; }
   }
 log "--- proof: GET /api/fleet (head -c 300) ---"
-curl -s "127.0.0.1:$PORT/api/fleet" 2>/dev/null | head -c 300 || true; echo
+auth_curl "127.0.0.1:$PORT/api/fleet" 2>/dev/null | head -c 300 || true; echo
 log "--- proof: SPA served at / ---"
-curl -s -o /dev/null -w 'GET / -> %{http_code}\n' "127.0.0.1:$PORT/" || true
+auth_curl -o /dev/null -w 'GET / -> %{http_code}\n' "127.0.0.1:$PORT/" || true
 log "--- proof: loopback-only (want 127.0.0.1, NO 0.0.0.0:$PORT, NO docker-proxy) ---"
 ss -tlnp | grep "$PORT" || fail "ss shows nothing on $PORT?! Fix: docker compose ps ; docker compose logs dashboard | tail -20"
 if ss -tln 2>/dev/null | grep -qE "0\.0\.0\.0:$PORT[[:space:]]"; then
