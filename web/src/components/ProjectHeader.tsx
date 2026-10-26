@@ -25,6 +25,16 @@ function usdText(value: number | undefined): string {
     : "—";
 }
 
+const PANES_TITLE =
+  "OpenCode panes in this directory (presence signal; may briefly include a pane whose process just exited)";
+
+function livePanes(
+  header: ProjectHeaderData & { live_panes?: unknown },
+): number | undefined {
+  const value = header.live_panes;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 export default function ProjectHeader({ header, nowMs }: ProjectHeaderProps) {
   const lastActivity = header.last_activity_ms;
   return (
@@ -63,10 +73,19 @@ export default function ProjectHeader({ header, nowMs }: ProjectHeaderProps) {
 
         <div className="project-kpis" aria-label="Project KPIs">
           <div className="kpi-card">
-            <div className="kpi-label" title="opencode processes alive in this directory">
+            <div
+              className="kpi-label"
+              title="opencode processes attributed by /proc; 0 when the container cannot read /proc/<pid>/cwd"
+            >
               Live procs
             </div>
             <div className="kpi-value">{numberText(header.live_procs)}</div>
+          </div>
+          <div className="kpi-card">
+            <div className="kpi-label" title={PANES_TITLE}>
+              Live panes
+            </div>
+            <div className="kpi-value">{numberText(livePanes(header))}</div>
           </div>
           <div className="kpi-card">
             <div className="kpi-label">Running</div>

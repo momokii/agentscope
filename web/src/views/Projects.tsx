@@ -43,11 +43,29 @@ function usdText(value: number | undefined): string {
     : "—";
 }
 
+const PANES_TITLE =
+  "OpenCode panes in this directory (presence signal; may briefly include a pane whose process just exited)";
+
+function livePanes(project: ProjectSummary): number | undefined {
+  const value = (project as ProjectSummary & { live_panes?: unknown }).live_panes;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 function procsText(project: ProjectSummary): string {
+  const panes = livePanes(project);
+  if (panes !== undefined) {
+    return panes === 0 ? "no panes" : `${panes} pane${panes === 1 ? "" : "s"}`;
+  }
   const procs = project.live_procs;
   if (typeof procs !== "number" || !Number.isFinite(procs)) return "— procs";
   if (procs === 0) return "no procs";
   return `${procs} proc${procs === 1 ? "" : "s"}`;
+}
+
+function presenceTitle(project: ProjectSummary): string {
+  return livePanes(project) !== undefined
+    ? PANES_TITLE
+    : `${procsText(project)} alive in this directory`;
 }
 
 export default function Projects({
@@ -199,7 +217,7 @@ export default function Projects({
                         ? "project-procs project-procs-live"
                         : "project-procs"
                     }
-                    title={`${procsText(project)} alive in this directory`}
+                    title={presenceTitle(project)}
                   >
                     <span aria-hidden="true">{isLive ? "●" : "◌"}</span>
                     <span>{procsText(project)}</span>

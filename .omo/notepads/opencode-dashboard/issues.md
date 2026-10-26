@@ -391,3 +391,10 @@
 ## 2026-10-26 KPI timezone bug found while verifying
 - cost_today API $1.7632 vs SQL local-midnight $0.8195: the container has no TZ and no /etc/localtime, so Go used UTC midnight (7h earlier on this WIB host). Fixed by forwarding TZ and bind-mounting /etc/localtime:ro in compose.
 - tokens_per_hour verified against SQL: 2,647,502 tokens in the last 60s x 60 = 158.8M/hr at that instant (the orchestrator's own long turn); decays to 0 when idle because the metrics sequence forces a publish after each refresh.
+
+## 2026-10-26 FINAL LIVE VERIFICATION (commit 6a3fc5d)
+- SSE via cookie: seq 8→9→10 in 15s; anon SSE 401. Live reload fixed.
+- cost_today $1.0789 vs SQL local-midnight $1.0815 (metrics_age 8.7s) — TZ fix works; cost_total $79.22 lifetime labeled separately.
+- tokens_per_hour 0 at a quiet moment (was a fabricated huge number); measured from message rows in last 60s ×60.
+- Projects: 5 dirs with pane presence rank first (cve-injector, opencode-dashboard, php2shell, idmr-alarm-sender, secnews-cms) with live_procs/live_panes=1 each; global live_processes=3 (proc truth) — presence vs exact documented.
+- Default fleet filter = Active + Recent; pagination 50/page; date presets + custom from; idle split Recent(≤24h)/Stale(1–7d)/Old(>7d).

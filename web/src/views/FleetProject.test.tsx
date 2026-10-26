@@ -72,21 +72,21 @@ describe("project drill-in", () => {
   });
 
   it("renders the project KPI header from the frozen projects array", () => {
-    renderProject({
-      projects: [
-        makeProject({
-          directory: "/srv/alpha",
-          name: "alpha",
-          live_procs: 2,
-          running: 1,
-          waiting_input: 0,
-          sessions: 7,
-          tokens_total: 9000,
-          cost_total: 4.5,
-          last_activity_ms: 5_000,
-        }),
-      ],
-    });
+    const alphaProject = {
+      ...makeProject({
+        directory: "/srv/alpha",
+        name: "alpha",
+        live_procs: 2,
+        running: 1,
+        waiting_input: 0,
+        sessions: 7,
+        tokens_total: 9000,
+        cost_total: 4.5,
+        last_activity_ms: 5_000,
+      }),
+      live_panes: 3,
+    };
+    renderProject({ projects: [alphaProject] });
     const header = screen.getByLabelText("Project alpha");
     expect(header.querySelector(".project-header-name")?.textContent).toBe(
       "alpha",
@@ -94,16 +94,19 @@ describe("project drill-in", () => {
     expect(within(header).getByText("/srv/alpha")).toBeDefined();
     expect(within(header).getByText("Live procs")).toBeDefined();
     expect(within(header).getByText("2")).toBeDefined();
+    expect(within(header).getByText("Live panes")).toBeDefined();
+    expect(within(header).getByText("3")).toBeDefined();
     expect(within(header).getByText("Cost total")).toBeDefined();
     expect(within(header).getByText("$4.50")).toBeDefined();
     expect(within(header).getByText("9.0k")).toBeDefined();
   });
 
-  it("degrades to derived counts and an em dash for live procs", () => {
+  it("degrades to derived counts and em dashes for live procs and panes", () => {
     renderProject();
     const header = screen.getByLabelText("Project alpha");
     expect(within(header).getByText("Live procs")).toBeDefined();
-    expect(within(header).getAllByText("—")).toHaveLength(1);
+    expect(within(header).getByText("Live panes")).toBeDefined();
+    expect(within(header).getAllByText("—")).toHaveLength(2);
     expect(within(header).getByText("Running")).toBeDefined();
   });
 });

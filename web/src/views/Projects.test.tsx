@@ -9,6 +9,9 @@ afterEach(cleanup);
 
 const NOON = new Date(2026, 9, 24, 12, 0, 0, 0).getTime();
 
+const PANES_TITLE =
+  "OpenCode panes in this directory (presence signal; may briefly include a pane whose process just exited)";
+
 function cards(): HTMLElement[] {
   return Array.from(document.querySelectorAll(".project-card"));
 }
@@ -86,6 +89,50 @@ describe("Projects landing", () => {
     expect(quiet.getAttribute("data-live")).toBe("false");
     expect(within(quiet).getByText("no procs")).toBeDefined();
     expect(within(quiet).getByText("QUIET")).toBeDefined();
+  });
+
+  it("labels pane-derived presence as panes, including the zero state", () => {
+    const alpha = {
+      ...makeProject({
+        directory: "/srv/alpha",
+        name: "alpha",
+        live_procs: 2,
+        running: 1,
+      }),
+      live_panes: 2,
+    };
+    const beta = {
+      ...makeProject({
+        directory: "/srv/beta",
+        name: "beta",
+        live_procs: 0,
+        running: 0,
+      }),
+      live_panes: 0,
+    };
+    render(<Projects nowMs={NOON} projects={[alpha, beta]} />);
+
+    const live = cards()[0] as HTMLElement;
+    expect(within(live).getByText("2 panes")).toBeDefined();
+    expect(within(live).getByTitle(PANES_TITLE)).toBeDefined();
+
+    const quiet = cards()[1] as HTMLElement;
+    expect(within(quiet).getByText("no panes")).toBeDefined();
+    expect(within(quiet).getByTitle(PANES_TITLE)).toBeDefined();
+  });
+
+  it("uses the singular pane label for one pane", () => {
+    const alpha = {
+      ...makeProject({
+        directory: "/srv/alpha",
+        name: "alpha",
+        live_procs: 1,
+        running: 1,
+      }),
+      live_panes: 1,
+    };
+    render(<Projects projects={[alpha]} />);
+    expect(within(cards()[0] as HTMLElement).getByText("1 pane")).toBeDefined();
   });
 
   it("links each card to the encoded project drill-in route", () => {
