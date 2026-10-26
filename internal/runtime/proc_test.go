@@ -157,6 +157,46 @@ func Test_ScanOpencode_unreadable_root_fails(t *testing.T) {
 	}
 }
 
+func Test_ScanOpencode_keeps_proc_when_cwd_unreadable(t *testing.T) {
+	// Given: one opencode proc with a readable cwd, one whose cwd
+	// readlink fails (regular file, like in-container EACCES denial
+	// while status/stat/cmdline stay readable), one with no cwd link.
+	root := t.TempDir()
+	writeFixtureProc(t, root, 200, "opencode", "S (sleeping)", 10, "/proj/alpha")
+	writeFixtureProc(t, root, 201, "opencode", "S (sleeping)", 10, "")
+	if err := os.WriteFile(filepath.Join(root, "201", "cwd"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeFixtureProc(t, root, 202, "opencode", "S (sleeping)", 10, "")
+
+	// When
+	found, err := ScanOpencode(root)
+
+	// Then: all three procs kept; bad/missing cwd reads empty.
+	if err != nil {
+		t.Fatalf("ScanOpencode: %v", err)
+	}
+	byPID := map[int]ProcInfo{}
+	for _, p := range found {
+		byPID[p.PID] = p
+	}
+	if len(byPID) != 3 {
+		t.Fatalf("got %+v, want 3 opencode procs", found)
+	}
+	if byPID[200].CWD != "/proj/alpha" {
+		t.Errorf("pid 200 CWD = %q, want /proj/alpha", byPID[200].CWD)
+	}
+	if byPID[201].CWD != "" {
+		t.Errorf("pid 201 CWD = %q, want empty", byPID[201].CWD)
+	}
+	if byPID[202].CWD != "" {
+		t.Errorf("pid 202 CWD = %q, want empty", byPID[202].CWD)
+	}
+	if !byPID[201].Alive() || !byPID[202].Alive() {
+		t.Errorf("cwd-less procs must still read alive: %+v %+v", byPID[201], byPID[202])
+	}
+}
+
 func Test_ChildPID_resolves_pane_shell_chain(t *testing.T) {
 	// Given: shell pid 10 parents opencode pid 100; pid 101 is unrelated.
 	root := t.TempDir()

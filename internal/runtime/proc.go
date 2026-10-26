@@ -146,11 +146,12 @@ func ScanOpencode(procRoot string) ([]ProcInfo, error) {
 		if err != nil {
 			continue
 		}
-		// CWD is best-effort: a proc that vanishes mid-scan keeps its
-		// entry with an empty CWD rather than failing the row.
+		// CWD is best-effort: any read failure (vanished mid-scan,
+		// EACCES on readlink in-container, ...) keeps the entry with
+		// an empty CWD rather than dropping the row.
 		cwd, cwdErr := ReadProcCWD(procRoot, pid)
-		if cwdErr != nil && !errors.Is(cwdErr, ErrProcGone) {
-			continue
+		if cwdErr != nil {
+			cwd = ""
 		}
 		found = append(found, ProcInfo{PID: pid, PPID: ppid, CWD: cwd, State: state})
 	}
