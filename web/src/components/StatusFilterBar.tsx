@@ -1,6 +1,10 @@
 import { statusBadgeSpec } from "./StatusBadge";
 import type { StatusFilter } from "../lib/fleetSort";
-import { STATUS_FILTERS, isLiveStatus } from "../lib/fleetSort";
+import {
+  STATUS_CHIP_FILTERS,
+  STATUS_FILTERS,
+  isLiveStatus,
+} from "../lib/fleetSort";
 import type { SessionStatus } from "../lib/sse";
 
 /** Short chip labels (fleet toolbar space is tight; badge keeps full text). */
@@ -43,9 +47,13 @@ export default function StatusFilterBar({
     (sum, status) => sum + counts[status],
     0,
   );
+  const filters =
+    value === "idle"
+      ? STATUS_FILTERS
+      : STATUS_CHIP_FILTERS;
   return (
     <div className="filter-bar" role="group" aria-label="Filter fleet by status">
-      {STATUS_FILTERS.map((filter) => {
+      {filters.map((filter) => {
         const selected = value === filter;
         const count = filter === "all" ? total : counts[filter];
         const spec = filter === "all" ? null : statusBadgeSpec(filter);

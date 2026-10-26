@@ -79,6 +79,26 @@ export interface KPIs {
    */
   live_processes?: number;
   live_panes?: number;
+  /**
+   * Lifetime cost. `cost_today` keeps its historical name but now means
+   * spend since local midnight; `tokens_per_hour` is measured over the last
+   * 60s × 60. Absent on older snapshots → render "—", never zero.
+   */
+  cost_total?: number;
+  metrics_age_ms?: number;
+}
+
+export interface ProjectSummary {
+  directory: string;
+  name?: string;
+  sessions?: number;
+  running?: number;
+  waiting_input?: number;
+  idle?: number;
+  tokens_total?: number;
+  cost_total?: number;
+  live_procs?: number;
+  last_activity_ms?: number;
 }
 
 export interface Snapshot {
@@ -87,6 +107,7 @@ export interface Snapshot {
   kpis: KPIs;
   last_poll_ms: number;
   stale: boolean;
+  projects?: ProjectSummary[];
 }
 
 export type ConnectionPhase =
@@ -240,6 +261,9 @@ export function normalizeSnapshot(payload: unknown): Snapshot {
         ? (payload["last_poll_ms"] as number)
         : 0,
     stale: payload["stale"] === true,
+    ...(Array.isArray(payload["projects"])
+      ? { projects: payload["projects"] as ProjectSummary[] }
+      : {}),
   };
 }
 

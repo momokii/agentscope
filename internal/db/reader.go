@@ -59,6 +59,11 @@
 //	   (uses todo_session_idx; max observed live is 16).
 //	Q11 detail child counts: WHERE parent_id IN (<family ids>) GROUP BY
 //	   parent_id (session_parent_idx; one row per direct child at most).
+//	Q12 message metrics (OFF-TICK ONLY): one time-range scan over message
+//	   (WHERE time_created >= local midnight — no index covers a time-only
+//	   predicate) summing JSON token/cost fields, with a trailing-60s
+//	   conditional in the same pass. Costs ~3.5s on the live 8.2GB WAL db;
+//	   only the collector's background refresher may call it, never a tick.
 //
 // The database is opened read-only (mode=ro URI + PRAGMA query_only=ON) so
 // the reader never disturbs live TUI writers. SQLITE_BUSY from the live

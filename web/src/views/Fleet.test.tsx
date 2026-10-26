@@ -128,13 +128,14 @@ describe("Fleet", () => {
   });
 
   it("shows STALE chip on a stale snapshot and the reconnecting banner", () => {
-    renderFleet({
+    const { container } = renderFleet({
       snapshot: buildFixtureSnapshot({ stale: true }),
       phase: "reconnecting",
       attempt: 3,
     });
-    expect(screen.getByText(/Stale/)).toBeDefined();
-    expect(screen.getByText(/last update 4s ago/)).toBeDefined();
+    const staleChip = container.querySelector(".state-chip-stale");
+    expect(staleChip?.textContent).toContain("Stale");
+    expect(staleChip?.textContent).toContain("last update 4s ago");
     expect(screen.getByText(/reconnecting… attempt 3/)).toBeDefined();
   });
 

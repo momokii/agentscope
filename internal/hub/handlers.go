@@ -30,12 +30,13 @@ type HealthResponse struct {
 }
 
 // FleetResponse is GET /api/fleet. Field list frozen per the work plan:
-// {seq, sessions, kpis}. Sessions reuse model.SessionRow tags so Wave 2
-// consumes identical shapes from REST and SSE frames.
+// {seq, sessions, projects, kpis}. Sessions reuse model.SessionRow tags so
+// Wave 2 consumes identical shapes from REST and SSE frames.
 type FleetResponse struct {
-	Seq      uint64             `json:"seq"`
-	Sessions []model.SessionRow `json:"sessions"`
-	KPIs     model.KPIs         `json:"kpis"`
+	Seq      uint64                 `json:"seq"`
+	Sessions []model.SessionRow     `json:"sessions"`
+	Projects []model.ProjectSummary `json:"projects"`
+	KPIs     model.KPIs             `json:"kpis"`
 }
 
 // DebugResponse is GET /api/debug/hub. It is deliberately NOT part of the
@@ -199,13 +200,20 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 // latest tick (empty fleet before the first Publish).
 func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request) {
 	_ = r
-	resp := FleetResponse{Sessions: []model.SessionRow{}}
+	resp := FleetResponse{
+		Sessions: []model.SessionRow{},
+		Projects: []model.ProjectSummary{},
+	}
 	if snap, ok := s.hub.Latest(); ok {
 		resp.Seq = snap.Seq
 		resp.Sessions = snap.Sessions
+		resp.Projects = snap.Projects
 		resp.KPIs = snap.KPIs
 		if resp.Sessions == nil {
 			resp.Sessions = []model.SessionRow{}
+		}
+		if resp.Projects == nil {
+			resp.Projects = []model.ProjectSummary{}
 		}
 	}
 	payload, err := json.Marshal(resp)

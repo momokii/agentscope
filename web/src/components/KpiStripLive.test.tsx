@@ -34,6 +34,23 @@ describe("KpiStrip live runtime cards", () => {
     for (const el of absent) {
       expect(el.textContent).toBe("—");
     }
-    expect(container.querySelector(".kpi-strip")?.children).toHaveLength(8);
+    expect(container.querySelector(".kpi-strip")?.children).toHaveLength(10);
+  });
+
+  it("renders lifetime cost and metrics age with distinct labels", () => {
+    const { kpis } = buildFixtureSnapshot();
+    render(
+      <KpiStrip
+        kpis={{ ...kpis, cost_total: 48.2, metrics_age_ms: 12_000 }}
+        prevKpis={{ ...kpis, cost_total: 47.0, metrics_age_ms: 20_000 }}
+        phase="connected"
+        lastSeq={42}
+      />,
+    );
+    expect(screen.getByText("Cost total")).toBeDefined();
+    expect(screen.getByText("$48.20")).toBeDefined();
+    expect(screen.getByText("+$1.20")).toBeDefined();
+    expect(screen.getByText("Metrics age")).toBeDefined();
+    expect(screen.getByText("12s")).toBeDefined();
   });
 });

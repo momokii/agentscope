@@ -282,6 +282,34 @@ func Test_GateWithAuth_OpenMode_PassesThrough(t *testing.T) {
 	}
 }
 
+// Given: DASHBOARD_AUTH unset (empty) and a request that happens to carry
+// Basic credentials.
+// When: gateWithAuth wraps a stub mux.
+// Then: it passes through open and issues no session cookie (open mode must
+// be byte-for-byte unchanged).
+func Test_GateWithAuth_OpenMode_IssuesNoCookie(t *testing.T) {
+	t.Setenv(auth.EnvVar, "")
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	gated, err := gateWithAuth(inner)
+	if err != nil {
+		t.Fatalf("open mode must not error: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.SetBasicAuth("any", "thing")
+	rec := httptest.NewRecorder()
+	gated.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("open mode = %d, want 200", rec.Code)
+	}
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == auth.SessionCookieName {
+			t.Fatalf("open mode issued a session cookie: %+v", c)
+		}
+	}
+}
+
 // Given: DASHBOARD_AUTH set to a valid user:pass.
 // When: requests hit the gated handler with no/wrong/correct credentials.
 // Then: 401 + WWW-Authenticate + empty body without-or-with-wrong creds

@@ -8,7 +8,7 @@ import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 
 import type { KPIs } from "../lib/sse";
 import type { ConnectionPhase } from "../lib/sse";
-import { formatCompact, formatUSD } from "../lib/format";
+import { formatAgeShort, formatCompact, formatUSD } from "../lib/format";
 
 type DeltaTone = "run" | "ok" | "warn" | "err" | "mute";
 
@@ -68,6 +68,12 @@ function liveValue(raw: number | undefined): string {
   return typeof raw === "number" && Number.isFinite(raw) ? `${raw}` : "—";
 }
 
+function usdValue(raw: number | undefined): string {
+  return typeof raw === "number" && Number.isFinite(raw)
+    ? formatUSD(raw)
+    : "—";
+}
+
 function liveDelta(raw: number | undefined, prev: number | undefined): Delta {
   if (typeof raw !== "number" || !Number.isFinite(raw)) {
     return { tone: "mute", text: "—", direction: "flat" };
@@ -75,7 +81,31 @@ function liveDelta(raw: number | undefined, prev: number | undefined): Delta {
   return infoDelta(raw, typeof prev === "number" ? prev : null);
 }
 
+function usdDelta(
+  current: number | undefined,
+  previous: number | undefined,
+): Delta {
+  if (typeof current !== "number" || !Number.isFinite(current)) {
+    return { tone: "mute", text: "—", direction: "flat" };
+  }
+  if (
+    typeof previous !== "number" ||
+    !Number.isFinite(previous) ||
+    previous === current
+  ) {
+    return { tone: "mute", text: "±0", direction: "flat" };
+  }
+  const diff = current - previous;
+  return {
+    tone: "run",
+    text: `${diff > 0 ? "+" : "−"}${formatUSD(Math.abs(diff))}`,
+    direction: diff > 0 ? "up" : "down",
+  };
+}
+
 const LIVE_ABSENT_TITLE = "runtime not yet reporting";
+const COST_TOTAL_ABSENT_TITLE = "lifetime cost not yet reporting";
+const METRICS_AGE_ABSENT_TITLE = "message-level metrics not yet reporting";
 
 function DeltaLine({ delta }: { delta: Delta }) {
   return (
@@ -114,6 +144,10 @@ export default function KpiStrip({ kpis, prevKpis, phase, lastSeq }: KpiStripPro
     Math.round(kpis.cost_today * 100),
     prev ? Math.round(prev.cost_today * 100) : null,
   );
+  const costTotalDelta = usdDelta(kpis.cost_total, prev?.cost_total);
+  const hasMetricsAge =
+    typeof kpis.metrics_age_ms === "number" &&
+    Number.isFinite(kpis.metrics_age_ms);
 
   return (
     <section className="kpi-strip" aria-label="Fleet KPIs">
@@ -128,7 +162,9 @@ export default function KpiStrip({ kpis, prevKpis, phase, lastSeq }: KpiStripPro
         <DeltaLine delta={waitingDelta(kpis.waiting_input, prev?.waiting_input ?? null)} />
       </div>
       <div className="kpi-card">
-        <div className="kpi-label">Tokens/hr</div>
+        <div className="kpi-label" title="Measured tokens in the last 60s × 60">
+          Tokens/hr
+        </div>
         <div className="kpi-value">{formatCompact(kpis.tokens_per_hour)}</div>
         <DeltaLine
           delta={{
@@ -143,7 +179,9 @@ export default function KpiStrip({ kpis, prevKpis, phase, lastSeq }: KpiStripPro
         />
       </div>
       <div className="kpi-card">
-        <div className="kpi-label">Cost today</div>
+        <div className="kpi-label" title="Spend since local midnight">
+          Cost today
+        </div>
         <div className="kpi-value">{formatUSD(kpis.cost_today)}</div>
         <DeltaLine
           delta={{
@@ -156,6 +194,18 @@ export default function KpiStrip({ kpis, prevKpis, phase, lastSeq }: KpiStripPro
                   )}`,
           }}
         />
+      </div>
+      <div className="kpi-card">
+        <div className="kpi-label" title="Lifetime spend across all sessions">
+          Cost total
+        </div>
+        <div
+          className="kpi-value"
+          title={kpis.cost_total === undefined ? COST_TOTAL_ABSENT_TITLE : undefined}
+        >
+          {usdValue(kpis.cost_total)}
+        </div>
+        <DeltaLine delta={costTotalDelta} />
       </div>
       <div className="kpi-card">
         <div className="kpi-label">Errors</div>
@@ -183,6 +233,27 @@ export default function KpiStrip({ kpis, prevKpis, phase, lastSeq }: KpiStripPro
           {liveValue(kpis.live_panes)}
         </div>
         <DeltaLine delta={liveDelta(kpis.live_panes, prev?.live_panes)} />
+      </div>
+      <div className="kpi-card">
+        <div
+          className="kpi-label"
+          title="Age of message-level metrics; session totals may be fresher"
+        >
+          Metrics age
+        </div>
+        <div
+          className="kpi-value"
+          title={hasMetricsAge ? undefined : METRICS_AGE_ABSENT_TITLE}
+        >
+          {hasMetricsAge ? formatAgeShort(kpis.metrics_age_ms as number) : "—"}
+        </div>
+        <DeltaLine
+          delta={{
+            tone: "mute",
+            text: hasMetricsAge ? "message metrics" : "—",
+            direction: "flat",
+          }}
+        />
       </div>
       <div className="kpi-card">
         <div className="kpi-label">SSE stream</div>

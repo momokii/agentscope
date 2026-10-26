@@ -84,6 +84,13 @@ type SessionRow struct {
 	Tokens TokenCounts `json:"tokens"`
 	// Cost is cumulative USD cost.
 	Cost float64 `json:"cost"`
+	// RawCost is this session's own cumulative cost before subagent
+	// roll-up. Not serialized: the wire contract's cost keeps its rolled-up
+	// meaning, while aggregate KPIs/projects avoid counting children twice.
+	RawCost float64 `json:"-"`
+	// RawTokensTotal is Tokens.Total before subagent roll-up. Not
+	// serialized for the same double-counting reason as RawCost.
+	RawTokensTotal int64 `json:"-"`
 	// UpdatedRelativeMs is now minus session.time_updated, in milliseconds,
 	// computed at snapshot build time. Drives the fleet "relative time" cell.
 	UpdatedRelativeMs int64 `json:"updated_relative_ms"`
@@ -105,10 +112,19 @@ type KPIs struct {
 	Active int `json:"active"`
 	// WaitingInput is the count of sessions with heuristic waiting-input.
 	WaitingInput int `json:"waiting_input"`
-	// TokensPerHour is fleet-wide token throughput over the trailing hour.
+	// TokensPerHour is fleet-wide token throughput: the measured message
+	// tokens created in the last 60 seconds, scaled to an hour (x60). It is
+	// never derived from session roll-up deltas — a finishing subagent
+	// would inject its whole history as one tick's delta.
 	TokensPerHour float64 `json:"tokens_per_hour"`
-	// CostToday is fleet-wide USD spend since local midnight.
+	// CostToday is message-level USD spend since local midnight.
 	CostToday float64 `json:"cost_today"`
+	// CostTotal is lifetime USD spend: the sum of each session's own
+	// cumulative cost (message-level truth, no subagent double count).
+	CostTotal float64 `json:"cost_total"`
+	// MetricsAgeMs is milliseconds since the last successful message-level
+	// metrics refresh. -1 means no refresh has completed yet (unknown).
+	MetricsAgeMs int64 `json:"metrics_age_ms"`
 	// Errors is the count of sessions with status error.
 	Errors int `json:"errors"`
 	// LivePanes is the count of live (non-exited) zellij panes observed by
@@ -122,6 +138,25 @@ type KPIs struct {
 	SSEConnected bool `json:"sse_connected"`
 }
 
+// ProjectSummary is one per-directory aggregate in Snapshot.Projects.
+// Projects are keyed by session.directory (cleaned); directories with no
+// sessions are excluded, and a directory with no live process reports
+// live_procs 0. Idle counts every session that is neither running nor
+// waiting-input (idle, error, archived). Name is the directory basename
+// (the directory itself when it has no basename). Field names are frozen.
+type ProjectSummary struct {
+	Directory      string  `json:"directory"`
+	Name           string  `json:"name"`
+	Sessions       int     `json:"sessions"`
+	Running        int     `json:"running"`
+	WaitingInput   int     `json:"waiting_input"`
+	Idle           int     `json:"idle"`
+	TokensTotal    int64   `json:"tokens_total"`
+	CostTotal      float64 `json:"cost_total"`
+	LiveProcs      int     `json:"live_procs"`
+	LastActivityMs int64   `json:"last_activity_ms"`
+}
+
 // Snapshot is one collector tick: GET /api/fleet body and each
 // GET /api/events SSE data frame. Consumer: internal/collector builds it
 // with a monotonically increasing Seq; internal/hub fans it out and
@@ -131,6 +166,9 @@ type Snapshot struct {
 	Seq uint64 `json:"seq"`
 	// Sessions is the full fleet row set, sorted running→exited.
 	Sessions []SessionRow `json:"sessions"`
+	// Projects is the per-directory aggregate, sorted live_procs desc,
+	// running desc, last_activity_ms asc.
+	Projects []ProjectSummary `json:"projects"`
 	// KPIs is the aggregated fleet strip for this tick.
 	KPIs KPIs `json:"kpis"`
 	// LastPollMs is the duration of the last collector poll in milliseconds.

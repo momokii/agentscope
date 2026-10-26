@@ -3,11 +3,14 @@
 //
 // Design decisions (frozen by the W1-4 contract):
 //   - Watermark skip: PollState (MAX(time_updated), MAX(event.rowid)) is the
-//     cheap freshness check. When both values equal the last PUBLISHED tick,
-//     the full join is skipped: no Sessions/Enrich/Publish calls and seq is
+//     cheap freshness check. When both values equal the last PUBLISHED tick
+//     AND no message-metrics refresh has landed since the last publish, the
+//     full join is skipped: no Sessions/Enrich/Publish calls and seq is
 //     unchanged. Seq advances by exactly 1 per published Snapshot, so a skip
-//     emits no gap. The watermark is stored only on successful publish, so a
-//     failed publish can never wedge the loop into perpetual skips.
+//     emits no gap. The metrics sequence forces a publish after each refresh
+//     so tokens_per_hour can decay to 0 while nothing is running. The
+//     watermark is stored only on successful publish, so a failed publish can
+//     never wedge the loop into perpetual skips.
 //   - Fail-open watermark: a PollState error does NOT skip the tick; the full
 //     join is attempted and the frame (good or stale) still publishes.
 //   - Publish failure backoff is the normal tick wait: no in-tick retry loop
@@ -30,6 +33,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"opencode-dashboard/internal/model"
@@ -66,10 +71,12 @@ const (
 
 // Collector joins DB rows with runtime presence into Snapshot ticks.
 //
-// It is intentionally NOT safe for concurrent use: drive it from a single
-// goroutine via Run (or call Tick sequentially from tests). The publish path
-// spawns a short-lived waiter goroutine per tick that always rejoins before
-// Tick returns, so no goroutine outlives a tick.
+// Tick is not safe to call concurrently with itself: drive it from a single
+// goroutine via Run (or call Tick sequentially from tests). The only
+// concurrent writer is the message-metrics refresher, and its state is
+// guarded by metricsMu. The publish path spawns a short-lived waiter
+// goroutine per tick that always rejoins before Tick returns, so no
+// publish goroutine outlives a tick.
 type Collector struct {
 	db   ports.DBReader
 	rt   ports.RuntimeSource
@@ -86,13 +93,21 @@ type Collector struct {
 	wmUpdateMs    int64
 	wmEventRowID  int64
 
-	prevTotals  map[string]int64
-	sparks      map[string]*tokenRing
-	freshTicks  int
-	windowStart time.Time
+	prevTotals map[string]int64
+	sparks     map[string]*tokenRing
+
+	// Message-level metrics are refreshed by their own goroutine (see
+	// metrics.go) and read by every tick under metricsMu. The sequence
+	// lets a tick publish when a refresh lands even if the DB watermark
+	// did not move (otherwise tokens_per_hour could never decay to 0).
+	metricsMu               sync.Mutex
+	metrics                 metricsSample
+	metricsInterval         time.Duration
+	metricsWarned           atomic.Bool
+	lastPublishedMetricsSeq uint64
 
 	lastSessions []model.SessionRow
-	lastKPIs     model.KPIs
+	lastProjects []model.ProjectSummary
 	haveLastGood bool
 	publishStale bool
 }
@@ -126,31 +141,41 @@ func NewCollector(db ports.DBReader, rt ports.RuntimeSource, sink ports.Snapshot
 		slog.Duration("db_timeout", dbTimeout),
 		slog.Duration("poll_interval", cfg.PollInterval),
 		slog.Duration("active_window", activeWindow),
+		slog.Duration("metrics_interval", defaultMetricsInterval),
 	)
 	return &Collector{
-		db:             db,
-		rt:             rt,
-		sink:           sink,
-		cfg:            cfg,
-		clock:          realClock{},
-		dbTimeout:      dbTimeout,
-		activeWindow:   activeWindow,
-		publishTimeout: clampPublishTimeout(cfg.PollInterval),
-		prevTotals:     make(map[string]int64),
-		sparks:         make(map[string]*tokenRing),
+		db:              db,
+		rt:              rt,
+		sink:            sink,
+		cfg:             cfg,
+		clock:           realClock{},
+		dbTimeout:       dbTimeout,
+		activeWindow:    activeWindow,
+		publishTimeout:  clampPublishTimeout(cfg.PollInterval),
+		metricsInterval: defaultMetricsInterval,
+		prevTotals:      make(map[string]int64),
+		sparks:          make(map[string]*tokenRing),
 	}, nil
 }
 
 // Run ticks immediately once, then on every cfg.PollInterval, until ctx ends.
 // Tick errors are logged and swallowed — a failing source marks frames stale
-// but never crashes the loop. Run returns nil on clean cancellation.
+// but never crashes the loop. Run returns nil on clean cancellation. The
+// message-metrics refresher runs in its own goroutine (see metricsLoop) so a
+// slow metrics scan can never delay a tick.
 func (c *Collector) Run(ctx context.Context) error {
+	metricsDone := make(chan struct{})
+	go func() {
+		defer close(metricsDone)
+		c.metricsLoop(ctx)
+	}()
 	c.tickOnce(ctx)
 	ticker := time.NewTicker(c.cfg.PollInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
+			<-metricsDone
 			return nil
 		case <-ticker.C:
 			c.tickOnce(ctx)
@@ -179,7 +204,8 @@ func (c *Collector) Tick(ctx context.Context) (bool, error) {
 	wmUpdateMs, wmEventRowID, wmErr := c.pollState(ctx)
 	if wmErr != nil {
 		slog.ErrorContext(ctx, "collector pollstate failed", slog.Any("err", wmErr))
-	} else if c.havePublished && wmUpdateMs == c.wmUpdateMs && wmEventRowID == c.wmEventRowID {
+	} else if c.havePublished && wmUpdateMs == c.wmUpdateMs && wmEventRowID == c.wmEventRowID &&
+		c.metricsSequence() == c.lastPublishedMetricsSeq {
 		return false, nil
 	}
 
@@ -197,9 +223,6 @@ func (c *Collector) Tick(ctx context.Context) (bool, error) {
 
 	// UpdatedRelativeMs is owned by DBReader (only it holds
 	// session.time_updated at this seam); the collector preserves it untouched.
-	if c.freshTicks == 0 {
-		c.windowStart = start
-	}
 	windowMs := c.activeWindow.Milliseconds()
 	for i := range enriched {
 		recent := enriched[i].UpdatedRelativeMs <= windowMs
@@ -209,15 +232,23 @@ func (c *Collector) Tick(ctx context.Context) (bool, error) {
 	}
 	sortSessions(enriched)
 
-	elapsed := c.clock.Now().Sub(start)
+	now := c.clock.Now()
+	elapsed := now.Sub(start)
 	stale := sessErr != nil || enrichErr != nil || wmErr != nil || c.publishStale ||
 		elapsed > freshnessFactor*interval
 	livePanes, liveProcs := c.rt.LiveCounts()
-	kpis := buildKPIs(enriched, c.tokensPerHour(interval, start), livePanes, liveProcs)
+	metrics, metricsAgeMs := c.metricsValue(now)
+	kpis := buildKPIs(enriched, kpiMetrics{
+		tokensLast60s:     metrics.tokensLast60s,
+		costSinceMidnight: metrics.costSinceMidnight,
+		ageMs:             metricsAgeMs,
+	}, livePanes, liveProcs)
+	projects := buildProjects(enriched, c.rt.ProcsByDir())
 
 	snap := model.Snapshot{
 		Seq:        c.seq + 1,
 		Sessions:   enriched,
+		Projects:   projects,
 		KPIs:       kpis,
 		LastPollMs: elapsed.Milliseconds(),
 		Stale:      stale,
@@ -238,27 +269,40 @@ func (c *Collector) Tick(ctx context.Context) (bool, error) {
 		c.wmEventRowID = wmEventRowID
 	}
 	c.lastSessions = snap.Sessions
-	c.lastKPIs = snap.KPIs
+	c.lastProjects = snap.Projects
+	c.lastPublishedMetricsSeq = metrics.seq
 	c.haveLastGood = true
 	c.publishStale = false
-	c.freshTicks++
 	return true, nil
 }
 
 // publishStaleFrame emits the last good frame (or an empty frame when the
 // collector has never published) marked stale after a Sessions failure.
 func (c *Collector) publishStaleFrame(ctx context.Context, start time.Time) (bool, error) {
-	elapsed := c.clock.Now().Sub(start)
+	now := c.clock.Now()
+	elapsed := now.Sub(start)
 	sessions := append([]model.SessionRow(nil), c.lastSessions...)
+	projects := append([]model.ProjectSummary(nil), c.lastProjects...)
+	livePanes, liveProcs := c.rt.LiveCounts()
+	metrics, metricsAgeMs := c.metricsValue(now)
+	kpis := buildKPIs(sessions, kpiMetrics{
+		tokensLast60s:     metrics.tokensLast60s,
+		costSinceMidnight: metrics.costSinceMidnight,
+		ageMs:             metricsAgeMs,
+	}, livePanes, liveProcs)
 	snap := model.Snapshot{
 		Seq:        c.seq + 1,
 		Sessions:   sessions,
-		KPIs:       c.lastKPIs,
+		Projects:   projects,
+		KPIs:       kpis,
 		LastPollMs: elapsed.Milliseconds(),
 		Stale:      true,
 	}
 	if snap.Sessions == nil {
 		snap.Sessions = []model.SessionRow{}
+	}
+	if snap.Projects == nil {
+		snap.Projects = []model.ProjectSummary{}
 	}
 	if err := c.publish(ctx, snap); err != nil {
 		c.publishStale = true
@@ -267,7 +311,8 @@ func (c *Collector) publishStaleFrame(ctx context.Context, start time.Time) (boo
 	c.seq = snap.Seq
 	c.havePublished = true
 	c.lastSessions = snap.Sessions
-	c.lastKPIs = snap.KPIs
+	c.lastProjects = snap.Projects
+	c.lastPublishedMetricsSeq = metrics.seq
 	c.haveLastGood = true
 	return true, nil
 }

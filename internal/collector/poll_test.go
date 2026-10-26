@@ -41,8 +41,14 @@ type fakeDB struct {
 	evID    int64
 	wmErr   error
 
-	sessCalls int
-	wmCalls   int
+	metrics        ports.MessageMetrics
+	metricsErr     error
+	metricsBlock   chan struct{}
+	metricsStarted chan struct{}
+
+	sessCalls    int
+	wmCalls      int
+	metricsCalls int
 }
 
 func (f *fakeDB) Sessions(ctx context.Context) ([]model.SessionRow, error) {
@@ -71,6 +77,29 @@ func (f *fakeDB) PollState(ctx context.Context) (int64, int64, error) {
 		return 0, 0, f.wmErr
 	}
 	return f.updMs, f.evID, nil
+}
+
+func (f *fakeDB) MessageMetrics(ctx context.Context, _ time.Time) (ports.MessageMetrics, error) {
+	f.mu.Lock()
+	f.metricsCalls++
+	block := f.metricsBlock
+	started := f.metricsStarted
+	m, err := f.metrics, f.metricsErr
+	f.mu.Unlock()
+	if started != nil {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+	}
+	if block != nil {
+		select {
+		case <-block:
+		case <-ctx.Done():
+			return ports.MessageMetrics{}, ctx.Err()
+		}
+	}
+	return m, err
 }
 
 // SessionDetail keeps fakeDB satisfying ports.DBReader after the interface
@@ -116,13 +145,22 @@ func (f *fakeDB) watermarkCalls() int {
 }
 
 type fakeRuntime struct {
-	log       *orderLog
-	enrichErr error
-	panes     int
-	procs     int
+	log        *orderLog
+	enrichErr  error
+	panes      int
+	procs      int
+	procsByDir map[string]int
 }
 
 func (f *fakeRuntime) LiveCounts() (int, int) { return f.panes, f.procs }
+
+func (f *fakeRuntime) ProcsByDir() map[string]int {
+	out := make(map[string]int, len(f.procsByDir))
+	for dir, n := range f.procsByDir {
+		out[dir] = n
+	}
+	return out
+}
 
 func (f *fakeRuntime) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.SessionRow, error) {
 	if f.log != nil {
@@ -214,13 +252,15 @@ func testConfig() ports.Config {
 
 func rowFixture(id string, status model.SessionStatus, total int64, cost float64) model.SessionRow {
 	return model.SessionRow{
-		ID:      id,
-		Title:   "title-" + id,
-		Project: "proj",
-		Model:   "p/m",
-		Status:  status,
-		Tokens:  model.TokenCounts{In: total / 2, Out: total - total/2, Total: total},
-		Cost:    cost,
+		ID:             id,
+		Title:          "title-" + id,
+		Project:        "proj",
+		Model:          "p/m",
+		Status:         status,
+		Tokens:         model.TokenCounts{In: total / 2, Out: total - total/2, Total: total},
+		Cost:           cost,
+		RawCost:        cost,
+		RawTokensTotal: total,
 	}
 }
 
@@ -282,8 +322,14 @@ func Test_Collector_Tick_publishes_joined_snapshot_when_watermark_moves(t *testi
 	if snap.KPIs.Active != 1 || snap.KPIs.SSEConnected != true {
 		t.Errorf("kpis = %+v, want active=1 sse=true", snap.KPIs)
 	}
-	if snap.KPIs.CostToday != 4.0 {
-		t.Errorf("costToday = %v, want 4.0", snap.KPIs.CostToday)
+	if snap.KPIs.CostToday != 0 {
+		t.Errorf("costToday before a metrics refresh = %v, want 0", snap.KPIs.CostToday)
+	}
+	if snap.KPIs.CostTotal != 4.0 {
+		t.Errorf("costTotal = %v, want 4.0", snap.KPIs.CostTotal)
+	}
+	if snap.KPIs.MetricsAgeMs != -1 {
+		t.Errorf("metricsAgeMs before a refresh = %d, want -1", snap.KPIs.MetricsAgeMs)
 	}
 }
 
@@ -547,8 +593,11 @@ func Test_Collector_KPI_counts(t *testing.T) {
 	if kpis.Errors != 1 {
 		t.Errorf("errors = %d, want 1", kpis.Errors)
 	}
-	if kpis.CostToday != 63 {
-		t.Errorf("costToday = %v, want 63", kpis.CostToday)
+	if kpis.CostTotal != 63 {
+		t.Errorf("costTotal = %v, want 63", kpis.CostTotal)
+	}
+	if kpis.CostToday != 0 {
+		t.Errorf("costToday = %v, want 0 before metrics refresh", kpis.CostToday)
 	}
 	if !kpis.SSEConnected {
 		t.Error("sseConnected must be true")
@@ -817,6 +866,10 @@ func (d *deadlineProbeDB) Sessions(ctx context.Context) ([]model.SessionRow, err
 
 func (d *deadlineProbeDB) SessionDetail(_ context.Context, id string) (model.SessionDetail, error) {
 	return model.SessionDetail{}, fmt.Errorf("deadlineProbeDB: no detail for %s", id)
+}
+
+func (d *deadlineProbeDB) MessageMetrics(context.Context, time.Time) (ports.MessageMetrics, error) {
+	return ports.MessageMetrics{}, nil
 }
 
 // Given: DBTimeout set to 60ms with a DB that never answers.

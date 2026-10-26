@@ -124,6 +124,7 @@ func (r *Reader) toRow(s sessionScalars, in derivedInput, nowMs int64) model.Ses
 	}
 	signals.RecentActivity = relativeMs <= windowMs
 	tokensIn := s.tokensIn + s.tokensCr
+	total := tokensIn + s.tokensOut + s.tokensReas
 	return model.SessionRow{
 		ID:        s.id,
 		Title:     s.title,
@@ -134,9 +135,11 @@ func (r *Reader) toRow(s sessionScalars, in derivedInput, nowMs int64) model.Ses
 		Tokens: model.TokenCounts{
 			In:    tokensIn,
 			Out:   s.tokensOut,
-			Total: tokensIn + s.tokensOut + s.tokensReas,
+			Total: total,
 		},
 		Cost:              s.cost,
+		RawCost:           s.cost,
+		RawTokensTotal:    total,
 		UpdatedRelativeMs: relativeMs,
 	}
 }

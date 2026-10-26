@@ -38,6 +38,23 @@ type DBReader interface {
 	// MAX(session time_updated) and MAX(event rowid). The collector uses it
 	// to skip a full snapshot when nothing moved.
 	PollState(ctx context.Context) (lastUpdateMs int64, lastEventRowID int64, err error)
+	// MessageMetrics computes throughput and spend from individual message
+	// rows as of now (the caller supplies the clock). Session totals roll
+	// up subagent children, so diffing them counts a finishing child's
+	// entire history as one tick's work; per-message timestamps are the
+	// only honest throughput source.
+	MessageMetrics(ctx context.Context, now time.Time) (MessageMetrics, error)
+}
+
+// MessageMetrics is one message-level sample: tokens created in the last
+// 60 seconds and USD cost since local midnight.
+type MessageMetrics struct {
+	// TokensLast60s is the sum of message token totals created in the
+	// trailing 60 seconds.
+	TokensLast60s int64
+	// CostSinceMidnight is the sum of message cost created since local
+	// midnight in now's location.
+	CostSinceMidnight float64
 }
 
 // RuntimeSource is the zellij + /proc presence join (W1-2 owns the
@@ -56,6 +73,11 @@ type RuntimeSource interface {
 	// faults (the tick's Stale flag marks the uncertainty); zero before
 	// the first successful Enrich.
 	LiveCounts() (panes int, procs int)
+	// ProcsByDir reports the last observed count of ALIVE opencode
+	// processes per cleaned working directory, from the same /proc scan
+	// Enrich ran. Empty CWDs cannot be attributed and are omitted; a scan
+	// fault keeps the last-known map. Never guessed from sessions.
+	ProcsByDir() map[string]int
 }
 
 // SnapshotSink receives fully joined snapshots (W1-3 hub owns the

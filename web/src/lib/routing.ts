@@ -9,16 +9,34 @@
  * serializable so back/forward works via the existing hashchange wiring.
  */
 
-import type { StatusFilter } from "./fleetSort";
-import { STATUS_FILTERS } from "./fleetSort";
+import type { DatePreset, IdleBucket, StatusFilter } from "./fleetSort";
+import {
+  DATE_PRESETS,
+  IDLE_BUCKETS,
+  STATUS_FILTERS,
+  parseLocalDate,
+} from "./fleetSort";
+
+export interface FleetQuery {
+  status?: StatusFilter;
+  liveOnly?: boolean;
+  bucket?: IdleBucket;
+  since?: DatePreset;
+  /** `YYYY-MM-DD` custom lower bound (wins over `since`). */
+  from?: string;
+  /** 1-based page; omitted from the URL when 1. */
+  page?: number;
+}
 
 export type Route =
-  | { view: "fleet"; status?: StatusFilter; liveOnly?: boolean }
+  | ({ view: "fleet" } & FleetQuery)
+  | ({ view: "project"; directory: string } & FleetQuery)
   | { view: "session"; id: string; tab: SessionTab; messageId?: string }
   | { view: "compare"; ids: string[] }
   | { view: "timeline" };
 
 const SESSION_PREFIX = "/sessions/";
+const PROJECTS_PREFIX = "/projects/";
 const COMPARE_PATH = "/compare";
 const TIMELINE_PATH = "/timeline";
 const MAX_COMPARE_IDS = 4;
@@ -45,6 +63,16 @@ export function isSessionTab(value: string): value is SessionTab {
 
 export function parseHash(hash: string): Route {
   const clean = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (clean.startsWith(PROJECTS_PREFIX)) {
+    const [path, query] = splitQuery(clean);
+    const encoded = path.slice(PROJECTS_PREFIX.length);
+    if (encoded === "") return fleetRoute(query);
+    return {
+      view: "project",
+      directory: decodeURIComponent(encoded),
+      ...fleetQuery(query),
+    };
+  }
   if (clean.startsWith(SESSION_PREFIX)) {
     const rest = clean.slice(SESSION_PREFIX.length);
     // W3-2 additive: Raw-tab deep links append `?m=<msgId>`; split the
@@ -90,14 +118,57 @@ export function parseHash(hash: string): Route {
  * are omitted from the Route so `{ view: "fleet" }` equality holds.
  */
 function fleetRoute(query: string): Route {
-  if (query === "") return { view: "fleet" };
+  return { view: "fleet", ...fleetQuery(query) };
+}
+
+/**
+ * Shared fleet/project query params. Defaults are omitted so `{ view:
+ * "fleet" }` equality holds and bare `#/` stays bare. `from` wins over
+ * `since`; unknown values fall back to no filter.
+ */
+function fleetQuery(query: string): FleetQuery {
+  if (query === "") return {};
   const status = parseStatusParam(query);
   const liveOnly = parseLiveParam(query);
+  const bucket = parseBucketParam(query);
+  const from = parseFromParam(query);
+  const since = from === undefined ? parseSinceParam(query) : undefined;
+  const page = parsePageParam(query);
   return {
-    view: "fleet",
     ...(status === "all" ? {} : { status }),
     ...(liveOnly ? { liveOnly: true } : {}),
+    ...(bucket === undefined ? {} : { bucket }),
+    ...(since === undefined ? {} : { since }),
+    ...(from === undefined ? {} : { from }),
+    ...(page === undefined ? {} : { page }),
   };
+}
+
+export function parseBucketParam(query: string): IdleBucket | undefined {
+  const raw =
+    new URLSearchParams(query).get("bucket")?.trim().toLowerCase() ?? "";
+  if (!(IDLE_BUCKETS as readonly string[]).includes(raw)) return undefined;
+  return raw as IdleBucket;
+}
+
+export function parseSinceParam(query: string): DatePreset | undefined {
+  const raw = new URLSearchParams(query).get("since")?.trim().toLowerCase();
+  if (raw === undefined || raw === "all" || raw === "") return undefined;
+  if (!(DATE_PRESETS as readonly string[]).includes(raw)) return undefined;
+  return raw as DatePreset;
+}
+
+export function parseFromParam(query: string): string | undefined {
+  const raw = new URLSearchParams(query).get("from")?.trim() ?? "";
+  if (raw === "" || parseLocalDate(raw) === null) return undefined;
+  return raw;
+}
+
+export function parsePageParam(query: string): number | undefined {
+  const raw = new URLSearchParams(query).get("page")?.trim() ?? "";
+  if (!/^\d+$/.test(raw)) return undefined;
+  const page = Number(raw);
+  return Number.isSafeInteger(page) && page > 1 ? page : undefined;
 }
 
 /** `status=running|waiting-input|idle|error|archived|all` (`waiting` alias). */
@@ -149,15 +220,51 @@ export function parseIds(query: string): string[] {
   return [...seen];
 }
 
+function fleetParams(query: FleetQuery): URLSearchParams {
+  const params = new URLSearchParams();
+  if (query.status !== undefined && query.status !== "all") {
+    params.set("status", query.status);
+  }
+  if (query.liveOnly === true) params.set("live", "1");
+  if (query.bucket !== undefined && query.bucket !== "active-recent") {
+    params.set("bucket", query.bucket);
+  }
+  if (query.from !== undefined && query.from !== "") {
+    params.set("from", query.from);
+  } else if (query.since !== undefined && query.since !== "all") {
+    params.set("since", query.since);
+  }
+  if (query.page !== undefined && query.page > 1) {
+    params.set("page", `${Math.trunc(query.page)}`);
+  }
+  return params;
+}
+
+function hashWithQuery(path: string, query: FleetQuery): string {
+  const params = fleetParams(query).toString();
+  return params === "" ? path : `${path}?${params}`;
+}
+
+export function buildFleetQueryHash(query: FleetQuery = {}): string {
+  return hashWithQuery("#/", query);
+}
+
 export function buildFleetHash(
   status: StatusFilter = "all",
   liveOnly = false,
+  query: Omit<FleetQuery, "status" | "liveOnly"> = {},
 ): string {
-  const params = new URLSearchParams();
-  if (status !== "all") params.set("status", status);
-  if (liveOnly) params.set("live", "1");
-  const query = params.toString();
-  return query === "" ? "#/" : `#/?${query}`;
+  return buildFleetQueryHash({ ...query, status, liveOnly });
+}
+
+export function buildProjectHash(
+  directory: string,
+  query: FleetQuery = {},
+): string {
+  return hashWithQuery(
+    `#${PROJECTS_PREFIX}${encodeURIComponent(directory)}`,
+    query,
+  );
 }
 
 export function buildSessionHash(

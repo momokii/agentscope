@@ -6,9 +6,10 @@
  * One row per status so badge/sort/group tests cover the full matrix.
  */
 
-import type { SessionRow, Snapshot } from "../lib/sse";
+import type { ProjectSummary, SessionRow, Snapshot } from "../lib/sse";
 
 let seq = 0;
+let projectSeq = 0;
 
 export function makeRow(overrides: Partial<SessionRow> = {}): SessionRow {
   seq += 1;
@@ -26,6 +27,27 @@ export function makeRow(overrides: Partial<SessionRow> = {}): SessionRow {
     subagent_count: 0,
     pane: { cwd: "/home/kelanach/opencode-dashboard", exited: false },
     orphan: false,
+    ...overrides,
+  };
+}
+
+export function makeProject(
+  overrides: Partial<ProjectSummary> = {},
+): ProjectSummary {
+  projectSeq += 1;
+  const directory = overrides.directory ?? `/srv/project-${projectSeq}`;
+  const name = directory.replace(/\/+$/, "").split("/").pop() ?? directory;
+  return {
+    directory,
+    name,
+    sessions: 1,
+    running: 0,
+    waiting_input: 0,
+    idle: 1,
+    tokens_total: 1500,
+    cost_total: 0.0123,
+    live_procs: 0,
+    last_activity_ms: 30_000,
     ...overrides,
   };
 }

@@ -130,6 +130,8 @@ func (l *liveDBReader) Sessions(ctx context.Context) ([]model.SessionRow, error)
 			Status:            status,
 			Tokens:            model.TokenCounts{In: s.In, Out: s.Out, Total: s.Total},
 			Cost:              s.Cost,
+			RawCost:           s.Cost,
+			RawTokensTotal:    s.Total,
 			UpdatedRelativeMs: l.last.NowMs - s.Upd,
 			SubagentCount:     s.Kids,
 		})
@@ -143,6 +145,13 @@ func (l *liveDBReader) SessionDetail(_ context.Context, id string) (model.Sessio
 	return model.SessionDetail{}, fmt.Errorf("liveDBReader: no detail for %s", id)
 }
 
+// MessageMetrics keeps liveDBReader satisfying ports.DBReader. This probe
+// shells to a limited python read; message-level metrics have their own
+// db-level coverage, so the Manual-QA path reports an honest zero sample.
+func (l *liveDBReader) MessageMetrics(_ context.Context, _ time.Time) (ports.MessageMetrics, error) {
+	return ports.MessageMetrics{}, nil
+}
+
 // liveRuntime is the two-tick Manual-QA stand-in for the W1-2 RuntimeSource:
 // it scans /proc for live opencode processes (self excluded) and marks rows
 // whose directory matches a live cwd as present, everything else orphan.
@@ -152,6 +161,10 @@ type liveRuntime struct{}
 // LiveCounts keeps liveRuntime satisfying ports.RuntimeSource. The Manual-QA
 // probe never asserts ground-truth counts; the db-reader path is the point.
 func (liveRuntime) LiveCounts() (int, int) { return 0, 0 }
+
+// ProcsByDir keeps liveRuntime satisfying ports.RuntimeSource. This stand-in
+// does not attribute processes to directories; the real runtime source does.
+func (liveRuntime) ProcsByDir() map[string]int { return nil }
 
 func (liveRuntime) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.SessionRow, error) {
 	liveCWDs := liveOpencodeCWDs()

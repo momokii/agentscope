@@ -62,11 +62,13 @@ type Source struct {
 	// a separate seam from Runner: zellij exits 0 on missing sessions, so
 	// stderr text — not the exit code — is the failure signal).
 	dump dumpRunner
-	// countsMu guards lastLivePanes/lastLiveProcesses: the most recent
-	// ground-truth observation, served via LiveCounts.
+	// countsMu guards lastLivePanes/lastLiveProcesses/lastProcsByDir: the
+	// most recent ground-truth observation, served via LiveCounts and
+	// ProcsByDir.
 	countsMu          sync.Mutex
 	lastLivePanes     int
 	lastLiveProcesses int
+	lastProcsByDir    map[string]int
 	// warnedPanes/warnedProcs rate-limit degradation warnings to once per
 	// process per source (atomic CAS: concurrent ticks warn exactly once).
 	// Silent zeros hid a whole deploy; the first fault of each source logs.
@@ -175,6 +177,7 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 
 	// Orphan scan: opencode procs with no zellij pane at their CWD.
 	var procsByDir map[string][]ProcInfo
+	liveProcsByDir := make(map[string]int)
 	procCount := -1
 	if procErr == nil {
 		procCount = 0
@@ -188,6 +191,9 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 			}
 			key := filepath.Clean(pr.CWD)
 			procsByDir[key] = append(procsByDir[key], pr)
+			if pr.Alive() {
+				liveProcsByDir[key]++
+			}
 		}
 	}
 	s.countsMu.Lock()
@@ -196,6 +202,7 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 	}
 	if procCount >= 0 {
 		s.lastLiveProcesses = procCount
+		s.lastProcsByDir = liveProcsByDir
 	}
 	s.countsMu.Unlock()
 
@@ -247,6 +254,19 @@ func (s *Source) LiveCounts() (panes int, procs int) {
 	s.countsMu.Lock()
 	defer s.countsMu.Unlock()
 	return s.lastLivePanes, s.lastLiveProcesses
+}
+
+// ProcsByDir reports the last observed alive opencode process count per
+// cleaned directory. The map is copied so callers can read it without
+// holding the source lock. Empty until the first successful proc scan.
+func (s *Source) ProcsByDir() map[string]int {
+	s.countsMu.Lock()
+	defer s.countsMu.Unlock()
+	out := make(map[string]int, len(s.lastProcsByDir))
+	for dir, n := range s.lastProcsByDir {
+		out[dir] = n
+	}
+	return out
 }
 
 // warnOnce logs the first fault of one source only. The atomic CAS keeps

@@ -13,16 +13,30 @@ import { Pause, Pin, Play, Search } from "lucide-react";
 import type { SessionRow, Snapshot } from "../lib/sse";
 import type { ConnectionPhase } from "../lib/sse";
 import {
+  DEFAULT_DATE_FILTER,
+  DEFAULT_IDLE_BUCKET,
+  IDLE_BUCKET_LABELS,
   RECENCY_LABELS,
   applyFleetFilters,
+  countByIdleBucket,
   countByStatus,
   groupFleetRows,
   isExited,
+  paginateRows,
   sortFleetRows,
 } from "../lib/fleetSort";
-import type { StatusFilter } from "../lib/fleetSort";
+import type {
+  DateFilter,
+  IdleBucket,
+  StatusFilter,
+} from "../lib/fleetSort";
+import type { FleetQuery } from "../lib/routing";
 import { formatAge, formatCompact, formatUSD } from "../lib/format";
+import { resolveProjectHeader } from "../lib/projects";
 import KpiStrip from "../components/KpiStrip";
+import Pagination from "../components/Pagination";
+import ProjectHeader from "../components/ProjectHeader";
+import RecencyFilterBar from "../components/RecencyFilterBar";
 import RelativeTime from "../components/RelativeTime";
 import Sparkline from "../components/Sparkline";
 import StatusBadge from "../components/StatusBadge";
@@ -58,6 +72,13 @@ export interface FleetProps {
   statusFilter?: StatusFilter;
   liveOnly?: boolean;
   onFilterChange?: (status: StatusFilter, liveOnly: boolean) => void;
+  /** Drill-in directory; null/undefined renders the flat fleet. */
+  projectDirectory?: string | null;
+  bucket?: IdleBucket;
+  date?: DateFilter;
+  page?: number;
+  /** Hash-serialized query patch (bucket/date/page/project filters). */
+  onQueryChange?: (patch: FleetQuery) => void;
 }
 
 function zeroKpis(): KPIs {
@@ -126,27 +147,95 @@ export default function Fleet({
   statusFilter = "all",
   liveOnly = false,
   onFilterChange,
+  projectDirectory = null,
+  bucket = "all",
+  date = DEFAULT_DATE_FILTER,
+  page = 1,
+  onQueryChange,
 }: FleetProps) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const now = nowMs ?? Date.now();
 
-  /** Per-status counts over the FULL snapshot — one pass per tick. */
-  const statusCounts = useMemo(
-    () => countByStatus(snapshot?.sessions ?? []),
-    [snapshot],
+  const scopeRows = useMemo(
+    () =>
+      projectDirectory === null
+        ? (snapshot?.sessions ?? [])
+        : (snapshot?.sessions ?? []).filter(
+            (row) => row.directory === projectDirectory,
+          ),
+    [snapshot, projectDirectory],
+  );
+
+  /** Per-status counts over the scoped snapshot — one pass per tick. */
+  const statusCounts = useMemo(() => countByStatus(scopeRows), [scopeRows]);
+
+  const bucketCounts = useMemo(
+    () => countByIdleBucket(scopeRows),
+    [scopeRows],
   );
 
   const rows = useMemo(() => {
     if (!snapshot) return [];
     const pinned = new Set(pins);
     return sortFleetRows(
-      applyFleetFilters(snapshot.sessions, query, statusFilter, liveOnly),
+      applyFleetFilters(snapshot.sessions, query, statusFilter, liveOnly, {
+        bucket,
+        date,
+        directory: projectDirectory,
+        nowMs: now,
+      }),
     ).filter((row) => !pinned.has(row.id));
-  }, [snapshot, query, statusFilter, liveOnly, pins]);
+  }, [
+    snapshot,
+    query,
+    statusFilter,
+    liveOnly,
+    pins,
+    bucket,
+    date,
+    projectDirectory,
+    now,
+  ]);
+
+  const pageSlice = useMemo(
+    () => paginateRows(rows, page),
+    [rows, page],
+  );
+
+  const changeQuery = (value: string) => {
+    setQuery(value);
+    if (page > 1) onQueryChange?.({ page: 1 });
+  };
+
+  const changeBucket = (next: IdleBucket) => {
+    onQueryChange?.({ bucket: next, page: 1 });
+  };
+
+  const changeDate = (next: DateFilter) => {
+    const resetBucket =
+      next.from !== null || next.preset !== "all"
+        ? bucket === DEFAULT_IDLE_BUCKET
+          ? { bucket: "all" as IdleBucket }
+          : {}
+        : {};
+    onQueryChange?.({
+      since: next.preset === "all" ? undefined : next.preset,
+      from: next.from ?? undefined,
+      page: 1,
+      ...resetBucket,
+    });
+  };
 
   const resetFilters = () => {
     setQuery("");
     onFilterChange?.("all", false);
+    onQueryChange?.({
+      bucket: DEFAULT_IDLE_BUCKET,
+      since: undefined,
+      from: undefined,
+      page: 1,
+    });
   };
 
   const activeFilterBits: string[] = [];
@@ -156,6 +245,13 @@ export default function Fleet({
     if (statusFilter !== "all")
       activeFilterBits.push(`status ${STATUS_FILTER_LABELS[statusFilter]}`);
     if (liveOnly) activeFilterBits.push("live only");
+    if (bucket !== "all" && bucket !== DEFAULT_IDLE_BUCKET)
+      activeFilterBits.push(`bucket ${IDLE_BUCKET_LABELS[bucket]}`);
+    if (date.from !== null && date.from !== undefined) {
+      activeFilterBits.push(`from ${date.from}`);
+    } else if (date.preset !== "all") {
+      activeFilterBits.push(`last ${date.preset}`);
+    }
   }
   const filterActive = activeFilterBits.length > 0;
 
@@ -165,14 +261,16 @@ export default function Fleet({
     const byId = new Map(snapshot.sessions.map((row) => [row.id, row]));
     return pins
       .map((id) => byId.get(id))
-      .filter((row): row is SessionRow => row !== undefined);
-  }, [snapshot, pins]);
+      .filter((row): row is SessionRow => row !== undefined)
+      .filter(
+        (row) =>
+          projectDirectory === null || row.directory === projectDirectory,
+      );
+  }, [snapshot, pins, projectDirectory]);
 
   const groups = useMemo(
-    () => groupFleetRows(rows, nowMs ?? Date.now()),
-    // Re-group on every snapshot tick; the clock is read per render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, snapshot?.seq, nowMs],
+    () => groupFleetRows(pageSlice.rows, now),
+    [pageSlice.rows, now],
   );
 
   const toggleExpanded = (id: string) => {
@@ -258,9 +356,16 @@ export default function Fleet({
 
   return (
     <div className="fleet">
+      {projectDirectory !== null && (
+        <ProjectHeader
+          header={resolveProjectHeader(snapshot, projectDirectory)}
+          nowMs={now}
+        />
+      )}
       <div className="fleet-toolbar">
         <span className="fleet-title">
-          Fleet <span className="count">({rows.length})</span>
+          {projectDirectory !== null ? "Sessions" : "Fleet"}{" "}
+          <span className="count">({rows.length})</span>
         </span>
         {!live && (
           <span className="state-chip state-chip-paused">
@@ -284,7 +389,7 @@ export default function Fleet({
           <input
             type="search"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => changeQuery(event.target.value)}
             placeholder="Filter id, title, cwd, model…"
             aria-label="Filter fleet sessions"
           />
@@ -319,6 +424,14 @@ export default function Fleet({
         liveOnly={liveOnly}
         onSelect={(status) => onFilterChange?.(status, liveOnly)}
         onToggleLiveOnly={() => onFilterChange?.(statusFilter, !liveOnly)}
+      />
+
+      <RecencyFilterBar
+        counts={bucketCounts}
+        bucket={bucket}
+        onSelectBucket={changeBucket}
+        date={date}
+        onChangeDate={changeDate}
       />
 
       <KpiStrip
@@ -390,6 +503,15 @@ export default function Fleet({
             </tbody>
           </table>
         </div>
+      )}
+
+      {rows.length > 0 && (
+        <Pagination
+          page={pageSlice.page}
+          totalPages={pageSlice.totalPages}
+          total={pageSlice.total}
+          onPageChange={(next) => onQueryChange?.({ page: next })}
+        />
       )}
     </div>
   );

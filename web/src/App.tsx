@@ -26,25 +26,48 @@ import type { ActivityEvent } from "./lib/activity";
 import { usePins } from "./lib/pins";
 import {
   buildCompareHash,
-  buildFleetHash,
+  buildFleetQueryHash,
+  buildProjectHash,
   buildSessionHash,
   buildTimelineHash,
 } from "./lib/routing";
 import { parseHash } from "./lib/routing";
-import type { Route } from "./lib/routing";
+import type { FleetQuery, Route } from "./lib/routing";
 import type { StatusFilter } from "./lib/fleetSort";
+import { DEFAULT_DATE_FILTER, DEFAULT_IDLE_BUCKET } from "./lib/fleetSort";
+import { hasProjects } from "./lib/projects";
 import { isTypingTarget, useCommandPalette } from "./lib/useCommandPalette";
 import BottomBar from "./components/BottomBar";
 import CmdBar from "./components/CmdBar";
 import Compare from "./views/Compare";
 import Fleet from "./views/Fleet";
 import GlobalTimeline from "./views/GlobalTimeline";
+import Projects from "./views/Projects";
 import SessionDetail from "./views/SessionDetail";
 
 function readRoute(): Route {
   return parseHash(
     typeof window === "undefined" ? "#/" : window.location.hash,
   );
+}
+
+function queryFromRoute(route: Route): FleetQuery | null {
+  if (route.view !== "fleet" && route.view !== "project") return null;
+  return {
+    status: route.status,
+    liveOnly: route.liveOnly,
+    bucket: route.bucket,
+    since: route.since,
+    from: route.from,
+    page: route.page,
+  };
+}
+
+function trimmedQuery(query: FleetQuery): FleetQuery {
+  const next: FleetQuery = { ...query };
+  if (next.from) next.since = undefined;
+  else if (next.since) next.from = undefined;
+  return next;
 }
 
 /** Digit keys 1–9 map to pinned slots 0–8 (char codes, no regex). */
@@ -143,18 +166,43 @@ export default function App() {
 
   const selectedId = route.view === "session" ? route.id : null;
 
-  // Fleet-UX filter state lives in the hash (`#/?status=running&live=1`) so
-  // filtered views are shareable and back/forward works via hashchange.
-  const fleetStatus: StatusFilter =
-    route.view === "fleet" ? (route.status ?? "all") : "all";
-  const fleetLiveOnly = route.view === "fleet" && route.liveOnly === true;
+  const fleetRoute = route.view === "fleet" || route.view === "project";
+  const fleetStatus: StatusFilter = fleetRoute
+    ? (route.status ?? "all")
+    : "all";
+  const fleetLiveOnly = fleetRoute && route.liveOnly === true;
+  const fleetBucket = fleetRoute
+    ? (route.bucket ?? DEFAULT_IDLE_BUCKET)
+    : DEFAULT_IDLE_BUCKET;
+  const fleetDate = fleetRoute
+    ? { preset: route.since ?? "all", from: route.from ?? null }
+    : DEFAULT_DATE_FILTER;
+  const fleetPage = fleetRoute ? (route.page ?? 1) : 1;
 
   const changeFleetFilter = useCallback(
     (status: StatusFilter, liveOnly: boolean) => {
-      window.location.hash = buildFleetHash(status, liveOnly);
+      const current = readRoute();
+      if (current.view !== "fleet" && current.view !== "project") return;
+      const base = trimmedQuery(queryFromRoute(current) ?? {});
+      const next: FleetQuery = { ...base, status, liveOnly, page: 1 };
+      window.location.hash =
+        current.view === "project"
+          ? buildProjectHash(current.directory, next)
+          : buildFleetQueryHash(next);
     },
     [],
   );
+
+  const changeFleetQuery = useCallback((patch: FleetQuery) => {
+    const current = readRoute();
+    if (current.view !== "fleet" && current.view !== "project") return;
+    const base = queryFromRoute(current) ?? {};
+    const next = trimmedQuery({ ...base, ...patch });
+    window.location.hash =
+      current.view === "project"
+        ? buildProjectHash(current.directory, next)
+        : buildFleetQueryHash(next);
+  }, []);
 
   // Global quick-switch + live/pin keys. Ignored while typing; Esc closes
   // the palette first (hook), then drops back from stub/compare/timeline
@@ -205,13 +253,15 @@ export default function App() {
         <nav className="app-nav" aria-label="Views">
           <a
             className={
-              route.view === "fleet" || route.view === "session"
+              route.view === "fleet" ||
+              route.view === "project" ||
+              route.view === "session"
                 ? "app-nav-link app-nav-link-active"
                 : "app-nav-link"
             }
             href="#/"
           >
-            Fleet
+            Projects
           </a>
           <a
             className={
@@ -262,6 +312,41 @@ export default function App() {
             selectedId={selectedId}
             onSelect={selectSession}
           />
+        ) : route.view === "project" ? (
+          <Fleet
+            snapshot={snapshot}
+            prevSnapshot={prevSnapshot}
+            phase={status.state}
+            attempt={status.attempt}
+            live={live}
+            snapshotAgeMs={receivedAt === null ? null : Date.now() - receivedAt}
+            onToggleLive={() => setLive((v) => !v)}
+            selectedId={selectedId}
+            pins={pins}
+            onTogglePin={togglePin}
+            onSelect={selectSession}
+            statusFilter={fleetStatus}
+            liveOnly={fleetLiveOnly}
+            projectDirectory={route.directory}
+            bucket={fleetBucket}
+            date={fleetDate}
+            page={fleetPage}
+            onFilterChange={changeFleetFilter}
+            onQueryChange={changeFleetQuery}
+          />
+        ) : hasProjects(snapshot) ? (
+          <Projects
+            projects={snapshot.projects}
+            live={live}
+            onToggleLive={() => setLive((v) => !v)}
+            phase={status.state}
+            attempt={status.attempt}
+            stale={snapshot.stale}
+            snapshotAgeMs={receivedAt === null ? null : Date.now() - receivedAt}
+            kpis={snapshot.kpis}
+            prevKpis={prevSnapshot?.kpis ?? null}
+            lastSeq={snapshot.seq}
+          />
         ) : (
           <Fleet
             snapshot={snapshot}
@@ -277,7 +362,11 @@ export default function App() {
             onSelect={selectSession}
             statusFilter={fleetStatus}
             liveOnly={fleetLiveOnly}
+            bucket={fleetBucket}
+            date={fleetDate}
+            page={fleetPage}
             onFilterChange={changeFleetFilter}
+            onQueryChange={changeFleetQuery}
           />
         )}
       </main>

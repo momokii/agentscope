@@ -6,8 +6,11 @@
 // (open on loopback, documented — not accidental). A set DASHBOARD_AUTH
 // gates EVERYTHING (API + embedded SPA) behind one shared credential.
 //
-// v1 is basic-auth-or-open only. Deliberately out of scope: sessions,
-// cookies, OAuth, per-user management. See docs/SECURITY.md.
+// A successful Basic check also mints a bounded, HttpOnly session cookie
+// (see session.go) so the native EventSource used by the SPA can authorize
+// its stream: EventSource cannot send an Authorization header. Cookie and
+// Basic are OR-ed; neither replaces the other. There is still no per-user
+// management, OAuth, or persistent session storage. See docs/SECURITY.md.
 //
 // The package never logs: no log/slog/fmt-print imports anywhere here,
 // so credentials cannot leak through log pipelines. basic_test.go pins
@@ -22,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 // Realm is the Basic challenge realm. It names the protected area only;
@@ -93,25 +97,39 @@ func CredentialsFromEnv() (Credentials, error) {
 // HTTP Basic auth. Comparison is constant-time over SHA-256 digests so
 // neither value length nor prefix leaks through timing.
 //
-// Failure (missing/malformed header or credential mismatch) → 401 with
-// WWW-Authenticate: Basic realm="opencode-dashboard" and an empty body.
+// A request is authorized by EITHER valid Basic credentials OR a session
+// cookie issued after an earlier successful Basic check. A successful Basic
+// check also sets the session cookie (HttpOnly, SameSite=Lax, Path=/,
+// Secure only over TLS).
+//
+// Failure (missing/malformed credentials, unknown/expired cookie) → 401
+// with WWW-Authenticate: Basic realm="opencode-dashboard" and an empty body.
 // The 401 body and headers never echo the username or password.
 func Middleware(next http.Handler, username, password string) http.Handler {
+	return middlewareWithStore(next, username, password,
+		newSessionStore(maxSessionTokens, DefaultSessionTTL, time.Now))
+}
+
+// middlewareWithStore is Middleware with an injectable token store (tests
+// pin expiry/capacity without sleeping).
+func middlewareWithStore(next http.Handler, username, password string, store *sessionStore) http.Handler {
 	wantUser := sha256.Sum256([]byte(username))
 	wantPass := sha256.Sum256([]byte(password))
 	// Copies escape the stack into the closure; they are digests, never
 	// the raw secrets, and this package has no logging path.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotUser, gotPass, ok := r.BasicAuth()
-		if !ok {
-			challenge(w)
-			return
+		if gotUser, gotPass, ok := r.BasicAuth(); ok {
+			gotUserSum := sha256.Sum256([]byte(gotUser))
+			gotPassSum := sha256.Sum256([]byte(gotPass))
+			userOK := subtle.ConstantTimeCompare(wantUser[:], gotUserSum[:]) == 1
+			passOK := subtle.ConstantTimeCompare(wantPass[:], gotPassSum[:]) == 1
+			if userOK && passOK {
+				setSessionCookie(w, r, store)
+				next.ServeHTTP(w, r)
+				return
+			}
 		}
-		gotUserSum := sha256.Sum256([]byte(gotUser))
-		gotPassSum := sha256.Sum256([]byte(gotPass))
-		userOK := subtle.ConstantTimeCompare(wantUser[:], gotUserSum[:]) == 1
-		passOK := subtle.ConstantTimeCompare(wantPass[:], gotPassSum[:]) == 1
-		if userOK && passOK {
+		if c, err := r.Cookie(SessionCookieName); err == nil && store.valid(c.Value) {
 			next.ServeHTTP(w, r)
 			return
 		}

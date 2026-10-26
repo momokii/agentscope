@@ -169,6 +169,26 @@ describe("contract helpers", () => {
     const fleet = { seq: 9, sessions: [], kpis: makeSnapshot(9).kpis };
     expect(normalizeSnapshot(fleet)).toMatchObject({ seq: 9, last_poll_ms: 0 });
   });
+
+  it("passes through optional projects and KPI fields, and omits absent projects", () => {
+    const base = makeSnapshot(9);
+    const withProjects = normalizeSnapshot({
+      ...base,
+      kpis: { ...base.kpis, cost_total: 12.5, metrics_age_ms: 4000 },
+      projects: [
+        {
+          directory: "/srv/alpha",
+          name: "alpha",
+          sessions: 3,
+          live_procs: 2,
+        },
+      ],
+    });
+    expect(withProjects.kpis.cost_total).toBe(12.5);
+    expect(withProjects.kpis.metrics_age_ms).toBe(4000);
+    expect(withProjects.projects?.[0]?.directory).toBe("/srv/alpha");
+    expect(normalizeSnapshot(base).projects).toBeUndefined();
+  });
 });
 
 describe("sse client", () => {

@@ -56,7 +56,7 @@ describe("Fleet status filters", () => {
     expect(
       screen.getByRole("button", { name: "Show ALL sessions (5)" }),
     ).toBeDefined();
-    for (const label of ["RUNNING", "WAITING", "IDLE", "ERROR", "ARCHIVED"]) {
+    for (const label of ["RUNNING", "WAITING", "ERROR", "ARCHIVED"]) {
       expect(
         screen.getByRole("button", { name: new RegExp(`Show ${label} sessions \\(1\\)`) }),
       ).toBeDefined();
@@ -64,6 +64,10 @@ describe("Fleet status filters", () => {
     expect(
       screen.getByRole("button", { name: /Show only live sessions.*\(2\)/ }),
     ).toBeDefined();
+    // The flat IDLE bucket is replaced by the Recency/Stale/Old age chips.
+    expect(
+      screen.queryByRole("button", { name: /Show IDLE sessions/ }),
+    ).toBeNull();
   });
 
   it("filters rows to the selected status via the controlled prop", () => {
@@ -73,8 +77,10 @@ describe("Fleet status filters", () => {
 
   it("notifies on chip select so App can persist it to the hash", () => {
     const { onFilterChange } = renderFleet();
-    fireEvent.click(screen.getByRole("button", { name: /Show IDLE sessions/ }));
-    expect(onFilterChange).toHaveBeenCalledWith("idle", false);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Show ARCHIVED sessions/ }),
+    );
+    expect(onFilterChange).toHaveBeenCalledWith("archived", false);
   });
 
   it("live-only keeps running plus waiting-input rows", () => {

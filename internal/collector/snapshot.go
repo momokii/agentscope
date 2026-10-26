@@ -47,14 +47,6 @@ func (r *tokenRing) push(delta int64) {
 	}
 }
 
-func (r *tokenRing) sum() int64 {
-	var total int64
-	for _, d := range r.deltas {
-		total += d
-	}
-	return total
-}
-
 func (r *tokenRing) rates(interval time.Duration) []float64 {
 	perMin := interval.Minutes()
 	if perMin <= 0 {
@@ -87,33 +79,6 @@ func (c *Collector) observeSpark(id string, total int64) {
 		}
 		ring.push(delta)
 	}
-}
-
-// tokensPerHour estimates fleet throughput over the trailing window: all
-// buffered deltas scaled to an hour. The window is real elapsed time since
-// the first fresh tick, floored at the nominal schedule (so hot test ticks
-// don't pretend sub-second coverage) and capped at sparkCap intervals (the
-// ring holds no more history than that).
-func (c *Collector) tokensPerHour(interval time.Duration, now time.Time) float64 {
-	var total int64
-	for _, ring := range c.sparks {
-		total += ring.sum()
-	}
-	windowTicks := c.freshTicks + 1 // this tick's deltas are already buffered
-	if windowTicks > sparkCap {
-		windowTicks = sparkCap
-	}
-	windowSecs := now.Sub(c.windowStart).Seconds()
-	if nominal := float64(windowTicks) * interval.Seconds(); windowSecs < nominal {
-		windowSecs = nominal
-	}
-	if cap := float64(sparkCap) * interval.Seconds(); windowSecs > cap {
-		windowSecs = cap
-	}
-	if windowSecs <= 0 {
-		return 0
-	}
-	return float64(total) * 3600 / windowSecs
 }
 
 // projectSignals maps a DB-provided status back onto the primitive signals
@@ -180,17 +145,20 @@ func sortSessions(rows []model.SessionRow) {
 	})
 }
 
-// buildKPIs aggregates one tick's fleet strip. CostToday is a v1
-// approximation: SessionRow carries cumulative cost only, so the strip sums
-// it fleet-wide; true since-local-midnight attribution needs message-level
-// cost timestamps from the db layer (W1-1 follow-up). SSEConnected reports
-// the collector-to-sink path the collector itself owns. livePanes and
+// buildKPIs aggregates one tick's fleet strip. Throughput and today's cost
+// come from the background refresher's message-level sample: session totals
+// roll up subagent children, so a completing child completes its whole
+// history at once and a delta of those totals is a lie. CostTotal sums each
+// row's own pre-roll-up cost, so children are not counted twice. SSEConnected
+// reports the collector-to-sink path the collector itself owns. livePanes and
 // liveProcesses are the runtime source's ground truth (see
 // ports.RuntimeSource.LiveCounts) so the operator can compare sessions
 // running against processes actually alive.
-func buildKPIs(rows []model.SessionRow, tokensPerHour float64, livePanes, liveProcesses int) model.KPIs {
+func buildKPIs(rows []model.SessionRow, metrics kpiMetrics, livePanes, liveProcesses int) model.KPIs {
 	kpis := model.KPIs{
-		TokensPerHour: tokensPerHour,
+		TokensPerHour: float64(metrics.tokensLast60s) * 60,
+		CostToday:     metrics.costSinceMidnight,
+		MetricsAgeMs:  metrics.ageMs,
 		SSEConnected:  true,
 		LivePanes:     livePanes,
 		LiveProcesses: liveProcesses,
@@ -204,7 +172,7 @@ func buildKPIs(rows []model.SessionRow, tokensPerHour float64, livePanes, livePr
 		case model.SessionError:
 			kpis.Errors++
 		}
-		kpis.CostToday += row.Cost
+		kpis.CostTotal += row.RawCost
 	}
 	return kpis
 }
