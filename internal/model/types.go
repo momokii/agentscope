@@ -145,16 +145,24 @@ type KPIs struct {
 // waiting-input (idle, error, archived). Name is the directory basename
 // (the directory itself when it has no basename). Field names are frozen.
 type ProjectSummary struct {
-	Directory      string  `json:"directory"`
-	Name           string  `json:"name"`
-	Sessions       int     `json:"sessions"`
-	Running        int     `json:"running"`
-	WaitingInput   int     `json:"waiting_input"`
-	Idle           int     `json:"idle"`
-	TokensTotal    int64   `json:"tokens_total"`
-	CostTotal      float64 `json:"cost_total"`
-	LiveProcs      int     `json:"live_procs"`
-	LastActivityMs int64   `json:"last_activity_ms"`
+	Directory    string  `json:"directory"`
+	Name         string  `json:"name"`
+	Sessions     int     `json:"sessions"`
+	Running      int     `json:"running"`
+	WaitingInput int     `json:"waiting_input"`
+	Idle         int     `json:"idle"`
+	TokensTotal  int64   `json:"tokens_total"`
+	CostTotal    float64 `json:"cost_total"`
+	LiveProcs    int     `json:"live_procs"`
+	// LivePanes counts non-exited zellij panes whose command is opencode in
+	// this directory. It is a presence signal, not an exact process count:
+	// a pane can linger for one listing after its process exits, and stale
+	// panes are corrected by the next list-panes/close. It is carried
+	// independently of LiveProcs, which stays /proc-derived (and falls back
+	// to this pane presence in containers where /proc/<pid>/cwd is
+	// unreadable).
+	LivePanes      int   `json:"live_panes"`
+	LastActivityMs int64 `json:"last_activity_ms"`
 }
 
 // Snapshot is one collector tick: GET /api/fleet body and each
@@ -167,7 +175,7 @@ type Snapshot struct {
 	// Sessions is the full fleet row set, sorted running→exited.
 	Sessions []SessionRow `json:"sessions"`
 	// Projects is the per-directory aggregate, sorted live_procs desc,
-	// running desc, last_activity_ms asc.
+	// live_panes desc, running desc, last_activity_ms asc, directory asc.
 	Projects []ProjectSummary `json:"projects"`
 	// KPIs is the aggregated fleet strip for this tick.
 	KPIs KPIs `json:"kpis"`

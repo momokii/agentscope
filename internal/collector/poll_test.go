@@ -150,6 +150,7 @@ type fakeRuntime struct {
 	panes      int
 	procs      int
 	procsByDir map[string]int
+	panesByDir map[string]int
 }
 
 func (f *fakeRuntime) LiveCounts() (int, int) { return f.panes, f.procs }
@@ -157,6 +158,14 @@ func (f *fakeRuntime) LiveCounts() (int, int) { return f.panes, f.procs }
 func (f *fakeRuntime) ProcsByDir() map[string]int {
 	out := make(map[string]int, len(f.procsByDir))
 	for dir, n := range f.procsByDir {
+		out[dir] = n
+	}
+	return out
+}
+
+func (f *fakeRuntime) PanesByDir() map[string]int {
+	out := make(map[string]int, len(f.panesByDir))
+	for dir, n := range f.panesByDir {
 		out[dir] = n
 	}
 	return out

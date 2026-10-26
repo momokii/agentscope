@@ -243,7 +243,7 @@ func (c *Collector) Tick(ctx context.Context) (bool, error) {
 		costSinceMidnight: metrics.costSinceMidnight,
 		ageMs:             metricsAgeMs,
 	}, livePanes, liveProcs)
-	projects := buildProjects(enriched, c.rt.ProcsByDir())
+	projects := buildProjects(enriched, c.rt.ProcsByDir(), panesByDir(c.rt))
 
 	snap := model.Snapshot{
 		Seq:        c.seq + 1,

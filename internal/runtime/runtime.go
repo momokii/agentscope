@@ -62,13 +62,14 @@ type Source struct {
 	// a separate seam from Runner: zellij exits 0 on missing sessions, so
 	// stderr text — not the exit code — is the failure signal).
 	dump dumpRunner
-	// countsMu guards lastLivePanes/lastLiveProcesses/lastProcsByDir: the
-	// most recent ground-truth observation, served via LiveCounts and
-	// ProcsByDir.
+	// countsMu guards lastLivePanes/lastLiveProcesses/lastProcsByDir/
+	// lastPanesByDir: the most recent ground-truth observation, served via
+	// LiveCounts, ProcsByDir, and PanesByDir.
 	countsMu          sync.Mutex
 	lastLivePanes     int
 	lastLiveProcesses int
 	lastProcsByDir    map[string]int
+	lastPanesByDir    map[string]int
 	// warnedPanes/warnedProcs rate-limit degradation warnings to once per
 	// process per source (atomic CAS: concurrent ticks warn exactly once).
 	// Silent zeros hid a whole deploy; the first fault of each source logs.
@@ -163,10 +164,14 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 
 	liveCount := 0
 	panesByDir := make(map[string]Pane)
+	panesProcsByDir := make(map[string]int)
 	if paneErr == nil {
 		for _, np := range livePanes {
 			if !np.pane.Exited {
 				liveCount++
+				if np.pane.CWD != "" && filepath.Base(np.pane.Command) == "opencode" {
+					panesProcsByDir[filepath.Clean(np.pane.CWD)]++
+				}
 			}
 			key := filepath.Clean(np.pane.CWD)
 			if existing, ok := panesByDir[key]; !ok || (existing.Exited && !np.pane.Exited) {
@@ -196,13 +201,30 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 			}
 		}
 	}
+	// Attribution source selection, documented because the two lanes differ:
+	//   - host: /proc/<pid>/cwd is readable, so liveProcsByDir is exact and
+	//     always preferred whenever it has any entry.
+	//   - container (pid:host + non-root): readlink /proc/<pid>/cwd is denied
+	//     by ptrace/Yama, so every proc CWD is empty and liveProcsByDir has
+	//     no keys even though the proc count is real. Fall back to zellij
+	//     panes (CWD + Command are visible in-container) as a per-directory
+	//     PRESENCE signal. It can include a pane whose process just exited
+	//     until the next list-panes/close corrects it; it is never used to
+	//     change the global live_processes or live_panes counts.
+	// A failed pane listing never fabricates presence: the proc-derived map
+	// is stored as-is (empty when /proc CWD was unreadable).
 	s.countsMu.Lock()
 	if paneErr == nil {
 		s.lastLivePanes = liveCount
+		s.lastPanesByDir = panesProcsByDir
 	}
 	if procCount >= 0 {
 		s.lastLiveProcesses = procCount
-		s.lastProcsByDir = liveProcsByDir
+		attributed := liveProcsByDir
+		if len(attributed) == 0 && procCount > 0 && paneErr == nil {
+			attributed = panesProcsByDir
+		}
+		s.lastProcsByDir = attributed
 	}
 	s.countsMu.Unlock()
 
@@ -256,14 +278,37 @@ func (s *Source) LiveCounts() (panes int, procs int) {
 	return s.lastLivePanes, s.lastLiveProcesses
 }
 
-// ProcsByDir reports the last observed alive opencode process count per
-// cleaned directory. The map is copied so callers can read it without
-// holding the source lock. Empty until the first successful proc scan.
+// ProcsByDir reports the last observed per-directory count of ALIVE opencode
+// processes. The map is copied so callers can read it without holding the
+// source lock. Empty until the first successful proc scan.
+//
+// /proc/<pid>/cwd is exact on the host and is always preferred when it
+// yields any attribution. In a pid:host non-root container the readlink is
+// denied (ptrace/Yama), so a scan can see live processes while attributing
+// none; in that case the map falls back to non-exited zellij panes whose
+// command is opencode. That fallback is presence, not an exact count: it may
+// include a pane whose process just exited until the next listing corrects
+// it, and it never changes the global LiveCounts.
 func (s *Source) ProcsByDir() map[string]int {
 	s.countsMu.Lock()
 	defer s.countsMu.Unlock()
 	out := make(map[string]int, len(s.lastProcsByDir))
 	for dir, n := range s.lastProcsByDir {
+		out[dir] = n
+	}
+	return out
+}
+
+// PanesByDir reports the last observed count of non-exited zellij panes
+// running opencode per cleaned directory, independent of /proc attribution.
+// It is the presence signal used by the fleet's live_panes column and by
+// the ProcsByDir container fallback. Empty until the first successful pane
+// listing; a listing fault keeps the last-known map.
+func (s *Source) PanesByDir() map[string]int {
+	s.countsMu.Lock()
+	defer s.countsMu.Unlock()
+	out := make(map[string]int, len(s.lastPanesByDir))
+	for dir, n := range s.lastPanesByDir {
 		out[dir] = n
 	}
 	return out

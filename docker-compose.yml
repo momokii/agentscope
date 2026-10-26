@@ -82,6 +82,12 @@ services:
       # paired with non-loopback BIND_ADDR). Value never logged — see
       # internal/auth no-log pin.
       DASHBOARD_AUTH: "${DASHBOARD_AUTH:-}"
+      # Local-time attribution: cost_today is "since LOCAL midnight" and log
+      # lines are stamped in local time. Without a zone the container runs in
+      # UTC, so "today" would start hours early on e.g. a WIB host.
+      # /etc/localtime is bind-mounted below (Go resolves the host zone even
+      # when TZ is empty); deploy.sh exports TZ from the host automatically.
+      TZ: "${TZ:-}"
     volumes:
       # WAL decision (see header): parent dir :ro keeps -wal/-shm visible.
       - ${HOME:-/home/hostuser}/.local/share/opencode:/data/opencode:ro
@@ -97,6 +103,9 @@ services:
       # (list-sessions, list-panes, dump-screen) — never attach, kill,
       # resurrect, or delete-session — and same-UID parity already holds.
       - /run/user/${UID:-1000}/zellij:/run/user/${UID:-1000}/zellij
+      # Host timezone (read-only): makes "cost today" boundary the operator's
+      # local midnight inside a zone-less container image.
+      - /etc/localtime:/etc/localtime:ro
     restart: unless-stopped
     healthcheck:
       # Exec-form: the binary probes its own /api/healthz (no shell/curl in

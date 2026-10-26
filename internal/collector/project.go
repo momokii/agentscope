@@ -5,14 +5,16 @@ import (
 	"sort"
 
 	"opencode-dashboard/internal/model"
+	"opencode-dashboard/internal/ports"
 )
 
 // buildProjects aggregates sessions by directory and joins the runtime
-// source's per-directory live process counts. Directories with no sessions
-// are excluded (there is no project row to describe) and a session
-// directory with no live process reports live_procs 0. Sort order is the
-// frozen contract: live_procs desc, running desc, last_activity_ms asc.
-func buildProjects(rows []model.SessionRow, procsByDir map[string]int) []model.ProjectSummary {
+// source's per-directory live process and live pane counts. Directories with
+// no sessions are excluded (there is no project row to describe) and a
+// session directory with no live process reports live_procs 0. Sort order is
+// the frozen contract: live_procs desc, live_panes desc, running desc,
+// last_activity_ms asc, directory asc.
+func buildProjects(rows []model.SessionRow, procsByDir, panesByDir map[string]int) []model.ProjectSummary {
 	byDir := make(map[string]*model.ProjectSummary)
 	lastActivity := make(map[string]int64)
 	haveActivity := make(map[string]bool)
@@ -48,11 +50,15 @@ func buildProjects(rows []model.SessionRow, procsByDir map[string]int) []model.P
 	for key, project := range byDir {
 		project.LastActivityMs = lastActivity[key]
 		project.LiveProcs = procsByDir[key]
+		project.LivePanes = panesByDir[key]
 		out = append(out, *project)
 	}
-	sort.Slice(out, func(i, j int) bool {
+	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].LiveProcs != out[j].LiveProcs {
 			return out[i].LiveProcs > out[j].LiveProcs
+		}
+		if out[i].LivePanes != out[j].LivePanes {
+			return out[i].LivePanes > out[j].LivePanes
 		}
 		if out[i].Running != out[j].Running {
 			return out[i].Running > out[j].Running
@@ -63,6 +69,20 @@ func buildProjects(rows []model.SessionRow, procsByDir map[string]int) []model.P
 		return out[i].Directory < out[j].Directory
 	})
 	return out
+}
+
+// paneDirSource is the optional runtime capability carrying pane presence per
+// directory. Runtime sources that cannot observe panes (or test stand-ins
+// that predate the capability) simply omit it; projects then report 0.
+type paneDirSource interface {
+	PanesByDir() map[string]int
+}
+
+func panesByDir(rt ports.RuntimeSource) map[string]int {
+	if src, ok := rt.(paneDirSource); ok {
+		return src.PanesByDir()
+	}
+	return nil
 }
 
 // projectName is the display label for a directory: its basename, or the

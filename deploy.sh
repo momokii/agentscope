@@ -142,7 +142,19 @@ fi
 export UID
 export GID="$(id -g)"
 export HOME="$HOME"
-log "bringing up: UID=$UID GID=$GID PORT=$PORT (host mode: binds host 127.0.0.1:$PORT directly)"
+
+# ---------------- timezone: forward the host zone so "today" is local midnight ----------------
+# Without TZ the container is UTC and cost_today starts hours early (WIB host:
+# 7h skew). /etc/localtime:ro is also mounted by compose, so Go still resolves
+# the zone if this leaves TZ unset — but an explicit value is what we print.
+if [ -z "${TZ:-}" ]; then
+  DETECTED_TZ="$(cat /etc/timezone 2>/dev/null | tr -d '[:space:]' || true)"
+  if [ -z "$DETECTED_TZ" ] && command -v timedatectl >/dev/null 2>&1; then
+    DETECTED_TZ="$(timedatectl show -p Timezone --value 2>/dev/null | tr -d '[:space:]' || true)"
+  fi
+  if [ -n "$DETECTED_TZ" ]; then export TZ="$DETECTED_TZ"; fi
+fi
+log "bringing up: UID=$UID GID=$GID PORT=$PORT TZ=${TZ:-unset} (host mode: binds host 127.0.0.1:$PORT directly)"
 if [ "${SKIP_BUILD:-0}" -eq 1 ]; then
   docker compose up -d
 else
@@ -214,6 +226,7 @@ cat <<EOF
   tailnet next:   tailscale serve --bg --https=443 http://127.0.0.1:$PORT
                   (funnel is BANNED: it puts a reversible base64 Basic gate on the public internet — serve stays tailnet-only.)
   DASHBOARD_AUTH: $AUTH_STATUS
+  tz:             ${TZ:-unset (container stays UTC; /etc/localtime mount still applies)}
   pinned:         image $BAKED_IMAGE · Go $BAKED_GO · zellij $BAKED_ZELLIJ · distroless static-debian12:nonroot
   teardown:       ./deploy.sh --port $PORT --down
 ================================================================
