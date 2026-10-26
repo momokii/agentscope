@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -242,6 +243,76 @@ func Test_Sessions_status(t *testing.T) {
 				seedMessage(t, db, "msg_1", "ses_base", 1, errorMsg)
 			},
 			want: model.SessionError, session: "ses_base",
+		},
+		{
+			name: "error when newest assistant errored over older completed turns",
+			seed: func(t *testing.T, db *sql.DB) {
+				seedProject(t, db, "global", "/", "")
+				seedSession(t, db, base)
+				seedMessage(t, db, "msg_1", "ses_base", 1, assistantDone)
+				seedMessage(t, db, "msg_2", "ses_base", 2, assistantDone)
+				seedMessage(t, db, "msg_3", "ses_base", fixedNow.UnixMilli()-1000, errorMsg)
+			},
+			want: model.SessionError, session: "ses_base",
+		},
+		{
+			name: "running when old error 14 deep and newest assistant in flight",
+			seed: func(t *testing.T, db *sql.DB) {
+				seedProject(t, db, "global", "/", "")
+				seedSession(t, db, base)
+				seedMessage(t, db, "msg_err", "ses_base", 1, errorMsg)
+				for i := 2; i <= 14; i++ {
+					seedMessage(t, db, fmt.Sprintf("msg_mid_%d", i), "ses_base", int64(i), assistantDone)
+				}
+				seedMessage(t, db, "msg_new", "ses_base", fixedNow.UnixMilli()-1000, assistantInflight)
+			},
+			want: model.SessionRunning, session: "ses_base",
+		},
+		{
+			name: "waiting-input when newest user arrived after errored assistant",
+			seed: func(t *testing.T, db *sql.DB) {
+				seedProject(t, db, "global", "/", "")
+				seedSession(t, db, base)
+				seedMessage(t, db, "msg_1", "ses_base", 1, errorMsg)
+				seedMessage(t, db, "msg_2", "ses_base", fixedNow.UnixMilli()-1000, userMsg)
+			},
+			want: model.SessionWaitingInput, session: "ses_base",
+		},
+		{
+			name: "waiting-input when deep error and user last",
+			seed: func(t *testing.T, db *sql.DB) {
+				seedProject(t, db, "global", "/", "")
+				seedSession(t, db, base)
+				seedMessage(t, db, "msg_err", "ses_base", 1, errorMsg)
+				for i := 2; i <= 14; i++ {
+					seedMessage(t, db, fmt.Sprintf("msg_mid2_%d", i), "ses_base", int64(i), assistantDone)
+				}
+				seedMessage(t, db, "msg_new", "ses_base", fixedNow.UnixMilli()-1000, userMsg)
+			},
+			want: model.SessionWaitingInput, session: "ses_base",
+		},
+		{
+			name: "idle when ancient session newest assistant errored",
+			seed: func(t *testing.T, db *sql.DB) {
+				seedProject(t, db, "global", "/", "")
+				s := base
+				s.updatedAgo = 10 * 60 * 1000
+				seedSession(t, db, s)
+				seedMessage(t, db, "msg_1", "ses_base", 1, errorMsg)
+			},
+			want: model.SessionIdle, session: "ses_base",
+		},
+		{
+			name: "archived wins over error and running",
+			seed: func(t *testing.T, db *sql.DB) {
+				seedProject(t, db, "global", "/", "")
+				s := base
+				s.archived = true
+				seedSession(t, db, s)
+				seedMessage(t, db, "msg_1", "ses_base", 1, errorMsg)
+				seedMessage(t, db, "msg_2", "ses_base", fixedNow.UnixMilli()-1000, assistantInflight)
+			},
+			want: model.SessionArchived, session: "ses_base",
 		},
 		{
 			name: "archived wins over running signals",

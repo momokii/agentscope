@@ -105,12 +105,14 @@ func decodeMessagePayload(data string) (messagePayload, bool) {
 }
 
 // applyMessagePayload folds one decoded message (newest indicates whether
-// it is the session's newest row, ordering newest-first) into the
+// it is the session's newest decodable row, ordering newest-first) into the
 // DeriveStatus inputs. Shared by the singular and batched paths so both
 // compute byte-identical signals. An in-flight candidate counts only when
 // the message itself is recent (msg.Recent, stamped by the caller from
 // time_created): a still-generating flag on a 70-day-old aborted message is
-// stale, not work.
+// stale, not work. HasError reflects ONLY the newest message when it is an
+// assistant turn: a transient failure 14+ rows deep must not brand a session
+// that has since kept generating (error-staleness).
 func applyMessagePayload(msg messagePayload, newest bool, signals *model.StatusSignals, modelFallback *string) {
 	if newest {
 		signals.LatestRole = msg.Role
@@ -118,7 +120,7 @@ func applyMessagePayload(msg messagePayload, newest bool, signals *model.StatusS
 	if msg.Role == "assistant" && msg.Time.Completed == nil && msg.Recent {
 		signals.InFlightAssistant = true
 	}
-	if msg.Error != nil && msg.Error.Name != "" {
+	if newest && msg.Role == "assistant" && msg.Error != nil && msg.Error.Name != "" {
 		signals.HasError = true
 	}
 	if *modelFallback == "" && msg.ProviderID != "" && msg.ModelID != "" {

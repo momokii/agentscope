@@ -4,7 +4,7 @@ import "testing"
 
 // Test_DeriveStatus_* — table-driven contract tests for the pure
 // status-derivation function. One scenario per row; the run proves the
-// precedence chain (archived > error > running > waiting-input > idle).
+// precedence chain (archived > running > error > waiting-input > idle).
 
 // Test_DeriveStatus_precedence verifies each status wins at its precedence
 // level, including combined-signal conflicts. Every active case sets
@@ -68,11 +68,39 @@ func Test_DeriveStatus_precedence(t *testing.T) {
 			want: SessionArchived,
 		},
 		{
-			name: "error beats running",
+			name: "running beats error when turn in flight",
 			signals: StatusSignals{
-				HasError: true, InFlightAssistant: true, RunningToolParts: 1, RecentActivity: true,
+				HasError: true, InFlightAssistant: true, LatestRole: "assistant", RecentActivity: true,
+			},
+			want: SessionRunning,
+		},
+		{
+			name: "running beats error when tool part running",
+			signals: StatusSignals{
+				HasError: true, RunningToolParts: 1, LatestRole: "assistant", RecentActivity: true,
+			},
+			want: SessionRunning,
+		},
+		{
+			name: "running beats error on fresh events",
+			signals: StatusSignals{
+				HasError: true, HasFreshEvents: true, LatestRole: "assistant", RecentActivity: true,
+			},
+			want: SessionRunning,
+		},
+		{
+			name: "error when newest assistant errored and nothing in flight",
+			signals: StatusSignals{
+				HasError: true, LatestRole: "assistant", RecentActivity: true,
 			},
 			want: SessionError,
+		},
+		{
+			name: "waiting-input when newest is user even with prior error cleared",
+			signals: StatusSignals{
+				LatestRole: "user", RecentActivity: true,
+			},
+			want: SessionWaitingInput,
 		},
 		{
 			name: "running beats waiting-input heuristic",

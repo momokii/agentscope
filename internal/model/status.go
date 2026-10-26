@@ -40,7 +40,9 @@ type StatusSignals struct {
 	HasFreshEvents bool
 	// LatestRole is the role of the newest message; "" when none exists.
 	LatestRole string
-	// HasError is true when a terminal message error was observed.
+	// HasError is true when the newest message is an assistant turn carrying
+	// a terminal message error. Older errors are ignored: they describe a
+	// past completed turn, not a permanent session flag (error-staleness).
 	HasError bool
 	// Compacting is true when session.time_compacting is set.
 	Compacting bool
@@ -62,9 +64,13 @@ type StatusSignals struct {
 //  1. Archived — time_archived set (wins over everything, even staleness).
 //  2. Idle on staleness — no session.time_updated bump inside the window
 //     means nothing is generating, regardless of stale signal rows.
-//  3. Error — terminal message error observed (and recent).
-//  4. Running — recent in-flight assistant turn, any running tool part, or
-//     fresh event rows arrived since the previous tick.
+//  3. Running — recent in-flight assistant turn, any running tool part, or
+//     fresh event rows arrived since the previous tick. Running outranks
+//     error: error describes the last completed turn, not a permanent flag,
+//     so a session generating right now is running even when the previous
+//     turn errored.
+//  4. Error — the newest assistant turn carried a terminal error (and
+//     nothing is generating now).
 //  5. Waiting-input (HEURISTIC — no explicit flag exists in the schema):
 //     compacting, or latest message is user-role with nothing in flight.
 //  6. Idle — everything else.
@@ -79,11 +85,11 @@ func DeriveStatus(s StatusSignals) SessionStatus {
 	if !s.RecentActivity {
 		return SessionIdle
 	}
-	if s.HasError {
-		return SessionError
-	}
 	if s.InFlightAssistant || s.RunningToolParts > 0 || s.HasFreshEvents {
 		return SessionRunning
+	}
+	if s.HasError {
+		return SessionError
 	}
 	// Waiting-input is a heuristic: the user spoke last and nothing is
 	// generating, or the session is mid-compaction. There is no
