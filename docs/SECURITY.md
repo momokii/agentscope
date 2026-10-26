@@ -10,9 +10,9 @@
 
 | Attacker | Can reach | Cannot reach | Why |
 |---|---|---|---|
-| Local attacker (other UID on the VM) | Nothing, if UID parity holds | DB, sockets, dashboard port | Sockets are `0700` (same-user mandatory); Go binds `127.0.0.1`; mounts are `:ro` into the container |
+| Local attacker (other UID on the VM) | Nothing, if UID parity holds | DB, sockets, dashboard port | Sockets are `0700` (same-user mandatory); Go binds `127.0.0.1`; mounts are `:ro` into the container (socket dir `:rw`, see §2) |
 | Tailnet peer (device on your tailnet) | Dashboard URL via `tailscale serve`, gated by Basic auth when `DASHBOARD_AUTH` is set | Host filesystem, opencode DB, zellij sockets | Serve proxies HTTP only; secrets never enter the image/API/logs (§3) |
-| Container escape (process breaks out of the container) | Host paths that are mounted `:ro` (read-only — observable, not writable) | `auth.json`, credential/account stores, host write access | §2 allowlist: those paths are never mounted; every mount is `:ro` |
+| Container escape (process breaks out of the container) | Host paths that are mounted `:ro` (read-only — observable, not writable), plus the socket dir (`:rw` — client sockets only, no server state worth corrupting) | `auth.json`, credential/account stores, host write access | §2 allowlist: those paths are never mounted; data/cache mounts are `:ro` |
 
 Out of scope for v1: prompt-injection via the UI (read-only UI, no prompt
 path, no shell exec from the browser), supply-chain of base images (W4-1
@@ -26,7 +26,7 @@ review gate — any mount not on it blocks the F4 release.
 
 | Host path | Container path | Mode | Purpose | Why nothing else |
 |---|---|---|---|---|
-| `/run/user/<uid>/zellij` | `/run/user/<uid>/zellij` | `:ro` | zellij CLI socket dir listing = pane liveness #1 | Presence only; no control socket writes |
+| `/run/user/<uid>/zellij` | `/run/user/<uid>/zellij` | `:rw` (REQUIRED — the zellij CLI mints a per-invocation client socket here; `:ro` kills every pane query with EROFS) | zellij CLI socket dir listing = pane liveness #1 | Read-only queries only (`list-sessions`/`list-panes`/`dump-screen` — no attach/kill/resurrect); same-UID parity already mandatory |
 | `~/.local/share/opencode/opencode.db` (+`-wal`/`-shm` siblings via dir semantics) | `/data/opencode/opencode.db` | `:ro` | Read-only WAL snapshot queries (indexed/sliced allowlist, `internal/db`) | 8.2 GB danger: full `part.data LIKE` scans banned; read-only open never disturbs live TUIs |
 | `~/.local/share/opencode/storage` | `/data/opencode/storage` | `:ro` | Session file attachments referenced by DB rows | Content display only |
 | `~/.cache/zellij` | `/data/zellij-cache` | `:ro` | EXITED-session semantics (resurrect re-runs, does not resume) | Dead-pane forensics only |
@@ -100,7 +100,7 @@ the tighter one.
 Deliberate trade (stated, not hidden): the container shares the host
 network namespace. This extends the already-accepted `pid: "host"` pattern
 (research-runtime-observability §4) for a monitoring agent that already
-joins host PID and `:ro` host mounts — the blast-radius delta is nil
+joins host PID and host mounts (`:ro` data/cache, `:rw` socket dir) — the blast-radius delta is nil
 beyond what those grants imply, and it removes the NAT hop that made the
 service unreachable.
 
@@ -161,9 +161,9 @@ Image/host checks — TO-RUN after W4-1's image exists (stated boundary:
 these cannot run until W4-1 lands `Dockerfile` + `compose`):
 
 ```bash
-# 6. Mount allowlist: exact output must equal §2 (no auth.json, all :ro)
+# 6. Mount allowlist: exact output must equal §2 (no auth.json; data/cache :ro, socket dir :rw)
 docker inspect <container> --format '{{json .Mounts}}' | python3 -m json.tool
-# EXPECTED: only the 4 §2 mounts, every one "Mode": "ro" / "RW": false
+# EXPECTED: only the 4 §2 mounts; data/cache "Mode": "ro" / "RW": false, socket dir "RW": true
 
 # 7. No secret baked into image layers
 docker history --no-trunc <image> | grep -i 'auth\|pass\|secret\|token\|credential'

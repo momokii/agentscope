@@ -44,7 +44,7 @@ loopback, no mapping); healthcheck
 retries: 3, start_period: 15s`; mounts
 `${HOME:-/home/hostuser}/.local/share/opencode:/data/opencode:ro`,
 `${HOME:-/home/hostuser}/.cache/zellij:/data/zellij-cache:ro`,
-`/run/user/${UID:-1000}/zellij:/run/user/${UID:-1000}/zellij:ro`;
+`/run/user/${UID:-1000}/zellij:/run/user/${UID:-1000}/zellij` (`:rw` — the CLI mints a per-call client socket);
 env `DATA_DIR: /data/opencode`, `POLL_INTERVAL: ${POLL_INTERVAL:-10s}`.
 Full proof log: `docs/DOCKER_VERIFY.md`.
 
@@ -62,7 +62,7 @@ Full proof log: `docs/DOCKER_VERIFY.md`.
                              # 8080 was squatted on the laptop dev host;
                              # the same may apply here — any free 18xxx works.
    docker compose config     # VERIFIED-here shape; TO-RUN: must exit 0 and show network_mode: host,
-                             # pid: host, NO ports: stanza, PORT: "18081", the three :ro mounts,
+                             # pid: host, NO ports: stanza, PORT: "18081", the two :ro mounts + :rw socket dir,
                              # the -healthcheck test
   ```
 - [ ] **D2. Bring it up and wait out the warm-up.**
@@ -192,7 +192,7 @@ running outside zellij).
 | Symptom | Check IN THIS ORDER (commands copy-paste) | Cause → fix |
 |---|---|---|
 | Blind dashboard (fleet empty / zero panes despite live sessions) | 1. `id -u` vs `docker exec <ctr> id -u` (must match; sockets 0700) 2. `echo $XDG_RUNTIME_DIR` vs `docker exec <ctr> printenv XDG_RUNTIME_DIR` (path parity; socket source must equal) 3. host `zellij --version` major vs image `docker exec <ctr> zellij --version` major (both `0`; socket dir `contract_version_1` is version-sensitive) 4. `ls $XDG_RUNTIME_DIR/zellij/contract_version_1/` (live names = liveness signal #1) | UID/XDG/major skew or wrong socket-dir mount. Any mismatch → `docker compose down`, fix env, `up -d --build` again. If majors differ, rebuild with matching `ZELLIJ_VERSION`. Startup FATALs for the loud cases: `DATA_DIR … unreadable … UID parity …`, `opencode.db missing at … mount the parent opencode/ dir …`, `zellij binary not found in PATH … blind to panes`, `XDG_RUNTIME_DIR is empty …` (§0 table) |
-| Stale frames (`stale:true` persists, old data) | `docker inspect <ctr> --format '{{json .Mounts}}'` (want ONLY the §0 allowlist mounts, every one `:ro`); confirm the opencode mount is the **parent dir** (`…/opencode:/data/opencode:ro`), NOT the bare `opencode.db` file (else `-wal`/`-shm` sidecars are hidden → blind-but-healthy staleness, compose header WAL decision) | WAL sidecars invisible, or DB-budget pressure: the dev host DB hit **8.2 GB** (1953 sessions) where full `part.data LIKE` scans exceed 60 s — queries must stay indexed/sliced per `internal/db` allowlist (plan data strategy rule 5). Never fix by widening mounts. |
+| Stale frames (`stale:true` persists, old data) | `docker inspect <ctr> --format '{{json .Mounts}}'` (want ONLY the §0 allowlist mounts — data/cache `:ro`, socket dir `:rw`; every other mount absent); confirm the opencode mount is the **parent dir** (`…/opencode:/data/opencode:ro`), NOT the bare `opencode.db` file (else `-wal`/`-shm` sidecars are hidden → blind-but-healthy staleness, compose header WAL decision) | WAL sidecars invisible, or DB-budget pressure: the dev host DB hit **8.2 GB** (1953 sessions) where full `part.data LIKE` scans exceed 60 s — queries must stay indexed/sliced per `internal/db` allowlist (plan data strategy rule 5). Never fix by widening mounts. |
 | Port taken (`address already in use`) | `ss -tlnp \| grep <PORT>` (find the squatter) | No variance split in host mode: the listen port IS `$PORT` — pick another free 18xxx (`PORT=18082 docker compose up -d --build`). (The laptop's own 8080 was squatted; same may apply on the VM.) |
 | Screen 503 (`GET /api/sessions/:id/screen` → 503) | Expected pre-drill-down or wiring fault | 503 = `SetScreenSource` never wired (nil backend serves 503 `screen-unavailable`, `internal/hub/screen.go`); in this binary `main.go` wires `srv.SetScreenSource(source)` — a 503 here means the build predates wiring or the route hit an unwired test server. Orphan panes instead return **409** DB-only (not 503) — see T4. |
 

@@ -2,8 +2,11 @@ package runtime
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"opencode-dashboard/internal/model"
@@ -64,6 +67,14 @@ type Source struct {
 	countsMu          sync.Mutex
 	lastLivePanes     int
 	lastLiveProcesses int
+	// warnedPanes/warnedProcs rate-limit degradation warnings to once per
+	// process per source (atomic CAS: concurrent ticks warn exactly once).
+	// Silent zeros hid a whole deploy; the first fault of each source logs.
+	warnedPanes atomic.Bool
+	warnedProcs atomic.Bool
+	// warn reports one degradation line. A field (not a global) so tests
+	// inject a counter; production logs via slog.
+	warn func(msg string)
 }
 
 // NewSource builds a Source with real zellij exec.
@@ -96,6 +107,7 @@ func NewSourceWithRunner(cfg Config, run Runner) *Source {
 		screenTimeout: cfg.ScreenTimeout,
 		now:           time.Now,
 		dump:          defaultDumpRunner(cfg.RuntimeDir),
+		warn:          func(msg string) { slog.Warn(msg) },
 	}
 }
 
@@ -122,7 +134,11 @@ var _ ports.RuntimeSource = (*Source)(nil)
 //
 // Any infrastructure fault (zellij missing/timeout, unreadable socket dir or
 // /proc) degrades to DB-only rows with a nil error: a broken zellij must
-// never crash the collector. Successful observations refresh LiveCounts.
+// never crash the collector. The two presence sources are independent: a
+// pane-listing fault never suppresses the process scan and vice versa. Each
+// successful observation refreshes its LiveCounts component; a failed source
+// keeps its last-known value and logs one warning line per process
+// (warn-once, not per tick).
 func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.SessionRow, error) {
 	out := make([]model.SessionRow, len(rows))
 	copy(out, rows)
@@ -132,29 +148,35 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	// One list-panes -j per live session max, via the shared listing path
-	// (see listLivePanes in screen.go). A listing fault degrades to DB-only
-	// rows: a broken zellij must never crash the collector.
-	livePanes, err := s.listLivePanes(ctx)
-	if err != nil {
-		return out, nil
+	// The two sources are observed independently: either may fail while
+	// the other succeeds, and the join below uses whatever succeeded.
+	livePanes, paneErr := s.listLivePanes(ctx)
+	if paneErr != nil {
+		s.warnOnce(&s.warnedPanes, fmt.Sprintf("runtime: pane listing failed, pane presence degraded (zellij socket-dir must be writable, XDG_RUNTIME_DIR parity, pid:host): %v", paneErr))
 	}
+	procs, procErr := ScanOpencode(s.procRoot)
+	if procErr != nil {
+		s.warnOnce(&s.warnedProcs, fmt.Sprintf("runtime: process scan failed, process presence degraded (needs pid:host /proc visibility): %v", procErr))
+	}
+
 	liveCount := 0
 	panesByDir := make(map[string]Pane)
-	for _, np := range livePanes {
-		if !np.pane.Exited {
-			liveCount++
-		}
-		key := filepath.Clean(np.pane.CWD)
-		if existing, ok := panesByDir[key]; !ok || (existing.Exited && !np.pane.Exited) {
-			panesByDir[key] = np.pane
+	if paneErr == nil {
+		for _, np := range livePanes {
+			if !np.pane.Exited {
+				liveCount++
+			}
+			key := filepath.Clean(np.pane.CWD)
+			if existing, ok := panesByDir[key]; !ok || (existing.Exited && !np.pane.Exited) {
+				panesByDir[key] = np.pane
+			}
 		}
 	}
 
 	// Orphan scan: opencode procs with no zellij pane at their CWD.
 	var procsByDir map[string][]ProcInfo
 	procCount := -1
-	if procs, err := ScanOpencode(s.procRoot); err == nil {
+	if procErr == nil {
 		procCount = 0
 		procsByDir = make(map[string][]ProcInfo)
 		for _, pr := range procs {
@@ -169,7 +191,9 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 		}
 	}
 	s.countsMu.Lock()
-	s.lastLivePanes = liveCount
+	if paneErr == nil {
+		s.lastLivePanes = liveCount
+	}
 	if procCount >= 0 {
 		s.lastLiveProcesses = procCount
 	}
@@ -217,11 +241,20 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 
 // LiveCounts reports the last observed ground truth: live (non-exited)
 // zellij panes and alive opencode processes. Zero before the first
-// successful Enrich; last-known across infra faults.
+// successful Enrich; last-known per source across infra faults (a failed
+// source never clobbers the other source's good observation).
 func (s *Source) LiveCounts() (panes int, procs int) {
 	s.countsMu.Lock()
 	defer s.countsMu.Unlock()
 	return s.lastLivePanes, s.lastLiveProcesses
+}
+
+// warnOnce logs the first fault of one source only. The atomic CAS keeps
+// concurrent ticks (and tests) to exactly one line per source per process.
+func (s *Source) warnOnce(flag *atomic.Bool, msg string) {
+	if flag.CompareAndSwap(false, true) && s.warn != nil {
+		s.warn(msg)
+	}
 }
 
 // backingDead reports whether every opencode proc observed at a pane CWD is

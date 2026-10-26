@@ -26,7 +26,8 @@ docker compose config
 
 Must exit 0 and show: `network_mode: host`, `pid: host`,
 `user: "<uid>:<gid>"`, `PORT: "<port>"` (the ACTUAL listen port — host mode
-has no mapping), the three `:ro` mounts, the
+has no mapping), the two `:ro` data/cache mounts plus the `:rw` socket-dir
+mount, the
 `["CMD", "/app/dashboard", "-healthcheck"]` healthcheck — and NO `ports:`
 stanza (ignored under host mode; its presence would be a lie).
 

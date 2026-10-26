@@ -21,10 +21,10 @@ To expose it on your tailnet afterwards: `tailscale serve --bg --https=443 http:
 │ zellij server → pane shells → opencode procs          │
 │ ~/.local/share/opencode/ (db + wal/shm + storage) :ro │
 │ ~/.cache/zellij/ (EXITED metadata) :ro                │
-│ $XDG_RUNTIME_DIR/zellij/ sockets (0700) :ro           │
+│ $XDG_RUNTIME_DIR/zellij/ sockets (0700) :rw (CLI mints a client socket per call) │
 │ /proc (pid:host liveness)                             │
 └──────────────┬───────────────────────────────────────┘
-               │ pid:host + net:host + :ro mounts (no NAT)
+               │ pid:host + net:host + :ro mounts (:rw socket dir only — no NAT)
 ┌─ Container ──▼───────────────────────────────────────┐
 │ Go single binary (distroless, no Node at runtime):    │
 │  binds HOST 127.0.0.1:$PORT directly (asserted in-code)│
@@ -89,7 +89,7 @@ npm run build --prefix web        # tsc + vite build → web/dist (committed fal
 | Path | One line |
 |---|---|
 | `deploy.sh` | One-click deploy: prereqs → dist → `up --build` → health wait → curl proofs → banner / `--down` teardown |
-| `docker-compose.yml` | Plug-n-play spec: `pid:host` + `network_mode:host`, UID parity, `:ro` allowlist, no `ports:` stanza, exec healthcheck |
+| `docker-compose.yml` | Plug-n-play spec: `pid:host` + `network_mode:host`, UID parity, `:ro` allowlist (`:rw` socket dir only), no `ports:` stanza, exec healthcheck |
 | `Dockerfile` | 3-stage build: pinned zellij CLI → Go static binary (embeds SPA) → distroless runtime |
 | `cmd/dashboard/` | Entrypoint: loopback assert, loud self-checks, seam wiring, API+SPA on one listener, `-healthcheck` probe |
 | `internal/ports/` | Frozen seams: `DBReader` / `RuntimeSource` / `SnapshotSink` / env `Config` |
@@ -108,7 +108,7 @@ npm run build --prefix web        # tsc + vite build → web/dist (committed fal
 
 ## Security (summary)
 
-Read-only v1: no prompt injection path, no shell exec from the UI. Four-path mount allowlist, every mount `:ro` (opencode parent dir for WAL sidecars, storage, zellij cache, socket dir) — `auth.json` and credential/account stores are never mounted and no query touches those tables. Loopback-only ×3 (Go bind assert on host loopback, compose carries no `ports:` stanza to misconfigure, `tailscale serve` fronting) — **funnel is banned**: Basic auth is base64 (reversible, not encryption) and must never face the public internet. No secrets in image/API/logs. Full model: `docs/SECURITY.md` (§5 checklist runnable verbatim).
+Read-only v1: no prompt injection path, no shell exec from the UI. Four-path mount allowlist, every mount `:ro` except the zellij socket dir (opencode parent dir for WAL sidecars, storage, zellij cache stay `:ro`; socket dir is `:rw` because the CLI mints a per-call client socket) — `auth.json` and credential/account stores are never mounted and no query touches those tables. Loopback-only ×3 (Go bind assert on host loopback, compose carries no `ports:` stanza to misconfigure, `tailscale serve` fronting) — **funnel is banned**: Basic auth is base64 (reversible, not encryption) and must never face the public internet. No secrets in image/API/logs. Full model: `docs/SECURITY.md` (§5 checklist runnable verbatim).
 
 ## Runbooks
 
@@ -120,7 +120,7 @@ Read-only v1: no prompt injection path, no shell exec from the UI. Four-path mou
 | Symptom | Cause → fix |
 |---|---|
 | Blind dashboard (fleet empty, zero panes, looks healthy) | UID/XDG/major skew: `id -u` vs `docker exec <ctr> id -u`; `echo $XDG_RUNTIME_DIR` vs container value; host `zellij --version` major vs baked `0.44.3`; `ls $XDG_RUNTIME_DIR/zellij/contract_version_1/` must list live sessions → `docker compose down`, fix env, `up -d --build` (details: `docs/VM_DEPLOY.md` §4) |
-| Stale fleet (`stale:true` persists) | WAL sidecars hidden (mount must be the parent `opencode/` dir, never the bare `.db` file) or 8.2 GB budget pressure (first 2–3 polls normal — wait, don't redeploy): `docker inspect <ctr> --format '{{json .Mounts}}'` must equal the allowlist, all `:ro` |
+| Stale fleet (`stale:true` persists) | WAL sidecars hidden (mount must be the parent `opencode/` dir, never the bare `.db` file) or 8.2 GB budget pressure (first 2–3 polls normal — wait, don't redeploy): `docker inspect <ctr> --format '{{json .Mounts}}'` must equal the allowlist (`:ro` everywhere except the socket dir, which is `:rw` so the CLI can mint its client socket) |
 | Port taken (`address already in use`) | Squatted host port (8080 was squatted on the dev host): `./deploy.sh` auto-bumps and says so — or pin one: `./deploy.sh --port 18082` (host mode: `$PORT` IS the listen port, no container/host split) |
 | `0.0.0.0` confusion (bound/published openly) | Forbidden by design: Go asserts loopback at startup; compose has NO `ports:` stanza (host mode — nothing to misconfigure); `ss -tlnp \| grep $PORT` must show `127.0.0.1:$PORT` held by the dashboard binary (no `docker-proxy` line) and NO `0.0.0.0:$PORT` line |
 | zellij major skew, no loud FATAL | Socket contract dir (`contract_version_1`) is version-sensitive; skew has no dedicated FATAL — it surfaces as blindness (boot log line `zellij detected` shows baked version). Majors differ → rebuild image with matching `ZELLIJ_VERSION`, do not proceed |

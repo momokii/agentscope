@@ -7,7 +7,8 @@
 #
 # Mount allowlist (NOTHING else enters the container):
 #   - opencode/ parent dir :ro  -> /data/opencode   (DB + storage; WAL decision below)
-#   - zellij socket dir   :ro  -> same path         (CLI liveness + dump-screen)
+#   - zellij socket dir   :rw  -> same path         (CLI liveness + dump-screen;
+#     read-write is REQUIRED, see the socket volume note below)
 #   - zellij cache dir    :ro  -> /data/zellij-cache (EXITED-session metadata)
 #   NEVER mounted: auth.json, credential/account* tables, the whole home dir.
 #   The dashboard needs no opencode credentials for read-only monitoring.
@@ -88,7 +89,14 @@ services:
       - ${HOME:-/home/hostuser}/.cache/zellij:/data/zellij-cache:ro
       # Live zellij sockets (0700 — requires user: parity above). Source
       # path must equal $XDG_RUNTIME_DIR/zellij on the host.
-      - /run/user/${UID:-1000}/zellij:/run/user/${UID:-1000}/zellij:ro
+      # Read-write is REQUIRED here (no :ro): the zellij CLI creates a
+      # per-invocation client socket inside XDG_RUNTIME_DIR to talk to the
+      # server, so a read-only mount fails every pane query with EROFS
+      # (ReadOnlyFilesystem: list-panes and dump-screen both die). Safe to
+      # allow: the dashboard only issues read-only zellij queries
+      # (list-sessions, list-panes, dump-screen) — never attach, kill,
+      # resurrect, or delete-session — and same-UID parity already holds.
+      - /run/user/${UID:-1000}/zellij:/run/user/${UID:-1000}/zellij
     restart: unless-stopped
     healthcheck:
       # Exec-form: the binary probes its own /api/healthz (no shell/curl in
