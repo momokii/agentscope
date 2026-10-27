@@ -37,6 +37,48 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 
 ## NEXT
 
+### TASK-311: Hide global KPIs in project detail (DONE 2026-10-27)
+- **Evidence:** KpiStrip renders only when `projectDirectory === null`; drill-in keeps scoped header + insight
+- **Priority:** High | **Complexity:** S | **Status:** DONE
+- **Scope:** `Fleet` renders `KpiStrip` only when `projectDirectory === null`; project drill-in keeps its scoped `ProjectHeader` + `ProjectInsight` numbers.
+- **Acceptance:** project view shows no fleet-wide KPI strip.
+- **Verify:** web suite green
+
+### TASK-312: Live metrics age + delta overflow fix (DONE 2026-10-27)
+- **Evidence:** `frameAgeMs` prop ticks age live (9s→10s verified in screenshots); delta ellipsizes; KPI min 136px fits full labels
+- **Priority:** High | **Complexity:** S | **Status:** DONE
+- **Scope:** `KpiStrip` accepts snapshot age and displays live metrics age (snapshot value + elapsed, ticking each second); `.kpi-delta` ellipsis (no overflow).
+- **Acceptance:** age climbs between publishes instead of freezing; label stays inside the card.
+- **Verify:** web suite green
+
+### TASK-313: RateChart dots + tick axis (DONE 2026-10-27)
+- **Evidence:** per-sample `<title>` tooltips; HTML axis row (SVG text smeared under preserveAspectRatio=none — fixed after screenshot review)
+- **Priority:** Medium | **Complexity:** S | **Status:** DONE
+- **Scope:** per-sample dots with value tooltips; x-axis oldest→latest tick labels + cadence caption.
+- **Acceptance:** hover/tooltip shows each dot's tokens/min; axes labeled honestly (ticks, not wall time).
+- **Verify:** web suite green
+
+### TASK-314: Projects landing filters + pagination (DONE 2026-10-27)
+- **Evidence:** active-since presets + 12/page pagination alongside search; tests green; verified in screenshots
+- **Priority:** Medium | **Complexity:** M | **Status:** DONE
+- **Scope:** landing gains active-since date presets + pagination (local state), alongside existing search.
+- **Acceptance:** presets filter by `last_activity_ms`; pages slice cards; empty states.
+- **Verify:** web suite green
+
+### TASK-315: Activity context + ticker pagination (DONE 2026-10-27)
+- **Evidence:** events carry title/project/harness, linked + right-side source; Prev/Next paging; link underline fixed after screenshot review
+- **Priority:** Medium | **Complexity:** M | **Status:** DONE
+- **Scope:** events carry session title/project/harness (rendered + linked); ticker show-more becomes Prev/Next paging.
+- **Acceptance:** every row names its source; pages slice the ring.
+- **Verify:** web suite green
+
+### TASK-316: DataGuide glossary for new users (DONE 2026-10-27)
+- **Evidence:** (?) toggle panel in Fleet (both modes) + Projects; verified rendered in screenshots; token gate clean
+- **Priority:** Medium | **Complexity:** S | **Status:** DONE
+- **Scope:** expandable (?) glossary (statuses, harness, KPIs, metrics age, recency, sparks/rate, screen states) in Fleet (both modes) + Projects.
+- **Acceptance:** renders, toggles, no token violations.
+- **Verify:** web suite green + token gate
+
 ### TASK-301: Screen serves only the pane claimant (DONE 2026-10-27)
 - **Evidence:** 409 + owner hint for the 110 non-claimants; claimant still 200; hub green; live curl proof
 - **Priority:** High | **Complexity:** S | **Status:** DONE
