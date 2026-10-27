@@ -10,6 +10,7 @@ import { ArrowLeft } from "lucide-react";
 
 import type { SessionRow } from "../lib/sse";
 import { formatCompact, formatUSD } from "../lib/format";
+import HarnessBadge from "../components/HarnessBadge";
 import StatusBadge from "../components/StatusBadge";
 import RelativeTime from "../components/RelativeTime";
 import Sparkline from "../components/Sparkline";
@@ -35,6 +36,7 @@ export default function SessionStub({ row, id }: SessionStubProps) {
         <>
           <div className="stub-head">
             <StatusBadge status={row.status} />
+            <HarnessBadge harness={row.harness} />
             <span className="stub-title">{row.title}</span>
           </div>
           <dl className="stub-facts mono">

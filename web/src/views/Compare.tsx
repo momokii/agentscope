@@ -23,6 +23,7 @@ import { filterCmdSessions } from "../components/CmdBar";
 import { formatCompact, formatUSD } from "../lib/format";
 import { overlaySeries } from "../lib/compare";
 import RelativeTime from "../components/RelativeTime";
+import HarnessBadge from "../components/HarnessBadge";
 import StatusBadge from "../components/StatusBadge";
 
 export interface CompareProps {
@@ -198,6 +199,7 @@ export default function Compare({
                     />
                     <span className="compare-card-title">{row.title}</span>
                     <span className="compare-card-id mono">{row.id}</span>
+                    <HarnessBadge harness={row.harness} />
                     <dl className="compare-kpis mono">
                       <div>
                         <dt>tokens</dt>

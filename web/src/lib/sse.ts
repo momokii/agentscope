@@ -37,6 +37,18 @@ const SESSION_STATUSES: readonly string[] = [
   "archived",
 ];
 
+/**
+ * Agent harness owning a session (Wave 5). MIRROR: `internal/model.Harness`
+ * (`"opencode"` / `"pi"`, JSON tag `harness`). Unknown or absent wire
+ * values normalize to `"opencode"` at the boundary (same rule as the
+ * backend collector), so pre-harness snapshots keep rendering.
+ */
+export type Harness = "opencode" | "pi";
+
+export function normalizeHarness(value: unknown): Harness {
+  return value === "pi" ? "pi" : "opencode";
+}
+
 export interface TokenCounts {
   in: number;
   out: number;
@@ -64,6 +76,8 @@ export interface SessionRow {
   subagent_count: number;
   pane: PaneInfo;
   orphan: boolean;
+  /** Agent harness owning this session. Always populated by the backend. */
+  harness: Harness;
 }
 
 export interface KPIs {
@@ -277,7 +291,7 @@ function normalizeRow(row: unknown, index: number): SessionRow {
       `snapshot: session ${row["id"]} has unknown status ${JSON.stringify(row["status"])}`,
     );
   }
-  return row as unknown as SessionRow;
+  return { ...(row as unknown as SessionRow), harness: normalizeHarness(row["harness"]) };
 }
 
 async function defaultFetchSnapshot(snapshotUrl: string): Promise<Snapshot> {

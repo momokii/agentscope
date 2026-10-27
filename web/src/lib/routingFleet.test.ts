@@ -6,6 +6,7 @@ import {
   buildProjectHash,
   parseBucketParam,
   parseFromParam,
+  parseHarnessParam,
   parseHash,
   parseLiveParam,
   parsePageParam,
@@ -156,6 +157,36 @@ describe("recency + paging params", () => {
     expect(buildFleetHash("archived", true)).toBe("#/?status=archived&live=1");
     expect(buildFleetHash("all", false, { bucket: "old", page: 2 })).toBe(
       "#/?bucket=old&page=2",
+    );
+  });
+});
+
+describe("harness routing", () => {
+  it("parses and builds the harness slice (unknown falls back to all)", () => {
+    expect(parseHash("#/?harness=pi")).toEqual({
+      view: "fleet",
+      harness: "pi",
+    });
+    expect(parseHash("#/?harness=opencode&status=running")).toEqual({
+      view: "fleet",
+      harness: "opencode",
+      status: "running",
+    });
+    expect(parseHarnessParam("harness=bogus")).toBe("all");
+    expect(parseHarnessParam("")).toBe("all");
+    expect(buildFleetQueryHash({ harness: "pi" })).toBe("#/?harness=pi");
+    expect(buildFleetQueryHash({ harness: "all" })).toBe("#/");
+    expect(buildFleetQueryHash({})).toBe("#/");
+  });
+
+  it("round-trips harness on the project path", () => {
+    expect(parseHash("#/projects/dir?harness=pi")).toEqual({
+      view: "project",
+      directory: "dir",
+      harness: "pi",
+    });
+    expect(buildProjectHash("dir", { harness: "pi", page: 2 })).toBe(
+      "#/projects/dir?harness=pi&page=2",
     );
   });
 });

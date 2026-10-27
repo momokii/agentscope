@@ -6,7 +6,7 @@
  * and calls these; unit-tested in fleetSort.test.ts.
  */
 
-import type { SessionRow, SessionStatus } from "./sse";
+import type { Harness, SessionRow, SessionStatus } from "./sse";
 
 /**
  * Display rank: running first, exited last. ARCHIVED sorts after ERROR
@@ -308,8 +308,36 @@ export interface FleetFilterOptions {
   date?: DateFilter;
   /** Drill-in: keep only sessions whose directory matches exactly. */
   directory?: string | null;
+  /** Harness slice: keep only sessions owned by this agent runtime. */
+  harness?: HarnessFilter;
   /** Snapshot clock for the custom `from` date approximation. */
   nowMs?: number;
+}
+
+/** Harness slice for the fleet filter (Wave 5). `"all"` keeps both. */
+export type HarnessFilter = "all" | Harness;
+
+export const HARNESS_FILTERS: readonly HarnessFilter[] = [
+  "all",
+  "opencode",
+  "pi",
+] as const;
+
+export interface HarnessCounts {
+  opencode: number;
+  pi: number;
+}
+
+/** Per-harness counts over a row set (one pass; unknown → opencode). */
+export function countByHarness(
+  rows: readonly SessionRow[],
+): HarnessCounts {
+  const counts: HarnessCounts = { opencode: 0, pi: 0 };
+  for (const row of rows) {
+    if (row.harness === "pi") counts.pi++;
+    else counts.opencode++;
+  }
+  return counts;
 }
 
 /**
@@ -328,9 +356,12 @@ export function applyFleetFilters(
   const bucket = options.bucket ?? "all";
   const date = options.date ?? DEFAULT_DATE_FILTER;
   const directory = options.directory ?? null;
+  const harness: HarnessFilter = options.harness ?? "all";
   const nowMs = options.nowMs ?? Date.now();
   return rows.filter((row) => {
     if (directory !== null && row.directory !== directory) return false;
+    if (harness !== "all" && (row.harness ?? "opencode") !== harness)
+      return false;
     if (status !== "all" && row.status !== status) return false;
     if (liveOnly && !isLiveStatus(row.status)) return false;
     if (!matchesIdleBucket(row, bucket)) return false;

@@ -30,6 +30,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowLeft, ChevronDown } from "lucide-react";
 
 import StatusBadge from "../components/StatusBadge";
+import HarnessBadge from "../components/HarnessBadge";
 import RelativeTime from "../components/RelativeTime";
 import SubagentPanel from "../components/SubagentPanel";
 import { formatCompact, formatUSD } from "../lib/format";
@@ -630,6 +631,7 @@ export default function SessionDetail({
       </a>
       <div className="detail-head">
         {row !== null && <StatusBadge status={row.status} />}
+        {row !== null && <HarnessBadge harness={row.harness} />}
         <span className="detail-title">{data.detail.info.title}</span>
       </div>
       <dl className="detail-facts mono">

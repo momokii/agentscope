@@ -12,14 +12,18 @@
 import type { DatePreset, IdleBucket, StatusFilter } from "./fleetSort";
 import {
   DATE_PRESETS,
+  HARNESS_FILTERS,
   IDLE_BUCKETS,
   STATUS_FILTERS,
   parseLocalDate,
 } from "./fleetSort";
+import type { HarnessFilter } from "./fleetSort";
 
 export interface FleetQuery {
   status?: StatusFilter;
   liveOnly?: boolean;
+  /** Harness slice (`opencode` | `pi`); omitted when `"all"`. */
+  harness?: HarnessFilter;
   bucket?: IdleBucket;
   since?: DatePreset;
   /** `YYYY-MM-DD` custom lower bound (wins over `since`). */
@@ -114,9 +118,10 @@ export function parseHash(hash: string): Route {
 
 /**
  * Fleet query params (additive, shareable): `status=<filter>` pins a status
- * chip, `live=1` pins the live-only toggle. Unknown values fall back to the
- * unfiltered fleet so hand-typed URLs never strand the operator. Defaults
- * are omitted from the Route so `{ view: "fleet" }` equality holds.
+ * chip, `live=1` pins the live-only toggle, `harness=pi|opencode` slices by
+ * agent runtime. Unknown values fall back to the unfiltered fleet so
+ * hand-typed URLs never strand the operator. Defaults are omitted from the
+ * Route so `{ view: "fleet" }` equality holds.
  */
 function fleetRoute(query: string): Route {
   return { view: "fleet", ...fleetQuery(query) };
@@ -135,9 +140,11 @@ function fleetQuery(query: string): FleetQuery {
   const from = parseFromParam(query);
   const since = from === undefined ? parseSinceParam(query) : undefined;
   const page = parsePageParam(query);
+  const harness = parseHarnessParam(query);
   return {
     ...(status === "all" ? {} : { status }),
     ...(liveOnly ? { liveOnly: true } : {}),
+    ...(harness === "all" ? {} : { harness }),
     ...(bucket === undefined ? {} : { bucket }),
     ...(since === undefined ? {} : { since }),
     ...(from === undefined ? {} : { from }),
@@ -179,6 +186,15 @@ export function parseStatusParam(query: string): StatusFilter {
   if (raw === "waiting") return "waiting-input";
   return (STATUS_FILTERS as readonly string[]).includes(raw)
     ? (raw as StatusFilter)
+    : "all";
+}
+
+/** `harness=opencode|pi|all`. Unknown values fall back to `"all"`. */
+export function parseHarnessParam(query: string): HarnessFilter {
+  const raw =
+    new URLSearchParams(query).get("harness")?.trim().toLowerCase() ?? "";
+  return (HARNESS_FILTERS as readonly string[]).includes(raw)
+    ? (raw as HarnessFilter)
     : "all";
 }
 
@@ -227,6 +243,9 @@ function fleetParams(query: FleetQuery): URLSearchParams {
     params.set("status", query.status);
   }
   if (query.liveOnly === true) params.set("live", "1");
+  if (query.harness !== undefined && query.harness !== "all") {
+    params.set("harness", query.harness);
+  }
   if (query.bucket !== undefined && query.bucket !== "active-recent") {
     params.set("bucket", query.bucket);
   }

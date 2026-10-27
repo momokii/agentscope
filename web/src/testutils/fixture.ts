@@ -27,6 +27,7 @@ export function makeRow(overrides: Partial<SessionRow> = {}): SessionRow {
     subagent_count: 0,
     pane: { cwd: "/home/kelanach/opencode-dashboard", exited: false },
     orphan: false,
+    harness: "opencode",
     ...overrides,
   };
 }

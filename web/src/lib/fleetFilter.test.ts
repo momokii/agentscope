@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyFleetFilters,
+  countByHarness,
   countByStatus,
   isLiveStatus,
 } from "./fleetSort";
@@ -83,5 +84,58 @@ describe("applyFleetFilters", () => {
       applyFleetFilters(rows, "worker", "all", true).map((row) => row.id),
     ).toEqual(["a"]);
     expect(applyFleetFilters(rows, "worker", "error", true)).toHaveLength(0);
+  });
+});
+
+describe("countByHarness", () => {
+  it("counts opencode and pi rows separately (missing reads as opencode)", () => {
+    const rows = [
+      makeRow({ id: "a", harness: "opencode" }),
+      makeRow({ id: "b", harness: "pi" }),
+      // Legacy rows without a harness predate Wave 5 and count as opencode.
+      { ...makeRow({ id: "c" }), harness: undefined as never },
+    ];
+    expect(countByHarness(rows)).toEqual({ opencode: 2, pi: 1 });
+  });
+
+  it("handles the empty fleet", () => {
+    expect(countByHarness([])).toEqual({ opencode: 0, pi: 0 });
+  });
+});
+
+describe("applyFleetFilters harness slice", () => {
+  it("keeps both harnesses by default and slices per harness", () => {
+    const rows = [
+      makeRow({ id: "a", harness: "opencode" }),
+      makeRow({ id: "b", harness: "pi" }),
+    ];
+    expect(applyFleetFilters(rows, "", "all", false)).toHaveLength(2);
+    expect(
+      applyFleetFilters(rows, "", "all", false, {
+        harness: "pi",
+      }).map((row) => row.id),
+    ).toEqual(["b"]);
+    expect(
+      applyFleetFilters(rows, "", "all", false, {
+        harness: "opencode",
+      }).map((row) => row.id),
+    ).toEqual(["a"]);
+  });
+
+  it("composes harness with status and query as AND", () => {
+    const rows = [
+      makeRow({ id: "a", title: "fix bug", status: "running", harness: "pi" }),
+      makeRow({
+        id: "b",
+        title: "fix bug",
+        status: "running",
+        harness: "opencode",
+      }),
+    ];
+    expect(
+      applyFleetFilters(rows, "fix", "running", false, {
+        harness: "pi",
+      }).map((row) => row.id),
+    ).toEqual(["a"]);
   });
 });

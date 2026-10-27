@@ -440,6 +440,19 @@ a:focus-visible {
   color: var(--mute);
 }
 
+/* Wave 5 harness badges: glyph + label carry the meaning (DESIGN section
+   6); the washes reuse existing tokens — no new hues. opencode sits on
+   the neutral mute wash (fleet default); pi sits on the accent wash. */
+.badge-harness-oc {
+  background: var(--wash-mute);
+  color: var(--ink-200);
+}
+
+.badge-harness-pi {
+  background: var(--wash-accent);
+  color: var(--accent);
+}
+
 .model-chip,
 .subagent-chip {
   display: inline-flex;

@@ -18,6 +18,7 @@ import {
   IDLE_BUCKET_LABELS,
   RECENCY_LABELS,
   applyFleetFilters,
+  countByHarness,
   countByIdleBucket,
   countByStatus,
   groupFleetRows,
@@ -27,12 +28,17 @@ import {
 } from "../lib/fleetSort";
 import type {
   DateFilter,
+  HarnessFilter,
   IdleBucket,
   StatusFilter,
 } from "../lib/fleetSort";
 import type { FleetQuery } from "../lib/routing";
 import { formatAge, formatCompact, formatUSD } from "../lib/format";
 import { resolveProjectHeader } from "../lib/projects";
+import HarnessBadge from "../components/HarnessBadge";
+import HarnessFilterBar, {
+  HARNESS_FILTER_LABELS,
+} from "../components/HarnessFilterBar";
 import KpiStrip from "../components/KpiStrip";
 import Pagination from "../components/Pagination";
 import ProjectHeader from "../components/ProjectHeader";
@@ -72,6 +78,8 @@ export interface FleetProps {
   statusFilter?: StatusFilter;
   liveOnly?: boolean;
   onFilterChange?: (status: StatusFilter, liveOnly: boolean) => void;
+  /** Harness slice, hash-driven from App (shareable links). */
+  harnessFilter?: HarnessFilter;
   /** Drill-in directory; null/undefined renders the flat fleet. */
   projectDirectory?: string | null;
   bucket?: IdleBucket;
@@ -147,6 +155,7 @@ export default function Fleet({
   statusFilter = "all",
   liveOnly = false,
   onFilterChange,
+  harnessFilter = "all",
   projectDirectory = null,
   bucket = "all",
   date = DEFAULT_DATE_FILTER,
@@ -170,6 +179,9 @@ export default function Fleet({
   /** Per-status counts over the scoped snapshot — one pass per tick. */
   const statusCounts = useMemo(() => countByStatus(scopeRows), [scopeRows]);
 
+  /** Per-harness counts over the scoped snapshot — one pass per tick. */
+  const harnessCounts = useMemo(() => countByHarness(scopeRows), [scopeRows]);
+
   const bucketCounts = useMemo(
     () => countByIdleBucket(scopeRows),
     [scopeRows],
@@ -183,6 +195,7 @@ export default function Fleet({
         bucket,
         date,
         directory: projectDirectory,
+        harness: harnessFilter,
         nowMs: now,
       }),
     ).filter((row) => !pinned.has(row.id));
@@ -191,6 +204,7 @@ export default function Fleet({
     query,
     statusFilter,
     liveOnly,
+    harnessFilter,
     pins,
     bucket,
     date,
@@ -232,6 +246,7 @@ export default function Fleet({
     onFilterChange?.("all", false);
     onQueryChange?.({
       bucket: DEFAULT_IDLE_BUCKET,
+      harness: undefined,
       since: undefined,
       from: undefined,
       page: 1,
@@ -245,6 +260,8 @@ export default function Fleet({
     if (statusFilter !== "all")
       activeFilterBits.push(`status ${STATUS_FILTER_LABELS[statusFilter]}`);
     if (liveOnly) activeFilterBits.push("live only");
+    if (harnessFilter !== "all")
+      activeFilterBits.push(`harness ${HARNESS_FILTER_LABELS[harnessFilter]}`);
     if (bucket !== "all" && bucket !== DEFAULT_IDLE_BUCKET)
       activeFilterBits.push(`bucket ${IDLE_BUCKET_LABELS[bucket]}`);
     if (date.from !== null && date.from !== undefined) {
@@ -300,6 +317,9 @@ export default function Fleet({
         <td>
           <StatusBadge status={row.status} />
         </td>
+        <td>
+          <HarnessBadge harness={row.harness} />
+        </td>
         <SessionCell row={row} />
         <td>
           <span className="model-chip">{row.model}</span>
@@ -345,7 +365,7 @@ export default function Fleet({
     return [
       main,
       <tr key={`${row.id}-sub`} className="subagent-detail">
-        <td colSpan={9}>
+        <td colSpan={10}>
           ↳ {row.subagent_count} child session
           {row.subagent_count === 1 ? "" : "s"} · tokens and cost include the
           subagent roll-up
@@ -426,6 +446,12 @@ export default function Fleet({
         onToggleLiveOnly={() => onFilterChange?.(statusFilter, !liveOnly)}
       />
 
+      <HarnessFilterBar
+        counts={harnessCounts}
+        value={harnessFilter}
+        onSelect={(harness) => onQueryChange?.({ harness, page: 1 })}
+      />
+
       <RecencyFilterBar
         counts={bucketCounts}
         bucket={bucket}
@@ -473,6 +499,7 @@ export default function Fleet({
             <thead>
               <tr>
                 <th scope="col">Status</th>
+                <th scope="col">Harness</th>
                 <th scope="col">Session</th>
                 <th scope="col">Model</th>
                 <th scope="col">Tokens</th>
@@ -487,7 +514,7 @@ export default function Fleet({
               {pinnedRows.length > 0 && (
                 <Fragment key="group-pinned">
                   <tr className="group-header">
-                    <td colSpan={9}>Pinned</td>
+                    <td colSpan={10}>Pinned</td>
                   </tr>
                   {pinnedRows.flatMap((row) => renderRow(row))}
                 </Fragment>
@@ -495,7 +522,7 @@ export default function Fleet({
               {groups.map((group) => (
                 <Fragment key={group.key}>
                   <tr key={`group-${group.key}`} className="group-header">
-                    <td colSpan={9}>{RECENCY_LABELS[group.key]}</td>
+                    <td colSpan={10}>{RECENCY_LABELS[group.key]}</td>
                   </tr>
                   {group.rows.flatMap((row) => renderRow(row))}
                 </Fragment>

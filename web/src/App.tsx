@@ -56,6 +56,7 @@ function queryFromRoute(route: Route): FleetQuery | null {
   return {
     status: route.status,
     liveOnly: route.liveOnly,
+    harness: route.harness,
     bucket: route.bucket,
     since: route.since,
     from: route.from,
@@ -137,9 +138,16 @@ export default function App() {
     return () => client.close();
   }, [live]);
 
+  // Pi rows deep-link to the Live pane tab: pi transcripts are a P6
+  // follow-up, but the live pane works today via harness-scoped resolve.
+  // Opencode rows keep the transcript default.
   const selectSession = useCallback(
     (id: string) => {
-      window.location.hash = buildSessionHash(id);
+      const row = snapshotRef.current?.sessions.find((r) => r.id === id);
+      window.location.hash =
+        row?.harness === "pi"
+          ? buildSessionHash(id, "screen")
+          : buildSessionHash(id);
       palette.setOpen(false);
       requestAnimationFrame(() => {
         document
@@ -171,6 +179,7 @@ export default function App() {
     ? (route.status ?? "all")
     : "all";
   const fleetLiveOnly = fleetRoute && route.liveOnly === true;
+  const fleetHarness = fleetRoute ? (route.harness ?? "all") : "all";
   const fleetBucket = fleetRoute
     ? (route.bucket ?? DEFAULT_IDLE_BUCKET)
     : DEFAULT_IDLE_BUCKET;
@@ -327,6 +336,7 @@ export default function App() {
             onSelect={selectSession}
             statusFilter={fleetStatus}
             liveOnly={fleetLiveOnly}
+            harnessFilter={fleetHarness}
             projectDirectory={route.directory}
             bucket={fleetBucket}
             date={fleetDate}
@@ -362,6 +372,7 @@ export default function App() {
             onSelect={selectSession}
             statusFilter={fleetStatus}
             liveOnly={fleetLiveOnly}
+            harnessFilter={fleetHarness}
             bucket={fleetBucket}
             date={fleetDate}
             page={fleetPage}

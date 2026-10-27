@@ -5,6 +5,7 @@ import {
   computeReconnectDelayMs,
   createSSEClient,
   deriveSnapshotUrl,
+  normalizeHarness,
   normalizeSnapshot,
   type Snapshot,
   type StatusEvent,
@@ -93,6 +94,7 @@ function makeSnapshot(seq: number, ids: string[] = ["ses_a"]): Snapshot {
       subagent_count: 0,
       pane: { cwd: "/tmp", exited: false },
       orphan: false,
+      harness: "opencode",
     })),
     kpis: {
       active: 1,
@@ -168,6 +170,25 @@ describe("contract helpers", () => {
     ).toThrow(/unknown status/);
     const fleet = { seq: 9, sessions: [], kpis: makeSnapshot(9).kpis };
     expect(normalizeSnapshot(fleet)).toMatchObject({ seq: 9, last_poll_ms: 0 });
+  });
+
+  it("normalizes harness at the boundary (missing/unknown reads as opencode)", () => {
+    expect(normalizeHarness("pi")).toBe("pi");
+    expect(normalizeHarness("opencode")).toBe("opencode");
+    expect(normalizeHarness(undefined)).toBe("opencode");
+    expect(normalizeHarness("bogus")).toBe("opencode");
+    const base = makeSnapshot(9);
+    const noHarness = {
+      ...base,
+      sessions: base.sessions.map(({ harness: _h, ...rest }) => rest),
+    };
+    // Pre-harness snapshots keep rendering as opencode rows.
+    expect(normalizeSnapshot(noHarness).sessions[0]?.harness).toBe("opencode");
+    const pi = normalizeSnapshot({
+      ...base,
+      sessions: [{ ...base.sessions[0], harness: "pi" }],
+    });
+    expect(pi.sessions[0]?.harness).toBe("pi");
   });
 
   it("passes through optional projects and KPI fields, and omits absent projects", () => {
