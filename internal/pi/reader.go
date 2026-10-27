@@ -80,6 +80,55 @@ func NewWithWindow(dir string, activeWindowMs int64) *Reader {
 // oversized, or unreadable files are skipped in isolation with the rest of
 // the tick intact. Deleted files drop out of the cache and the fleet.
 func (r *Reader) PiSessions(ctx context.Context) ([]model.SessionRow, error) {
+	nowMs := r.now().UnixMilli()
+	datas, err := r.parseFiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]model.SessionRow, 0, len(datas))
+	for _, d := range datas {
+		rows = append(rows, d.toRow(nowMs, r.activeWindowMs))
+	}
+	applyForkChildren(rows, datas)
+	sort.SliceStable(rows, func(i, j int) bool {
+		return rows[i].UpdatedRelativeMs < rows[j].UpdatedRelativeMs
+	})
+	return rows, nil
+}
+
+// PiMessageMetrics implements the message-level half of ports.PiReader:
+// usage tokens created in the trailing 60 seconds and usage cost since
+// local midnight — the same window semantics as db.MessageMetrics, so the
+// collector can sum both harnesses into one honest sample. Events come
+// from the mtime-cached parses (milliseconds, never a tick-path scan); a
+// missing store errors like PiSessions (collector treats it as disabled).
+func (r *Reader) PiMessageMetrics(ctx context.Context, now time.Time) (ports.MessageMetrics, error) {
+	nowMs := now.UnixMilli()
+	since60s := nowMs - int64((60 * time.Second).Milliseconds())
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	midnightMs := midnight.UnixMilli()
+	datas, err := r.parseFiles(ctx)
+	if err != nil {
+		return ports.MessageMetrics{}, err
+	}
+	var m ports.MessageMetrics
+	for _, d := range datas {
+		for _, ev := range d.events {
+			if ev.tsMs >= since60s {
+				m.TokensLast60s += ev.tokens
+			}
+			if ev.tsMs >= midnightMs {
+				m.CostSinceMidnight += ev.cost
+			}
+		}
+	}
+	return m, nil
+}
+
+// parseFiles lists the store and returns cached-or-fresh parses for every
+// session file, evicting deleted files from the cache. Shared by PiSessions
+// and PiMessageMetrics so both read the same cached parses per interval.
+func (r *Reader) parseFiles(ctx context.Context) ([]fileData, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -87,7 +136,6 @@ func (r *Reader) PiSessions(ctx context.Context) ([]model.SessionRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	nowMs := r.now().UnixMilli()
 	datas := make([]fileData, 0, len(paths))
 	seen := make(map[string]struct{}, len(paths))
 	for _, p := range paths {
@@ -102,16 +150,7 @@ func (r *Reader) PiSessions(ctx context.Context) ([]model.SessionRow, error) {
 		datas = append(datas, d)
 	}
 	r.evictUnseen(seen)
-
-	rows := make([]model.SessionRow, 0, len(datas))
-	for _, d := range datas {
-		rows = append(rows, d.toRow(nowMs, r.activeWindowMs))
-	}
-	applyForkChildren(rows, datas)
-	sort.SliceStable(rows, func(i, j int) bool {
-		return rows[i].UpdatedRelativeMs < rows[j].UpdatedRelativeMs
-	})
-	return rows, nil
+	return datas, nil
 }
 
 // listSessionFiles walks the store root one level per slug directory and

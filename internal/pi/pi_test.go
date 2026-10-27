@@ -216,6 +216,41 @@ func TestReader_CorruptIsolatedAndCache(t *testing.T) {
 	}
 }
 
+func TestPiMessageMetrics_windows(t *testing.T) {
+	// Fixed clock: 2026-10-27T12:10:00Z (UTC keeps midnight deterministic).
+	now := time.Date(2026, 10, 27, 12, 10, 0, 0, time.UTC)
+	content := `{"type":"session","version":3,"id":"m-1","timestamp":"2026-10-27T11:00:00.000Z","cwd":"/x"}
+` +
+		// Inside the trailing 60s and today: counts for both.
+		`{"type":"message","id":"a","parentId":null,"timestamp":"2026-10-27T12:09:30.000Z","message":{"role":"assistant","content":[],"stopReason":"stop","usage":{"input":100,"output":50,"cacheRead":0,"cacheWrite":0,"totalTokens":150,"cost":{"total":0.02}},"timestamp":1}}` + "\n" +
+		// Today but older than 60s: cost only.
+		`{"type":"message","id":"b","parentId":"a","timestamp":"2026-10-27T12:00:00.000Z","message":{"role":"assistant","content":[],"stopReason":"stop","usage":{"input":1000,"output":500,"cacheRead":0,"cacheWrite":0,"totalTokens":1500,"cost":{"total":0.30}},"timestamp":2}}` + "\n" +
+		// Yesterday: excluded from both.
+		`{"type":"usage","id":"c","parentId":"b","timestamp":"2026-10-26T23:00:00.000Z","kind":"cache_warm","provider":"p","model":"m","usage":{"input":0,"output":0,"cacheRead":9000,"cacheWrite":0,"totalTokens":9000,"cost":{"total":9.99}}}}` + "\n"
+	dir := t.TempDir()
+	writeSession(t, dir, "s", "f.jsonl", content)
+
+	r := New(dir)
+	m, err := r.PiMessageMetrics(t.Context(), now)
+	if err != nil {
+		t.Fatalf("PiMessageMetrics: %v", err)
+	}
+	if m.TokensLast60s != 150 {
+		t.Errorf("TokensLast60s = %d, want 150", m.TokensLast60s)
+	}
+	if m.CostSinceMidnight != 0.32 {
+		t.Errorf("CostSinceMidnight = %v, want 0.32", m.CostSinceMidnight)
+	}
+}
+
+func TestPiMessageMetrics_store_missing_errors(t *testing.T) {
+	r := New(filepath.Join(t.TempDir(), "nope"))
+	now := time.Date(2026, 10, 27, 12, 10, 0, 0, time.UTC)
+	if _, err := r.PiMessageMetrics(t.Context(), now); err == nil {
+		t.Error("missing store should error (collector treats as disabled)")
+	}
+}
+
 func TestReader_MissingDir(t *testing.T) {
 	r := New(filepath.Join(t.TempDir(), "nope"))
 	if _, err := r.PiSessions(t.Context()); err == nil {

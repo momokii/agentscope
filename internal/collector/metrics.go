@@ -52,6 +52,24 @@ func (c *Collector) refreshMetrics(ctx context.Context) {
 		}
 		return
 	}
+	// Pi contributes its own message-level sample when the source is
+	// wired: the two windows share semantics, so the fleet sample is the
+	// plain sum. Either side failing keeps last-good (the pi half degrades
+	// warn-once per process via the shared flag, like the pi tick merge).
+	if c.pi != nil {
+		pm, perr := c.pi.PiMessageMetrics(queryCtx, now)
+		if perr != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			if c.piWarned.CompareAndSwap(false, true) {
+				slog.WarnContext(ctx, "collector pi metrics refresh failed; keeping last good values", slog.Any("err", perr))
+			}
+			return
+		}
+		m.TokensLast60s += pm.TokensLast60s
+		m.CostSinceMidnight += pm.CostSinceMidnight
+	}
 	c.metricsMu.Lock()
 	defer c.metricsMu.Unlock()
 	c.metrics = metricsSample{

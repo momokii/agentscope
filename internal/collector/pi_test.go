@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"opencode-dashboard/internal/model"
 	"opencode-dashboard/internal/ports"
@@ -13,10 +14,12 @@ import (
 // fakePi serves canned pi rows or a store error, counting calls so merge
 // tests can assert the pi scan runs per tick without failing it.
 type fakePi struct {
-	mu    sync.Mutex
-	rows  []model.SessionRow
-	err   error
-	calls int
+	mu       sync.Mutex
+	rows     []model.SessionRow
+	err      error
+	calls    int
+	pmetrics ports.MessageMetrics
+	perr     error
 }
 
 func (f *fakePi) PiSessions(ctx context.Context) ([]model.SessionRow, error) {
@@ -29,6 +32,15 @@ func (f *fakePi) PiSessions(ctx context.Context) ([]model.SessionRow, error) {
 	out := make([]model.SessionRow, len(f.rows))
 	copy(out, f.rows)
 	return out, nil
+}
+
+func (f *fakePi) PiMessageMetrics(ctx context.Context, _ time.Time) (ports.MessageMetrics, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.perr != nil {
+		return ports.MessageMetrics{}, f.perr
+	}
+	return f.pmetrics, nil
 }
 
 func (f *fakePi) setRows(rows []model.SessionRow) {
@@ -145,6 +157,86 @@ func Test_Collector_Tick_pi_change_unskips_watermark(t *testing.T) {
 	if n := len(sink.published()); n != 2 {
 		t.Fatalf("snapshots = %d, want still 2", n)
 	}
+}
+
+func Test_Collector_refreshMetrics_sums_pi_sample(t *testing.T) {
+	// Given: DB and pi samples over the same instant.
+	t0 := time.UnixMilli(1800000000000)
+	db := &fakeDB{
+		rows:    []model.SessionRow{rowFixture("ses-1", model.SessionRunning, 50, 1)},
+		updMs:   1,
+		evID:    1,
+		metrics: ports.MessageMetrics{TokensLast60s: 1000, CostSinceMidnight: 0.5},
+	}
+	pi := &fakePi{pmetrics: ports.MessageMetrics{TokensLast60s: 234, CostSinceMidnight: 0.25}}
+	sink := &fakeSink{}
+	c, err := NewCollector(db, &fakeRuntime{}, sink, testConfig(), pi)
+	if err != nil {
+		t.Fatalf("NewCollector: %v", err)
+	}
+	c.clock = &stubClock{times: []time.Time{t0, t0, t0}}
+
+	// When
+	c.refreshMetrics(context.Background())
+	if _, err := c.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	// Then: the fleet sample is the plain sum of both harnesses.
+	got := sink.published()
+	if len(got) != 1 {
+		t.Fatalf("published = %d, want 1", len(got))
+	}
+	kpis := got[0].KPIs
+	if kpis.TokensPerHour != 1234*60 {
+		t.Errorf("TokensPerHour = %v, want %v", kpis.TokensPerHour, float64(1234*60))
+	}
+	if kpis.CostToday != 0.75 {
+		t.Errorf("CostToday = %v, want 0.75", kpis.CostToday)
+	}
+}
+
+func Test_Collector_pi_metrics_failure_keeps_last_good(t *testing.T) {
+	// Given: one good combined sample, then the pi store starts failing.
+	t0 := time.UnixMilli(1800000000000)
+	db := &fakeDB{
+		rows:    []model.SessionRow{rowFixture("ses-1", model.SessionIdle, 5, 1)},
+		updMs:   1,
+		evID:    1,
+		metrics: ports.MessageMetrics{TokensLast60s: 100, CostSinceMidnight: 0.1},
+	}
+	pi := &fakePi{pmetrics: ports.MessageMetrics{TokensLast60s: 50, CostSinceMidnight: 0.05}}
+	sink := &fakeSink{}
+	c, err := NewCollector(db, &fakeRuntime{}, sink, testConfig(), pi)
+	if err != nil {
+		t.Fatalf("NewCollector: %v", err)
+	}
+	c.clock = &stubClock{times: []time.Time{t0, t0, t0, t0.Add(time.Minute), t0.Add(time.Minute)}}
+	c.refreshMetrics(context.Background())
+	pi.perr = errBoomPi()
+
+	// When: the pi refresh fails.
+	c.refreshMetrics(context.Background())
+
+	// Then: last-good combined values persist (150 tokens, ~0.15 cost).
+	m, age := c.metricsValue(t0.Add(time.Minute))
+	if m.tokensLast60s != 150 || abs(m.costSinceMidnight-0.15) > 1e-9 {
+		t.Errorf("sample = %+v, want combined last-good {150 0.15}", m)
+	}
+	if age < 0 {
+		t.Errorf("age = %d, want non-negative (sample exists)", age)
+	}
+}
+
+func errBoomPi() error {
+	return errors.New("pi store boom")
+}
+
+func abs(f float64) float64 {
+	if f < 0 {
+		return -f
+	}
+	return f
 }
 
 func Test_piSignature_order_independent_and_status_sensitive(t *testing.T) {

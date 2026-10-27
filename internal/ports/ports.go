@@ -62,6 +62,13 @@ type PiReader interface {
 	// treats as "pi disabled" (never fatal, never stale-marking); a
 	// corrupt single file is skipped in isolation, never failing the tick.
 	PiSessions(ctx context.Context) ([]model.SessionRow, error)
+	// PiMessageMetrics returns the message-level throughput/spend sample
+	// over the JSONL store: usage tokens created in the trailing 60
+	// seconds and usage cost since local midnight (the same window
+	// semantics as DBReader.MessageMetrics, so the collector can sum both
+	// harnesses into one honest sample). Same error contract as
+	// PiSessions.
+	PiMessageMetrics(ctx context.Context, now time.Time) (MessageMetrics, error)
 }
 
 // MessageMetrics is one message-level sample: tokens created in the last

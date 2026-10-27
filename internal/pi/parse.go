@@ -79,6 +79,23 @@ type piEntry struct {
 	Version      int        `json:"version"`
 }
 
+// usageEvent is one message-level token/cost observation with its entry
+// timestamp: the raw material for the message-level metrics sample
+// (tokens in the trailing 60s, cost since local midnight). Assistant
+// message usage, usage entries, and compaction/summary usage all record
+// here — the same set pi counts in session totals.
+type usageEvent struct {
+	tsMs   int64
+	tokens int64
+	cost   float64
+}
+
+// maxUsageEventsPerFile caps the retained per-file event list. Sessions
+// with more usage observations in a day are absurd (the observed max is
+// hundreds); beyond the cap the oldest events drop, degrading only the
+// midnight-cost tail for that file — never the tick.
+const maxUsageEventsPerFile = 50000
+
 // fileData is the cached parse of one session file: everything a tick needs
 // to rebuild the row except the clock (UpdatedRelativeMs is recomputed per
 // tick from lastTsMs).
@@ -98,6 +115,7 @@ type fileData struct {
 	tokensTotal int64
 	cost        float64
 	parentID    string
+	events      []usageEvent
 }
 
 // parseSessionFile streams one JSONL session file into fileData. A malformed
@@ -161,7 +179,7 @@ func (d *fileData) applyLine(line []byte, fallbackMs int64) error {
 		}
 	case entryUsage, entryCompaction, entryBranchSummary:
 		if e.Usage != nil {
-			d.addUsage(e.Usage)
+			d.addUsage(e.Usage, tsMs)
 		}
 		d.lastTsMs = tsMs
 	case entrySessionInfo:
@@ -206,7 +224,7 @@ func (d *fileData) applyMessage(e piEntry, tsMs int64) {
 			d.lastModel = m.Provider + "/" + m.Model
 		}
 		if m.Usage != nil {
-			d.addUsage(m.Usage)
+			d.addUsage(m.Usage, tsMs)
 		}
 	case "toolResult":
 		// A tool result extends the open assistant turn; it does not end
@@ -214,17 +232,22 @@ func (d *fileData) applyMessage(e piEntry, tsMs int64) {
 		// ongoing, and usage from nested model work counts toward totals.
 		d.lastRole = "assistant"
 		if m.Usage != nil {
-			d.addUsage(m.Usage)
+			d.addUsage(m.Usage, tsMs)
 		}
 	default:
 		// system / custom_message and future roles: recency only.
 	}
 }
 
-// addUsage folds one pi usage record into the token/cost sums. Input counts
-// cache reads (tokensIn parallels the db roll-up where In includes cache
-// reads); reasoning is part of output and never double-counted.
-func (d *fileData) addUsage(u *piUsage) {
+// addUsage folds one pi usage record into the token/cost sums and the
+// message-level event list. Input counts cache reads (tokensIn parallels
+// the db roll-up where In includes cache reads); reasoning is part of
+// output and never double-counted.
+func (d *fileData) addUsage(u *piUsage, tsMs int64) {
+	d.events = append(d.events, usageEvent{tsMs: tsMs, tokens: u.TotalTokens, cost: u.Cost.Total})
+	if len(d.events) > maxUsageEventsPerFile {
+		d.events = d.events[len(d.events)-maxUsageEventsPerFile:]
+	}
 	d.tokensIn += u.Input + u.CacheRead
 	d.tokensOut += u.Output
 	d.tokensTotal += u.TotalTokens
