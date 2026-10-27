@@ -37,21 +37,24 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 
 ## NEXT
 
-### TASK-301: Screen serves only the pane claimant (correctness fix)
-- **Priority:** High | **Complexity:** S | **Status:** TODO
+### TASK-301: Screen serves only the pane claimant (DONE 2026-10-27)
+- **Evidence:** 409 + owner hint for the 110 non-claimants; claimant still 200; hub green; live curl proof
+- **Priority:** High | **Complexity:** S | **Status:** DONE
 - **Scope:** `/screen` returns 409 DB-only for snapshot rows with no live pane claim (`Pane.CWD == ""`/exited/orphan) instead of resolving the directory's *other* session pane; 409 hint names the owning session when one exists.
 - **Acceptance:** non-claimant session → 409 (was 200 with чужой pane text); claimant path unchanged.
 - **Verify:** `go test -count=1 ./internal/hub/`, live curl proof
 - **Security:** read-only, no shape change (hint is free text).
 
-### TASK-302: Pi message-level metrics (tokens/hr + cost_today cover pi)
-- **Priority:** High | **Complexity:** M | **Status:** TODO
+### TASK-302: Pi message-level metrics (DONE 2026-10-27)
+- **Evidence:** usage events + PiMessageMetrics; refresher sums both, either-side failure keeps last-good; live KPIs move with pi activity
+- **Priority:** High | **Complexity:** M | **Status:** DONE
 - **Scope:** `internal/pi` records usage events (ts/tokens/cost); new `ports.PiReader.PiMessageMetrics` mirroring DB midnight/60s semantics; collector refresher combines both samples (either error → last-good).
 - **Acceptance:** pi-only activity moves `tokens_per_hour`/`cost_today`; opencode-only hosts unchanged.
 - **Verify:** `go test -count=1 ./internal/pi/ ./internal/collector/` + live proof
 
-### TASK-303: Project + fleet diagrams (real data only)
-- **Priority:** Medium | **Complexity:** M | **Status:** TODO
+### TASK-303: Project + fleet diagrams (DONE 2026-10-27)
+- **Evidence:** ProjectInsight + fleet throughput strip, hand-rolled SVG, tokens only; web 230/230, lint + token gate clean; redeployed :8082, bundle verified
+- **Priority:** Medium | **Complexity:** M | **Status:** DONE
 - **Scope:** project drill-in header gains status distribution + totals + aggregate token-rate sparkline (element-wise spark sums); fleet gains a throughput strip; hand-rolled SVG, DESIGN tokens only, no new hues.
 - **Acceptance:** numbers reconcile with fleet rows; token gate clean.
 - **Verify:** `npm test --prefix web -- --run`, `npm run lint --prefix web`
