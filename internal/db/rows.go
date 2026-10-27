@@ -127,6 +127,7 @@ func (r *Reader) toRow(s sessionScalars, in derivedInput, nowMs int64) model.Ses
 	total := tokensIn + s.tokensOut + s.tokensReas
 	return model.SessionRow{
 		ID:        s.id,
+		Harness:   model.HarnessOpencode,
 		Title:     s.title,
 		Project:   projectLabel(s.projectID, s.projName, s.projWT),
 		Directory: s.directory,

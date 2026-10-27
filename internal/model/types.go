@@ -40,6 +40,30 @@ func (s SessionStatus) IsValid() bool {
 	}
 }
 
+// Harness is the agent runtime that owns a session. The dashboard is
+// multi-harness: opencode rows come from the WAL db (internal/db), pi rows
+// from JSONL session files (internal/pi). The fleet merges both; every
+// consumer that joins by process or pane must key on (directory, harness),
+// not directory alone — both harnesses can be live in one directory.
+type Harness string
+
+const (
+	// HarnessOpencode marks sessions owned by opencode (opencode.db).
+	HarnessOpencode Harness = "opencode"
+	// HarnessPi marks sessions owned by pi (JSONL session store).
+	HarnessPi Harness = "pi"
+)
+
+// IsValid reports whether h is a known harness value.
+func (h Harness) IsValid() bool {
+	switch h {
+	case HarnessOpencode, HarnessPi:
+		return true
+	default:
+		return false
+	}
+}
+
 // TokenCounts is the token roll-up for one session, including subagent
 // children (joined via session.parent_id). All values are cumulative totals.
 // Consumer: internal/db computes the roll-up; web/ renders the fleet row.
@@ -65,8 +89,10 @@ type PaneInfo struct {
 
 // SessionRow is one fleet-table row: GET /api/fleet → sessions[] and
 // GET /api/events snapshot ticks. Field list frozen per the work plan
-// (Lane A §2 + Lane C §6). Producers: internal/db (content/cost/tokens)
-// joined with internal/runtime (pane/orphan) by internal/collector.
+// (Lane A §2 + Lane C §6), extended by Wave 5 (Harness). Producers:
+// internal/db (opencode content/cost/tokens) and internal/pi (pi
+// content/cost/tokens), each joined with internal/runtime (pane/orphan)
+// by internal/collector.
 type SessionRow struct {
 	// ID is the opencode session id (ses_*).
 	ID string `json:"id"`
@@ -103,6 +129,12 @@ type SessionRow struct {
 	// Orphan is true when the session has no live zellij pane (matched only
 	// via /proc cmdline scan); live text is unavailable (dump-screen 409).
 	Orphan bool `json:"orphan"`
+	// Harness is the agent runtime owning this session (opencode or pi).
+	// Always populated on the wire: producers normalize unknown/empty to
+	// HarnessOpencode (the pre-Wave-5 contract had no harness dimension).
+	// Consumers: fleet chip + filter, per-(directory,harness) presence
+	// claims in internal/runtime, harness-scoped screen resolution.
+	Harness Harness `json:"harness"`
 }
 
 // KPIs is the fleet KPI strip: GET /api/fleet → kpis and Snapshot.KPIs.

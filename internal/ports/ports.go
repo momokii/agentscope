@@ -46,6 +46,24 @@ type DBReader interface {
 	MessageMetrics(ctx context.Context, now time.Time) (MessageMetrics, error)
 }
 
+// PiReader is the pi JSONL session-store source (Wave 5 owns the
+// implementation in internal/pi). It mirrors the content side of DBReader
+// for the second harness: one SessionRow per session file with
+// Harness=pi, title/tokens/cost/model filled and status derived via
+// model.DeriveStatus under the same recency gate. Pane/orphan fields stay
+// zero — RuntimeSource fills those for both harnesses.
+//
+// A nil PiReader disables pi monitoring: the collector skips the merge
+// and an opencode-only host behaves exactly as before (no new failure
+// modes, no config required).
+type PiReader interface {
+	// PiSessions returns one SessionRow per pi session file (Harness=pi).
+	// A missing/unreadable store root reports an error the collector
+	// treats as "pi disabled" (never fatal, never stale-marking); a
+	// corrupt single file is skipped in isolation, never failing the tick.
+	PiSessions(ctx context.Context) ([]model.SessionRow, error)
+}
+
 // MessageMetrics is one message-level sample: tokens created in the last
 // 60 seconds and USD cost since local midnight.
 type MessageMetrics struct {
@@ -126,6 +144,13 @@ type Config struct {
 	// DataDir is the read-only opencode data root
 	// (~/.local/share/opencode). Env: DATA_DIR.
 	DataDir string
+	// PiDataDir is the read-only pi session-store root
+	// (~/.pi/agent/sessions). Env: PI_DATA_DIR. Empty after load means
+	// "pi monitoring disabled" (opencode-only host): the collector
+	// skips the pi merge instead of failing. PI_CODING_AGENT_SESSION_DIR
+	// is deliberately NOT honored — the dashboard reads one fixed root
+	// (logged at startup) rather than chasing per-process overrides.
+	PiDataDir string
 }
 
 // DefaultActiveWindow is the default status recency gate: a session quiet
@@ -142,12 +167,13 @@ func DefaultConfig() Config {
 		BindAddr:     "127.0.0.1",
 		Port:         "8080",
 		DataDir:      defaultDataDir(),
+		PiDataDir:    defaultPiDataDir(),
 	}
 }
 
 // LoadConfigFromEnv returns DefaultConfig overlaid with PORT, DATA_DIR,
-// POLL_INTERVAL, DB_TIMEOUT, ACTIVE_WINDOW, and BIND_ADDR from the
-// environment. Malformed POLL_INTERVAL, DB_TIMEOUT, or ACTIVE_WINDOW falls
+// PI_DATA_DIR, POLL_INTERVAL, DB_TIMEOUT, ACTIVE_WINDOW, and BIND_ADDR from
+// the environment. Malformed POLL_INTERVAL, DB_TIMEOUT, or ACTIVE_WINDOW falls
 // back to its default; empty PORT/DATA_DIR/BIND_ADDR keep their defaults
 // (unset BIND_ADDR behaves exactly as before: loopback-only).
 func LoadConfigFromEnv() Config {
@@ -160,6 +186,9 @@ func LoadConfigFromEnv() Config {
 	}
 	if v := os.Getenv("DATA_DIR"); v != "" {
 		cfg.DataDir = v
+	}
+	if v := os.Getenv("PI_DATA_DIR"); v != "" {
+		cfg.PiDataDir = v
 	}
 	if v := os.Getenv("POLL_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
@@ -182,6 +211,18 @@ func LoadConfigFromEnv() Config {
 // Addr returns the bind address:port pair the hub must listen on.
 func (c Config) Addr() string {
 	return c.BindAddr + ":" + c.Port
+}
+
+// defaultPiDataDir resolves $HOME/.pi/agent/sessions (the pi default
+// session store; PI_CODING_AGENT_SESSION_DIR overrides are not honored —
+// see Config.PiDataDir). Split out so tests can cover the fallback
+// without touching process env beyond HOME.
+func defaultPiDataDir() string {
+	home := os.Getenv("HOME")
+	if home == "" {
+		return ".pi/agent/sessions"
+	}
+	return home + "/.pi/agent/sessions"
 }
 
 // defaultDataDir resolves $HOME/.local/share/opencode. Split out so tests

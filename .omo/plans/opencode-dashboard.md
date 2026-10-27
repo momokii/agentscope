@@ -174,3 +174,75 @@ Hard rules: bake `zellij` CLI (same major as host) into image; auto-detect UID a
 - U2 Lane A: `pending` (waiting-permission) state — heuristic until verified against a live prompt.
 - U3 Lane A: `session_message`/`session_input` queue semantics — empty at research time.
 - VM `UID/XDG_RUNTIME_DIR/HOME`, anything tailscale on VM, `zellij subscribe` streaming end-to-end (Lane B UNVERIFIED).
+
+## Wave 5 — Pi harness monitoring (multi-harness fleet)
+
+> Approved 2026-10-27. Research: live host inspection (pi 1.4.0) + pi docs
+> (`session-format.md`, `sessions.md`, `message-types.md`, `terminal-setup.md`,
+> `environment-variables.md`). Goal: the dashboard monitors **pi** sessions
+> alongside opencode, with visible harness differentiation, reusing every
+> frozen seam (collector tick, SSE, recency gate, read-only posture).
+
+**Research facts (verified live, not assumed):**
+- Sessions are JSONL at `~/.pi/agent/sessions/<slug-cwd>/<ts>_<uuid>.jsonl`
+  (override: `PI_CODING_AGENT_SESSION_DIR`); header has `id`/`cwd`; entries
+  form a tree (`message`, `model_change`, `session_info`, `compaction`,
+  `usage`, ...). Store scale observed: 6 files / 1.4 MB (cheap to parse).
+- Assistant messages carry `usage{totalTokens, cost.total}` + `stopReason`
+  (`stop|length|toolUse|error|aborted|deferred|pending`); `usage` entries add
+  non-conversation usage. Tokens/cost/model/status all derivable per file.
+- Procs: argv[0] basename exactly `pi`; `/proc/<pid>/cwd` readable on host,
+  denied in-container (same constraint as opencode — same fallback).
+- Panes: pi sets its own title (`π - <basename>` + spinner) but the join
+  does NOT parse titles: `list-panes -j` reports `pane_command: "pi"` and a
+  real `pane_cwd`, so pane→directory matching works unchanged.
+- `~/.pi/agent/auth.json` exists (0600) → same rule as opencode's: mount
+  only the `sessions/` subdir `:ro`, never the agent root.
+
+**Design (additive only, no frozen-shape breakage):**
+- `model.SessionRow.Harness` (`"opencode"` default-normalized, `"pi"` for pi;
+  serialized `harness`). Status derivation shared: pi stopReason maps onto
+  the existing five states (last-entry `user`/`toolUse`/streaming → running,
+  `stop`/`length` → waiting-input, `error` → error, `aborted` → idle), same
+  `ACTIVE_WINDOW` recency gate. Pi has no archived concept.
+- New `internal/pi` reader (`ports.PiReader`): directory scan + streaming
+  JSONL parse (mtime cache: skip unchanged files per tick); title from
+  `session_info`/`--name` else first user text else basename; model as
+  `provider/modelId`; fork children via `parentSession` path refs.
+- Runtime generalizes command matching (`ScanCommand` core; pane harness
+  from `pane_command` basename, `terminal_command` fallback — never title).
+  Claims key becomes (directory, harness): newest session per pair claims
+  presence. Global counts stay combined; only agent-command panes count.
+- Collector merges opencode+pi rows pre-Enrich; `ports.Config.PiDataDir`
+  (`PI_DATA_DIR`, default `$HOME/.pi/agent/sessions` — `PI_CODING_AGENT_SESSION_DIR`
+  is deliberately NOT honored: the dashboard reads one fixed root, logged at
+  startup). Missing dir → pi disabled gracefully, opencode unaffected.
+- UI: harness chip (π / OC glyph + label, never color-alone; new tokens in
+  `tokens.css` + `DESIGN.md` table) in fleet rows + detail header; harness
+  filter (all/opencode/pi) URL-serialized; TS `MIRROR` updated.
+- Screen: `DumpSessionScreen`/`ResolvePane` gain harness to disambiguate a
+  directory hosting both harnesses; hub resolves harness from snapshot row.
+- Deploy: compose `:ro` mount `~/.pi/agent/sessions:/data/pi-sessions`,
+  `PI_DATA_DIR` env; SECURITY.md §2/§3 rows; README config/API notes.
+
+**Out of scope (P6 follow-up TASK):** pi transcript drill-down (JSONL→export
+shape for Transcript/Turns/Timeline/Tools/Cost/Raw tabs), Compare/Timeline
+enablement. This wave: pi rows link to the Live pane tab; detail tabs show
+the honest empty state until P6.
+
+- [ ] P1. **model + pi source** — `Harness` type/field + `internal/pi` reader
+  with mtime cache, status mapping, fork children. **Verify:** `go test ./internal/pi/ ./internal/model/`
+- [ ] P2. **runtime generalization** — `ScanCommand`, pane `Harness()`,
+  (dir,harness) claims, harness-scoped resolve/dump. **Verify:** `go test ./internal/runtime/`
+- [ ] P3. **collector + config** — merge rows, `PiDataDir`, nil-safe disable.
+  **Verify:** `go test ./internal/collector/ ./internal/ports/`
+- [ ] P4. **frontend** — TS mirror, harness chip, filter + URL state, detail
+  header, pi rows → screen tab. **Verify:** `npm test --prefix web -- --run`,
+  `npm run lint --prefix web`, token gate
+- [ ] P5. **deploy + docs** — compose mount/env, SECURITY.md, README,
+  `.env.example`, full gates, `./deploy.sh` redeploy + live evidence.
+- [ ] P6. **(BACKLOG)** pi transcript drill-down via export-shaped route.
+
+**Risks:** R-pi1 title-format drift (mitigated: join never reads titles);
+R-pi2 JSONL schema drift (mitigated: unknown entry types ignored, defensive
+parse with per-file error isolation — one corrupt file never fails a tick).
