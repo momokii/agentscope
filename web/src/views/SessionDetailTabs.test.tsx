@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ComponentProps } from "react";
 
 afterEach(() => {
   cleanup();
@@ -18,13 +19,30 @@ import { buildTurns, flattenTurns, WINDOW_MAX_ROWS, zeroTokens } from "../lib/tr
 import { formatUSD } from "../lib/format";
 import {
   FIXTURE_MAIN_ID,
+  fixtureDetail,
   fixtureProvider,
 } from "../testutils/sessionDetail.fixture";
 
 function mainData() {
-  const data = fixtureProvider.getSessionDetail(FIXTURE_MAIN_ID);
+  const data = fixtureDetail(FIXTURE_MAIN_ID);
   if (data === null) throw new Error("fixture missing");
   return data;
+}
+
+function renderTab(
+  tab: ComponentProps<typeof SessionDetail>["tab"],
+  overrides: Partial<ComponentProps<typeof SessionDetail>> = {},
+) {
+  return render(
+    <SessionDetail
+      id={FIXTURE_MAIN_ID}
+      tab={tab}
+      row={null}
+      paletteOpen={false}
+      provider={fixtureProvider}
+      {...overrides}
+    />,
+  );
 }
 
 function extraProps(overrides: Partial<DetailExtraProps> = {}): DetailExtraProps {
@@ -120,10 +138,9 @@ describe("timeline tab", () => {
 });
 
 describe("tools tab + inspector (shell)", () => {
-  it("renders one row per tool run with top-5 blocks", () => {
-    const { container } = render(
-      <SessionDetail id={FIXTURE_MAIN_ID} tab="tools" row={null} paletteOpen={false} />,
-    );
+  it("renders one row per tool run with top-5 blocks", async () => {
+    const { container } = renderTab("tools");
+    await screen.findAllByTestId(/tool-row-/, { exact: false });
     expect(container.querySelectorAll(".tools-row[role='row']").length).toBeGreaterThanOrEqual(11);
     const latency = container.querySelector('[aria-label="top latency"]');
     expect(latency?.querySelector(".tools-sum-detail")?.textContent).toBe("12.0s");
@@ -131,11 +148,9 @@ describe("tools tab + inspector (shell)", () => {
     expect(errors?.textContent).toContain("bash");
   });
 
-  it("opens the right-rail inspector with the clicked run", () => {
-    const { container } = render(
-      <SessionDetail id={FIXTURE_MAIN_ID} tab="timeline" row={null} paletteOpen={false} />,
-    );
-    fireEvent.click(screen.getByTestId("tl-row-prt_fix_a4bash1"));
+  it("opens the right-rail inspector with the clicked run", async () => {
+    const { container } = renderTab("timeline");
+    fireEvent.click(await screen.findByTestId("tl-row-prt_fix_a4bash1"));
     const rail = screen.getByTestId("inspector-prt_fix_a4bash1");
     expect(rail).toBeDefined();
     expect(rail.textContent).toContain("npm test -- --run");
@@ -145,21 +160,17 @@ describe("tools tab + inspector (shell)", () => {
     expect(container.querySelector(".detail-split")).not.toBeNull();
   });
 
-  it("Esc closes the inspector and only the inspector", () => {
-    render(
-      <SessionDetail id={FIXTURE_MAIN_ID} tab="tools" row={null} paletteOpen={false} />,
-    );
-    fireEvent.click(screen.getByTestId("tool-row-prt_fix_a4bash1"));
+  it("Esc closes the inspector and only the inspector", async () => {
+    renderTab("tools");
+    fireEvent.click(await screen.findByTestId("tool-row-prt_fix_a4bash1"));
     expect(screen.queryByTestId("inspector-prt_fix_a4bash1")).not.toBeNull();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByTestId("inspector-prt_fix_a4bash1")).toBeNull();
   });
 
-  it("shows an error block for failed runs", () => {
-    render(
-      <SessionDetail id={FIXTURE_MAIN_ID} tab="tools" row={null} paletteOpen={false} />,
-    );
-    fireEvent.click(screen.getByTestId("tool-row-prt_fix_a2edit"));
+  it("shows an error block for failed runs", async () => {
+    renderTab("tools");
+    fireEvent.click(await screen.findByTestId("tool-row-prt_fix_a2edit"));
     expect(screen.getByTestId("inspector-prt_fix_a2edit").textContent).toContain(
       "oldString not found in content",
     );
@@ -167,10 +178,9 @@ describe("tools tab + inspector (shell)", () => {
 });
 
 describe("cost tab", () => {
-  it("pins cumulative math to the fixture info blocks", () => {
-    const { container } = render(
-      <SessionDetail id={FIXTURE_MAIN_ID} tab="cost" row={null} paletteOpen={false} />,
-    );
+  it("pins cumulative math to the fixture info blocks", async () => {
+    const { container } = renderTab("cost");
+    await screen.findByTestId("cost-total");
     const expected = formatUSD(0.0214 + 0.0021 + 0.0011);
     expect(container.querySelector("[data-testid='cost-total']")?.textContent).toBe(expected);
     expect(container.querySelector("[data-testid='rollup-total-cost']")?.textContent).toBe(expected);
@@ -178,10 +188,9 @@ describe("cost tab", () => {
     expect(CONTEXT_TOKENS).toBe(200_000);
   });
 
-  it("donut shares sum to 100% across two models", () => {
-    const { container } = render(
-      <SessionDetail id={FIXTURE_MAIN_ID} tab="cost" row={null} paletteOpen={false} />,
-    );
+  it("donut shares sum to 100% across two models", async () => {
+    const { container } = renderTab("cost");
+    await screen.findByTestId("cost-total");
     const slices = container.querySelectorAll("[data-testid^='donut-pct-']");
     expect(slices.length).toBe(2);
     let sum = 0;
@@ -192,10 +201,9 @@ describe("cost tab", () => {
     expect(container.textContent).toContain("toy-provider/toy-model-mini");
   });
 
-  it("rolls up one row per session with info-block totals", () => {
-    const { container } = render(
-      <SessionDetail id={FIXTURE_MAIN_ID} tab="cost" row={null} paletteOpen={false} />,
-    );
+  it("rolls up one row per session with info-block totals", async () => {
+    const { container } = renderTab("cost");
+    await screen.findByTestId("cost-total");
     expect(container.querySelector("[data-testid='rollup-ses_fixture_main01']")).not.toBeNull();
     expect(container.querySelector("[data-testid='rollup-ses_fixture_sub01']")).not.toBeNull();
     expect(container.querySelector("[data-testid='rollup-ses_fixture_sub02']")).not.toBeNull();
@@ -204,11 +212,9 @@ describe("cost tab", () => {
 });
 
 describe("raw tab", () => {
-  it("collapses sections and exposes deep-link anchors plus copy", () => {
-    const { container } = render(
-      <SessionDetail id={FIXTURE_MAIN_ID} tab="raw" row={null} paletteOpen={false} />,
-    );
-    expect(screen.getByTestId("raw-pre-msg_fix_a1")).toBeDefined();
+  it("collapses sections and exposes deep-link anchors plus copy", async () => {
+    const { container } = renderTab("raw");
+    await screen.findByTestId("raw-pre-msg_fix_a1");
     fireEvent.click(screen.getByTestId("raw-toggle-msg_fix_a1"));
     expect(screen.queryByTestId("raw-pre-msg_fix_a1")).toBeNull();
     fireEvent.click(screen.getByTestId("raw-toggle-msg_fix_a1"));
@@ -221,17 +227,9 @@ describe("raw tab", () => {
     expect(container.textContent).toContain("msg_fix_da1");
   });
 
-  it("highlights the ?m= message target", () => {
-    render(
-      <SessionDetail
-        id={FIXTURE_MAIN_ID}
-        tab="raw"
-        row={null}
-        paletteOpen={false}
-        messageId="msg_fix_a2"
-      />,
-    );
-    expect(screen.getByTestId("raw-msg-msg_fix_a2").className).toContain("raw-target");
+  it("highlights the ?m= message target", async () => {
+    renderTab("raw", { messageId: "msg_fix_a2" });
+    expect((await screen.findByTestId("raw-msg-msg_fix_a2")).className).toContain("raw-target");
   });
 });
 
@@ -243,31 +241,40 @@ describe("data coverage (all tabs read the same fixture)", () => {
     cost: "toy-model-mini",
     raw: "msg_fix_ca1",
   };
-  it.each(tabs)("tab %s renders ≥1 element from the shared fixture", (tab) => {
-    const { container } = render(
-      <SessionDetail id={FIXTURE_MAIN_ID} tab={tab} row={null} paletteOpen={false} />,
-    );
+  it.each(tabs)("tab %s renders ≥1 element from the shared fixture", async (tab) => {
+    const { container } = renderTab(tab);
     if (tab === "tools") {
-      expect(container.querySelector(`[data-testid='tool-row-${probes[tab]}']`)).not.toBeNull();
+      expect(await screen.findByTestId(`tool-row-${probes[tab]}`)).not.toBeNull();
     } else {
-      expect(container.textContent).toContain(probes[tab]);
+      await waitFor(() => expect(container.textContent).toContain(probes[tab]));
     }
   });
 });
 
 describe("tab switching preserves transcript scroll state", () => {
-  it("keeps the transcript node (and scrollTop) across tab switches", () => {
-    const view = render(
-      <SessionDetail id={FIXTURE_MAIN_ID} tab="transcript" row={null} paletteOpen={false} />,
-    );
+  it("keeps the transcript node (and scrollTop) across tab switches", async () => {
+    const view = renderTab("transcript");
+    await screen.findByText("Add dashboard drill-down");
     const scroller = view.container.querySelector(".transcript") as HTMLElement;
     expect(scroller).not.toBeNull();
     scroller.scrollTop = 222;
     view.rerender(
-      <SessionDetail id={FIXTURE_MAIN_ID} tab="tools" row={null} paletteOpen={false} />,
+      <SessionDetail
+        id={FIXTURE_MAIN_ID}
+        tab="tools"
+        row={null}
+        paletteOpen={false}
+        provider={fixtureProvider}
+      />,
     );
     view.rerender(
-      <SessionDetail id={FIXTURE_MAIN_ID} tab="transcript" row={null} paletteOpen={false} />,
+      <SessionDetail
+        id={FIXTURE_MAIN_ID}
+        tab="transcript"
+        row={null}
+        paletteOpen={false}
+        provider={fixtureProvider}
+      />,
     );
     const again = view.container.querySelector(".transcript") as HTMLElement;
     expect(again).toBe(scroller);

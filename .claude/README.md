@@ -1,14 +1,42 @@
 # `.claude/` Agent Infrastructure — Orientation
 
-> General-first by design. Starts stack-agnostic, then evolves into
-> project-specific content as the stack, patterns, and decisions become known.
+> Project-specific since 2026-10-27. Real product code, real commands, real state.
+> On-demand reference; the always-loaded files are the 4 imports in `CLAUDE.md`.
 
 ## What This Repository Is
 
-Blank repository bootstrapped for iterative AI-assisted development.
-No product code yet. This folder provides the agent operating system:
-behavioral rules, standards, environment discipline, resume protocol,
-checklists, and living state. Updated after the first working session.
+**opencode mission control** — an internal-only, read-only realtime dashboard for opencode
+agent sessions running inside zellij on one VM. Go 1.27.3 single binary (SSE + embedded
+React SPA) deployed as one Docker container behind `tailscale serve`.
+
+- Product overview / config / API: `README.md`
+- Live state: `state/CURRENT_STATUS.md`
+- Work board: `state/TASK_QUEUE.md`
+- Plan: `.omo/plans/opencode-dashboard.md`
+- Known gap: the SPA `SessionDetail` still reads a fixture provider even though the
+  backend detail API is live (see `TASK_QUEUE.md` TASK-102).
+
+## Repository at a Glance
+
+| Path | Contents |
+|---|---|
+| `cmd/dashboard/` | Entrypoint, startup self-checks, auth gate, `-healthcheck` probe, SPA fallback |
+| `internal/ports/` | Frozen seams (`DBReader`, `RuntimeSource`, `SnapshotSink`) + env `Config` |
+| `internal/model/` | `SessionRow`, `Snapshot`, `KPIs`, `ProjectSummary`, pure `DeriveStatus` |
+| `internal/db/` | Read-only WAL reader, indexed query allowlist, detail, message metrics |
+| `internal/runtime/` | zellij CLI + `/proc` join, orphan/zombie handling, on-demand screen |
+| `internal/collector/` | Poll loop, incremental event tail, message metrics, project roll-up |
+| `internal/hub/` | SSE fan-out, REST handlers, detail/screen routes |
+| `internal/auth/` | Basic gate + `ocd_session` cookie bridge, fail-closed parsing |
+| `web/src/views/` | `Projects` (landing), `Fleet`, `SessionDetail`, `Compare`, `GlobalTimeline` |
+| `web/src/components/` | KPI strip, ticker, CmdBar, status/recency filters, pagination, subagents |
+| `web/src/lib/` | SSE client, sorting/filtering, projects, routing, pins, formatting |
+| `web/src/tokens.css` | The only file allowed to contain 6-digit hex (design gate) |
+| `web/dist/` | Committed Vite build embedded by `go:embed` (fallback for no-Node hosts) |
+| `deploy.sh` | Prereqs → dist rebuild-if-stale → compose up → health wait → curl proofs |
+| `docker-compose.yml` / `Dockerfile` | Host-networked single container; distroless + zellij |
+| `docs/` | `SECURITY.md`, `VM_DEPLOY.md`, `DOCKER_VERIFY.md`, `ACTIONS_DEFERRED.md` |
+| `.omo/` | Work plan, research briefs, issue chronology |
 
 ## How Context Loads
 
@@ -65,8 +93,8 @@ No `defaultMode` is set — Claude Code's built-in default applies.
 - Plain `docker compose up *` only matches default (development) invocations.
   Explicit `-f ... prod ...` invocations do not match allow and therefore prompt.
 - Stack-specific commands (test runner, linter, package manager) are **not**
-  pre-allowed. Propose an allow-list after stack choice; add with confirmation.
-  Never add blanket `Bash(*)`.
+  pre-allowed; they prompt. Do not add a blanket `Bash(*)`. Propose additions
+  to `settings.json` with user confirmation.
 - `.pre-commit-config.yaml`, `.husky/`, `.devcontainer/`, `.mcp.json` are also
   protected paths — edits prompt. Expected.
 - Never create or modify `.claude/settings.local.json` (personal overrides).
@@ -94,13 +122,12 @@ report to the user.
 
 ## Self-Update Directive
 
-Every file starts general by design. As facts become known:
+Facts change; stale docs are bugs. When reality moves:
 
-1. Replace general content with project-specific content (stack, commands,
-   patterns, Compose files, tooling).
-2. Priority files: `CODING_STANDARDS.md`, `SECURITY_STANDARDS.md`,
-   `ENVIRONMENT_GUIDE.md`, `CLAUDE.md` Commands + Snapshot, `HOW_TO_RESUME.md`.
-3. Propose a stack-specific `settings.json` allow-list; add with confirmation.
+1. Replace stale content with what the code/config actually does (cite paths/commands).
+2. Priority files: `state/*`, `README.md`, `CLAUDE.md` Snapshot + Commands,
+   `docs/*`, `web/README.md`.
+3. Propose stack-specific `settings.json` allow-list additions; add with confirmation.
 4. Guardrail: extend/sharpen rules, never weaken `AGENT_RULES.md`,
    `SECURITY_STANDARDS.md`, or loosen `settings.json` without explicit approval.
 5. Keep every file concise; fix stale content immediately.

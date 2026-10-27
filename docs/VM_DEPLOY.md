@@ -29,6 +29,7 @@ degradation is banned by design).
 | P3 | `zellij --version` | `zellij 0.44.3` — **major MUST be `0`**, matching the baked CLI (`Dockerfile`: `ZELLIJ_VERSION=0.44.3`, "MAJOR 0 … the baked CLI major MUST match the host's"). Socket contract dir is version-sensitive: `$XDG_RUNTIME_DIR/zellij/contract_version_1` | No dedicated major-skew FATAL (major is logged at boot: `slog.Info("zellij detected", …)`); skew surfaces as a **blind dashboard** — the container CLI cannot speak the host's socket contract, `list-sessions`/`list-panes` fail, zero panes shown. If majors differ, rebuild the image with a matching `ZELLIJ_VERSION` (same major) — do not proceed. |
 | P4 | `docker --version` and `docker compose version` | `Docker Engine 2x.x` / `Compose v2.x` (any recent; W4-1 proven on `docker 29.3.1`) | No FATAL — compose itself refuses (`docker compose config` non-zero). Fix Docker before continuing. |
 | P5 | `tailscale status` | Your tailnet peers listed, `Self` marked active; VM reachable from your laptop (`tailscale ping <vm>`) | No container FATAL — failure surfaces at step D8 (serve URL unreachable). Fix tailnet login/ACLs before exposing. Optional ACL pointer: `docs/SECURITY.md` §4 (restrict servicers to `tag:owner`/`tag:admin`). |
+| P6 | `date` and `cat /etc/timezone` (or `timedatectl show -p Timezone --value`) | Your host zone, e.g. `WIB` / `Asia/Jakarta` | No FATAL — a zone-less container runs UTC, so `cost_today` (“since local midnight”) starts hours early. `deploy.sh` detects and forwards `TZ`; compose also mounts `/etc/localtime:ro`. Verify inside with `docker exec <ctr> date` and `printenv TZ`. |
 
 Also record once (TO-RUN-on-VM): `go version` (want `go1.27.x` — matches
 `Dockerfile` `golang:1.27.3-bookworm` and `go.mod`) and `ls
@@ -44,8 +45,10 @@ loopback, no mapping); healthcheck
 retries: 3, start_period: 15s`; mounts
 `${HOME:-/home/hostuser}/.local/share/opencode:/data/opencode:ro`,
 `${HOME:-/home/hostuser}/.cache/zellij:/data/zellij-cache:ro`,
+`/etc/localtime:/etc/localtime:ro`, and
 `/run/user/${UID:-1000}/zellij:/run/user/${UID:-1000}/zellij` (`:rw` — the CLI mints a per-call client socket);
-env `DATA_DIR: /data/opencode`, `POLL_INTERVAL: ${POLL_INTERVAL:-10s}`.
+env `DATA_DIR: /data/opencode`, `POLL_INTERVAL: ${POLL_INTERVAL:-10s}`,
+`DB_TIMEOUT`/`ACTIVE_WINDOW` (optional overrides; defaults 10s / 2m), `TZ` forwarded.
 Full proof log: `docs/DOCKER_VERIFY.md`.
 
 ## 1. Deploy (all TO-RUN-on-VM)
@@ -57,13 +60,19 @@ Full proof log: `docs/DOCKER_VERIFY.md`.
   export UID                # re-exports bash's readonly $UID (equals `id -u`); do NOT assign it
   export GID="$(id -g)"     # GID is not special — set it explicitly (P2)
   export HOME="$HOME"       # expands the ${HOME:-/home/hostuser} volume sources to YOUR home
-   export PORT=18081         # THE listen port (host mode: the binary binds host
-                             # 127.0.0.1:$PORT directly — no container/host split).
-                             # 8080 was squatted on the laptop dev host;
-                             # the same may apply here — any free 18xxx works.
-   docker compose config     # VERIFIED-here shape; TO-RUN: must exit 0 and show network_mode: host,
-                             # pid: host, NO ports: stanza, PORT: "18081", the two :ro mounts + :rw socket dir,
-                             # the -healthcheck test
+  export TZ="${TZ:-$(cat /etc/timezone 2>/dev/null || true)}"
+                            # YOUR zone (P6); deploy.sh auto-detects this, but a manual
+                            # `docker compose up` needs it or cost_today uses UTC midnight.
+                            # /etc/localtime:ro is also mounted as a fallback.
+  # Optional collector knobs (defaults shown): DB_TIMEOUT=10s ACTIVE_WINDOW=2m
+  export PORT=18081         # THE listen port (host mode: the binary binds host
+                            # 127.0.0.1:$PORT directly — no container/host split).
+                            # 8080 was squatted on the laptop dev host;
+                            # the same may apply here — any free 18xxx works.
+  docker compose config     # VERIFIED-here shape; TO-RUN: must exit 0 and show network_mode: host,
+                            # pid: host, NO ports: stanza, PORT: "18081",
+                            # the :ro mounts (data/cache/localtime) + :rw socket dir,
+                            # the -healthcheck test
   ```
 - [ ] **D2. Bring it up and wait out the warm-up.**
   ```bash
@@ -77,29 +86,42 @@ Full proof log: `docs/DOCKER_VERIFY.md`.
 - [ ] **D4. Health shape.**
   ```bash
   curl -s 127.0.0.1:$PORT/api/healthz
-  # want paste-shape: {"healthy":true,"version":"0.1.0","db_path":"/data/opencode/opencode.db","last_poll_ms":<n>,"stale":false}
+  # want paste-shape: {"healthy":true,"version":"0.1.0","db_path":"/data/opencode","last_poll_ms":<n>,"stale":false}
   ```
-  (`stale:true` on the first tick only is acceptable — re-curl after one
+  (`stale:true` during the first tick / a slow tick is acceptable — re-curl after one
+  `POLL_INTERVAL`; periodic staleness means a source error or a tick over 2×
   `POLL_INTERVAL`.) Field list frozen: `{healthy, version, db_path,
   last_poll_ms, stale}` (`internal/hub/handlers.go`).
 - [ ] **D5. Fleet shape.**
   ```bash
   curl -s 127.0.0.1:$PORT/api/fleet | head -c 300; echo
-  # want paste-shape: {"seq":<n>,"sessions":[...],"kpis":{...}}
+  # want paste-shape: {"seq":<n>,"sessions":[...],"projects":[...],"kpis":{...}}
   # empty sessions array is FINE on a host with no opencode sessions yet
   ```
+  KPI meanings to check while you are here: `tokens_per_hour` = message tokens in the
+  last 60s × 60 (background refresh; `metrics_age_ms` = its age, `-1` before the first
+  refresh); `cost_today` = message spend since local midnight (needs `TZ`/localtime);
+  `cost_total` = lifetime; `live_processes` = exact alive opencode `/proc` count;
+  `live_panes` = non-exited zellij panes. `projects[]` groups by directory and carries
+  `live_procs`/`live_panes` (presence, not necessarily exact in-container).
 - [ ] **D6. Loopback-only proof (paste both lines).**
    ```bash
    ss -tlnp | grep $PORT
    # want:  tcp  LISTEN  0  4096  127.0.0.1:18081  0.0.0.0:*  users:(("dashboard",...))
    # (host mode: the dashboard binary itself holds host loopback — NO docker-proxy line)
    # and NO line with 0.0.0.0:18081 — compose has no ports: stanza (SECURITY.md §4)
+   # (a 0.0.0.0 line is valid ONLY with an explicit BIND_ADDR opt-in + valid auth)
    ```
 - [ ] **D7 (optional). Gate with Basic auth.** `docs/SECURITY.md` §3 owns
   this: `export DASHBOARD_AUTH='user:pass'` (split on the FIRST colon)
   before `up` (or add to compose `environment:` + `up` again). Empty/unset
   = explicit open tailnet-trust mode. Malformed (no colon, empty user/pass)
-  = fail-closed refuse-to-serve. TO-RUN only if you want the gate.
+  = fail-closed refuse-to-serve. On a successful Basic check the server also
+  mints an HttpOnly `ocd_session` cookie (12h, bounded store, `SameSite=Lax`,
+  `Secure` only over TLS) so the browser's `EventSource` can authorize
+  `/api/events` — verify `curl -i -u "$DASHBOARD_AUTH" .../api/healthz` shows
+  `Set-Cookie: ocd_session=…` and an anonymous `/api/events` returns 401.
+  TO-RUN only if you want the gate.
 - [ ] **D7b (optional). Bind directly on the tailnet IP (no `serve`
   hop).** `BIND_ADDR=0.0.0.0 DASHBOARD_AUTH=user:pass docker compose up
   -d`, then open `http://<tailnet-ip>:$PORT` (healthz first). Non-loopback
@@ -148,10 +170,18 @@ orphan); older sessions in the same directory stay DB-only and are NOT
 marked orphan (orphan still means exactly one thing: an opencode process
 running outside zellij).
 
+Presence caveat for THIS container: `/proc/<pid>/cwd` is denied by
+ptrace/Yama under `pid: host` + non-root, so `projects[].live_procs` falls
+back to non-exited zellij panes whose command is opencode — a presence
+signal that can briefly include a just-exited pane. `kpis.live_processes` is
+still the exact `/proc` count; `kpis.live_panes` is the pane count. Do not
+treat per-project `live_procs` as an exact process census.
+
 - [ ] **T1–T3. Three live zellij panes.** Setup: `zellij --session
   f2check` (new session), open 3 panes (`Ctrl-O n` ×2), run `opencode` in
-  each on different projects (or the same project twice + one `sleep` pane
-  to vary COMMAND). Verify host-side: `zellij --session f2check action
+  each on **three different project directories** (same-directory duplicates
+  are DB-only by the newest-per-directory rule — only the newest claims the
+  pane). Verify host-side: `zellij --session f2check action
   list-panes --command` shows 3 rows; `ls
   $XDG_RUNTIME_DIR/zellij/contract_version_1/` contains `f2check`. Want:
   dashboard fleet lists all 3 panes live (running/idle per DB signals),
@@ -192,7 +222,9 @@ running outside zellij).
 | Symptom | Check IN THIS ORDER (commands copy-paste) | Cause → fix |
 |---|---|---|
 | Blind dashboard (fleet empty / zero panes despite live sessions) | 1. `id -u` vs `docker exec <ctr> id -u` (must match; sockets 0700) 2. `echo $XDG_RUNTIME_DIR` vs `docker exec <ctr> printenv XDG_RUNTIME_DIR` (path parity; socket source must equal) 3. host `zellij --version` major vs image `docker exec <ctr> zellij --version` major (both `0`; socket dir `contract_version_1` is version-sensitive) 4. `ls $XDG_RUNTIME_DIR/zellij/contract_version_1/` (live names = liveness signal #1) | UID/XDG/major skew or wrong socket-dir mount. Any mismatch → `docker compose down`, fix env, `up -d --build` again. If majors differ, rebuild with matching `ZELLIJ_VERSION`. Startup FATALs for the loud cases: `DATA_DIR … unreadable … UID parity …`, `opencode.db missing at … mount the parent opencode/ dir …`, `zellij binary not found in PATH … blind to panes`, `XDG_RUNTIME_DIR is empty …` (§0 table) |
-| Stale frames (`stale:true` persists, old data) | `docker inspect <ctr> --format '{{json .Mounts}}'` (want ONLY the §0 allowlist mounts — data/cache `:ro`, socket dir `:rw`; every other mount absent); confirm the opencode mount is the **parent dir** (`…/opencode:/data/opencode:ro`), NOT the bare `opencode.db` file (else `-wal`/`-shm` sidecars are hidden → blind-but-healthy staleness, compose header WAL decision) | WAL sidecars invisible, or DB-budget pressure: the dev host DB hit **8.2 GB** (1953 sessions) where full `part.data LIKE` scans exceed 60 s — queries must stay indexed/sliced per `internal/db` allowlist (plan data strategy rule 5). Never fix by widening mounts. |
+| Stale frames (`stale:true` persists, old data) | `docker inspect <ctr> --format '{{json .Mounts}}'` (want ONLY the §0 allowlist mounts — data/cache/localtime `:ro`, socket dir `:rw`; every other mount absent); confirm the opencode mount is the **parent dir** (`…/opencode:/data/opencode:ro`), NOT the bare `opencode.db` file (else `-wal`/`-shm` sidecars are hidden → blind-but-healthy staleness, compose header WAL decision); check `docker compose logs dashboard \| grep 'context deadline'` | WAL sidecars invisible, or DB budget pressure on the ~8.2 GB live DB. Queries stay indexed/sliced per the `internal/db` allowlist; the event tail is incremental after a seed. `DB_TIMEOUT` (default 10s) bounds each source call; a tick slower than 2× `POLL_INTERVAL` is published stale, not blanked. Never fix by widening mounts |
+| `cost_today` disagrees with SQL “since local midnight” | Container zone is UTC | `deploy.sh` forwards `TZ` and compose mounts `/etc/localtime:ro`; run `docker exec <ctr> date` / `printenv TZ` and compare with the host. `cost_today` is message-level; `cost_total` is lifetime |
+| Project `live_procs`/`live_panes` look approximate | Expected in-container | `/proc/<pid>/cwd` is denied by ptrace/Yama; per-directory `live_procs` falls back to opencode zellij-pane presence (may briefly include a just-exited pane). `kpis.live_processes` is the exact `/proc` count |
 | Port taken (`address already in use`) | `ss -tlnp \| grep <PORT>` (find the squatter) | No variance split in host mode: the listen port IS `$PORT` — pick another free 18xxx (`PORT=18082 docker compose up -d --build`). (The laptop's own 8080 was squatted; same may apply on the VM.) |
 | Screen 503 (`GET /api/sessions/:id/screen` → 503) | Expected pre-drill-down or wiring fault | 503 = `SetScreenSource` never wired (nil backend serves 503 `screen-unavailable`, `internal/hub/screen.go`); in this binary `main.go` wires `srv.SetScreenSource(source)` — a 503 here means the build predates wiring or the route hit an unwired test server. Orphan panes instead return **409** DB-only (not 503) — see T4. |
 

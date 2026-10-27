@@ -1,14 +1,16 @@
-# web/ — opencode mission control SPA (Wave 2)
+# web/ — opencode mission control SPA
 
-React + Vite + TypeScript SPA, embedded in the Go single binary in a later
-wave. Styling is hand-rolled CSS against the token contract in
-`web/DESIGN.md`: `src/tokens.css` is the ONLY file that may contain
+React 19 + Vite 6 + TypeScript 5.6.3 SPA, built to `dist/` and embedded in the Go
+single binary via `web/embed.go`. Styling is hand-rolled CSS against the token
+contract in `web/DESIGN.md`: `src/tokens.css` is the ONLY file that may contain
 6-digit hex literals (wave gate:
 `grep -rE '#[0-9a-f]{6}' web/src` hits `src/tokens.css` only).
 
 ## Scripts
 
-- `npm run dev` — Vite dev server (proxies `/api/*` to the Go backend; see `vite.config.ts`)
+- `npm run dev` — Vite dev server. **No `/api` proxy is configured** in
+  `vite.config.ts`; for live data use the built SPA served by the Go binary
+  (`./deploy.sh` or `go run ./cmd/dashboard`), or add a proxy yourself.
 - `npm run build` — strict typecheck (`tsc --noEmit`) + `vite build` → `dist/`
 - `npm run preview -- --port 18082` — serve the production build
 - `npm test -- --run` — vitest (jsdom for `.tsx`, node-compatible `sse` tests)
@@ -19,29 +21,41 @@ wave. Styling is hand-rolled CSS against the token contract in
 ```
 src/
   main.tsx            entry (#root + tokens/app css)
-  App.tsx             shell: SSE lifecycle, hash routing, activity ring, global keys, CmdBar + BottomBar wiring
+  App.tsx             shell: SSE lifecycle, hash routing, activity ring, global keys, CmdBar + BottomBar
   tokens.css          DESIGN section 2 verbatim — the single hex-bearing file
   app.css             all component styles, var() only
-  views/Fleet.tsx     fleet table (search + expansion + pins + selection state; pure children)
-  views/SessionStub.tsx  `#/sessions/:id` summary stub over Snapshot data (Wave 3 owns drill-down)
+  views/Projects.tsx  default landing: directory cards ranked by live presence, drill-in
+  views/Fleet.tsx     fleet table (status chips, recency buckets, date filter, pagination, pins)
+  views/SessionDetail.tsx  6 tabs (Transcript/Turns/Timeline/Tools/Cost/Raw) — FIXTURE-BACKED today
+  views/Compare.tsx   2–4 session comparison
+  views/GlobalTimeline.tsx  all-session swimlanes
+  views/SessionStub.tsx     legacy summary view (no longer routed; kept for its test)
   components/
-    KpiStrip.tsx      six stat cards (DESIGN section 4 anatomy)
-    StatusBadge.tsx   glyph+wash+label badge (Wave 3 reuses this)
-    Sparkline.tsx     72×24 inline polyline (Wave 3 reuses this)
-    RelativeTime.tsx  "Xs ago" cell + absolute tooltip (Wave 3 reuses this)
-    BottomBar.tsx     event ticker mount + persistent footer keymap
-    EventTicker.tsx   activity ring list (newest-first, cap 30 + show more, paused freeze)
-    CmdBar.tsx        `:`/Cmd+K fuzzy jump bar (id/title/cwd/model, up/down/enter/esc)
+    KpiStrip.tsx      KPI cards (active/waiting/tokens/costs/errors/live procs+panes/metrics age/SSE)
+    StatusFilterBar.tsx, RecencyFilterBar.tsx, Pagination.tsx
+    StatusBadge.tsx, Sparkline.tsx, RelativeTime.tsx, StatusDistribution.tsx
+    SubagentPanel.tsx, ProjectHeader.tsx
+    BottomBar.tsx, EventTicker.tsx, CmdBar.tsx
   lib/
-    sse.ts            READ-ONLY transport (W2-3, tested — do not modify)
-    fleetSort.ts      sort / Today-Yesterday-Older grouping / search filter
+    sse.ts            transport (reconnect/backoff/resume) — no rendering
+    fleetSort.ts      sort / status+recency filters / date presets / PAGE_SIZE=50
+    projects.ts       project naming, sorting, filtering, header resolution
+    routing.ts        hash routes (`#/`, `#/projects/:dir`, `#/sessions/:id[/:tab]`, compare, timeline)
+    activity.ts       pure diffSnapshots + ring buffer (no tool polling)
+    pins.ts           pin persistence (`opencode-dashboard:pins:v1`)
     format.ts         USD / compact / relative-time formatting
-    activity.ts       PURE diffSnapshots(prev, next) + ring buffer (cap 100); NO tool polling
-    pins.ts           pin persistence (`opencode-dashboard:pins:v1`, corrupt → empty) + usePins
-    routing.ts        hash routing (`#/` + `#/sessions/:id`, ~30 lines, no router lib)
+    transcript.ts     fixture-shaped transcript flattening, turns, costs
+    compare.ts        comparison helpers
     useCommandPalette.ts  `:`/Cmd+K open-state + isTypingTarget guard
-  testutils/fixture.ts  Snapshot fixture mirroring Go `model` json tags exactly
+  testutils/
+    fixture.ts        Snapshot fixture mirroring Go `model` json tags
+    sessionDetail.fixture.ts  current SessionDataProvider (fixture — NOT live data)
 ```
+
+> **Data-seam note:** `SessionDetail.tsx` reads through `SessionDataProvider` and
+> currently uses `fixtureProvider`. The backend `GET /api/sessions/:id` is live; a
+> fetch-backed provider swap is TASK-102. Do not treat drill-down content as real
+> session data in this build.
 
 ## Keyboard map (global handler ignores inputs/textareas/selects/contentEditable)
 
@@ -51,14 +65,15 @@ src/
 | `1`–`9` | jump to pinned slot (pin order) + highlight the row |
 | `p` | pin/unpin the selected session |
 | `l` | toggle LIVE (pause/resume snapshot stream) |
-| `esc` | close jump bar → back from `#/sessions/:id` to `#/` |
+| `esc` | close jump bar → back from a session/compare/timeline to the Projects/Fleet root |
 
-## Extension points (downstream waves)
+## Extension points
 
-- Wave 3 builds Transcript/Timeline/Tools/Cost/Raw detail views reusing
-  `StatusBadge` / `Sparkline` / `RelativeTime` + `routing.ts` hash builders.
-  The ticker stays session-level by design: per-session tool-call rows
-  (`/api/sessions/:id/tools` polling) are banned from the ticker — any
-  request for per-tool rows points at Wave 3.
-- Prop drilling stays ≤2 levels: `App` owns Snapshot/status/live/route/pins
-  state; `Fleet` owns view state; everything below is pure props.
+- **Live drill-down:** replace `fixtureProvider` with a fetch-backed
+  `SessionDataProvider` (TASK-102). The backend route and response shape already exist.
+- **Mobile layout:** no phone-specific breakpoint is shipped; add one without
+  introducing new colors (tokens only).
+- **Ticker boundary:** the ticker stays session-level by design. Per-session tool-call
+  polling is banned from the ticker; use the on-demand `/tools` endpoint from a detail view.
+- **Prop drilling stays ≤2 levels:** `App` owns snapshot/status/live/route/pins state;
+  `Fleet` owns table state; everything below is pure props.

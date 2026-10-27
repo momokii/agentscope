@@ -68,6 +68,9 @@ type Server struct {
 	// until SetDetailSource wires it; the detail and tools routes serve
 	// 503 while nil.
 	detail DetailSource
+	// export is the on-demand export-shaped backend (see export.go). Nil
+	// until SetExportSource wires it; the export route serves 503 while nil.
+	export ExportSource
 }
 
 // NewServer builds a Server reporting Version.
@@ -84,6 +87,7 @@ func NewServerWithVersion(cfg ports.Config, h *Hub, version string) *Server {
 	mux.HandleFunc("GET /api/fleet", s.handleFleet)
 	mux.HandleFunc("GET /api/sessions/{id}/tools", s.handleSessionTools)
 	mux.HandleFunc("GET /api/sessions/{id}/screen", s.handleSessionScreen)
+	mux.HandleFunc("GET /api/sessions/{id}/export", s.handleSessionExport)
 	mux.HandleFunc("GET /api/sessions/{id}", s.handleSessionDetail)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("GET /api/debug/hub", s.handleDebug)

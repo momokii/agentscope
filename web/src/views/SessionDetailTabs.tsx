@@ -1,10 +1,10 @@
 /**
  * SessionDetail W3-2 tabs: Timeline / Tools / Cost / Raw + shared inspector.
  *
- * Data honesty: every figure derives from the fixture `info`/`messages`
- * blocks via transcript.ts helpers (messageTokens/messageCost) — no
- * invented math. Each non-trivial formula carries a `// =` comment citing
- * the fixture fields it sums. Charts are hand-rolled SVG/HTML (W3-3
+ * Data honesty: every figure derives from the session `info`/`messages`
+ * blocks (live export or an injected fixture) via transcript.ts helpers
+ * (messageTokens/messageCost) — no invented math. Each non-trivial formula
+ * carries a `// =` comment citing the fields it sums. Charts are hand-rolled SVG/HTML (W3-3
  * precedent — no chart dep): zero animation, axes/ticks in mono 11px
  * `--ink-400`, max 5 hues from DESIGN tokens (documented maps below).
  * Every chart point carries its session/run id (data attrs + <title>).
@@ -36,7 +36,7 @@ import type {
 } from "../lib/transcript";
 import { isTypingTarget } from "../lib/useCommandPalette";
 import { formatCompact, formatUSD } from "../lib/format";
-import type { SessionDetailData } from "../testutils/sessionDetail.fixture";
+import type { SessionDetailData } from "../lib/sessionProvider";
 
 /* ---------------- shared: tool runs ---------------- */
 
@@ -655,7 +655,7 @@ export function ToolsTab({ runs, selectedRun, onSelectRun }: DetailExtraProps): 
 
 /* ---------------- Cost tab ---------------- */
 
-/** Toy context window: opencode export carries no context-limit field; the used value derives from fixture info.tokens. */
+/** Fixed context window: the export shape carries no context-limit field; the used value derives from info.tokens. */
 export const CONTEXT_TOKENS = 200_000;
 
 /** Donut slice order per DESIGN §8 (stays within the 5-hue budget). */

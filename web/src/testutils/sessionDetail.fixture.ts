@@ -25,22 +25,18 @@
  */
 
 import type { ExportSession } from "../lib/transcript";
+import type {
+  SessionDataProvider,
+  SessionDetailData,
+} from "../lib/sessionProvider";
 
-export interface SessionDetailData {
-  detail: ExportSession;
-  children: ExportSession[];
-}
+export type { SessionDataProvider, SessionDetailData } from "../lib/sessionProvider";
 
 /**
- * Data seam (binding): SessionDetail reads through THIS interface only.
- * Today it is the fixture map below; the `/api/sessions/:id` wiring lands
- * later by swapping `fixtureProvider` for a fetch-backed implementation
- * returning the same shape — no view code changes. Unknown id → null
- * (the view renders the empty state, never fabricated detail).
+ * Test-only provider: the view's default is `liveProvider` from
+ * `lib/sessionProvider.ts`; tests pass this fixture explicitly. Unknown id
+ * → null (the view renders the empty state, never fabricated detail).
  */
-export interface SessionDataProvider {
-  getSessionDetail(id: string): SessionDetailData | null;
-}
 
 const T = 1_700_000_000_000;
 
@@ -653,10 +649,12 @@ const DETAILS: Record<string, SessionDetailData> = {
   [SUB2_ID]: { detail: subDetail2, children: [] },
 };
 
+export function fixtureDetail(id: string): SessionDetailData | null {
+  return DETAILS[id] ?? null;
+}
+
 export const fixtureProvider: SessionDataProvider = {
-  getSessionDetail(id: string): SessionDetailData | null {
-    return DETAILS[id] ?? null;
-  },
+  getSessionDetail: fixtureDetail,
 };
 
 export function listFixtureIds(): string[] {

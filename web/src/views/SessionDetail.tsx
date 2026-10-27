@@ -15,9 +15,10 @@
  * is open (inspectorOpen prop), and App's bubble-phase Esc→fleet only
  * runs when the inspector is closed.
  *
- * DATA SEAM: reads through `SessionDataProvider` (fixture now —
- * `fixtureProvider`; `/api/sessions/:id` later by swapping the provider,
- * same shape). Unknown id renders the empty state, never invented detail.
+ * DATA SEAM: reads through `SessionDataProvider`, defaulting to the live
+ * export route (`liveProvider` → `/api/sessions/:id/export`). Tests inject
+ * the committed fixture explicitly. Unknown id / fetch failure renders the
+ * empty state, never invented detail.
  *
  * KEYBOARD: Esc resumes tail-follow. The listener runs on the CAPTURE phase
  * and stops propagation ONLY when it actually resumes (pinned or unseen),
@@ -54,7 +55,11 @@ import type {
   ToolStatus,
   Turn,
 } from "../lib/transcript";
-import { fixtureProvider } from "../testutils/sessionDetail.fixture";
+import { liveProvider } from "../lib/sessionProvider";
+import type {
+  SessionDataProvider,
+  SessionDetailData,
+} from "../lib/sessionProvider";
 import {
   collectToolRuns,
   CostTab,
@@ -65,6 +70,7 @@ import {
   useInspectorEsc,
 } from "./SessionDetailTabs";
 import type { DetailExtraProps, ToolRun } from "./SessionDetailTabs";
+import { ScreenTab } from "./ScreenTab";
 
 /* ---------------- tab registry (W3-2 edits ONLY this + TAB_CONTENT) ---------------- */
 
@@ -81,14 +87,16 @@ export const DETAIL_TABS: TabDef[] = [
   { id: "tools", label: "Tools", enabled: true },
   { id: "cost", label: "Cost", enabled: true },
   { id: "raw", label: "Raw", enabled: true },
+  { id: "screen", label: "Live pane", enabled: true },
 ];
 
-/** W3-2 extra-tab registry: tab id → component (uniform DetailExtraProps). */
+/** Extra-tab registry: tab id → component (uniform DetailExtraProps). */
 export const TAB_CONTENT = {
   timeline: TimelineTab,
   tools: ToolsTab,
   cost: CostTab,
   raw: RawTab,
+  screen: ScreenTab,
 } as const;
 
 export function DetailTabBar({ id, active }: { id: string; active: SessionTab }) {
@@ -512,15 +520,45 @@ export interface SessionDetailProps {
    * rendered from its matching row — never inferred from the parent.
    */
   sessions?: readonly SessionRow[];
+  /** Data source; production defaults to the live export route. */
+  provider?: SessionDataProvider;
 }
 
-export default function SessionDetail({ id, tab, row, paletteOpen, messageId = null, sessions = [] }: SessionDetailProps) {
-  const data = useMemo(() => fixtureProvider.getSessionDetail(id), [id]);
+export default function SessionDetail({
+  id,
+  tab,
+  row,
+  paletteOpen,
+  messageId = null,
+  sessions = [],
+  provider = liveProvider,
+}: SessionDetailProps) {
+  const [data, setData] = useState<SessionDetailData | null | undefined>(
+    undefined,
+  );
   const [jumpTo, setJumpTo] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
+  useEffect(() => {
+    let active = true;
+    setData(undefined);
+    Promise.resolve()
+      .then(() => provider.getSessionDetail(id))
+      .then(
+        (next) => {
+          if (active) setData(next);
+        },
+        () => {
+          if (active) setData(null);
+        },
+      );
+    return () => {
+      active = false;
+    };
+  }, [provider, id]);
+
   const flat = useMemo(
-    () => (data === null ? [] : flattenTurns(data.detail, data.children)),
+    () => (data === null || data === undefined ? [] : flattenTurns(data.detail, data.children)),
     [data],
   );
   const turns = useMemo(() => buildTurns(flat), [flat]);
@@ -541,6 +579,20 @@ export default function SessionDetail({ id, tab, row, paletteOpen, messageId = n
     setSelectedRunId(null);
   }, [tab, id]);
 
+  if (data === undefined) {
+    return (
+      <div className="session-detail">
+        <a className="stub-back mono" href={buildFleetHash()}>
+          <ArrowLeft aria-hidden="true" size={12} />
+          <span>back to fleet</span>
+        </a>
+        <div className="empty-state" role="status">
+          loading session…
+        </div>
+      </div>
+    );
+  }
+
   if (data === null) {
     return (
       <div className="session-detail">
@@ -549,7 +601,8 @@ export default function SessionDetail({ id, tab, row, paletteOpen, messageId = n
           <span>back to fleet</span>
         </a>
         <div className="empty-state">
-          Unknown session “{id}” — no detail in the provider.
+          Session “{id}” has no live detail — it may not exist, or the API is
+          unavailable.
         </div>
       </div>
     );
@@ -628,7 +681,7 @@ export default function SessionDetail({ id, tab, row, paletteOpen, messageId = n
         />
       </div>
       {tab === "turns" && <TurnsTab turns={turns} onSelect={selectTurn} />}
-      {(tab === "timeline" || tab === "tools" || tab === "cost" || tab === "raw") && (
+      {(tab === "timeline" || tab === "tools" || tab === "cost" || tab === "raw" || tab === "screen") && (
         <div className={inspectorOpen ? "detail-split" : undefined}>
           <div className="detail-main">
             <ExtraTab
@@ -654,7 +707,7 @@ export default function SessionDetail({ id, tab, row, paletteOpen, messageId = n
   );
 }
 
-function ExtraTab({ tab, ...extra }: { tab: "timeline" | "tools" | "cost" | "raw" } & DetailExtraProps): React.JSX.Element {
+function ExtraTab({ tab, ...extra }: { tab: "timeline" | "tools" | "cost" | "raw" | "screen" } & DetailExtraProps): React.JSX.Element {
   const Extra = TAB_CONTENT[tab];
   return <Extra {...extra} />;
 }

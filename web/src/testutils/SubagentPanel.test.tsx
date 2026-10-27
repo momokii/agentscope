@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 
 import SessionDetail from "../views/SessionDetail";
 import { makeRow } from "./fixture";
@@ -7,6 +7,7 @@ import {
   FIXTURE_MAIN_ID,
   FIXTURE_SUB_ID,
   FIXTURE_SUB2_ID,
+  fixtureProvider,
 } from "./sessionDetail.fixture";
 
 afterEach(() => {
@@ -34,7 +35,7 @@ const CHILD_ROWS = [
 ];
 
 describe("SubagentPanel", () => {
-  it("renders one row per child with its TRUE status, never the parent's", () => {
+  it("renders one row per child with its TRUE status, never the parent's", async () => {
     const parentRow = makeRow({ id: FIXTURE_MAIN_ID, status: "running" });
     const { container } = render(
       <SessionDetail
@@ -43,8 +44,10 @@ describe("SubagentPanel", () => {
         row={parentRow}
         paletteOpen={false}
         sessions={CHILD_ROWS}
+        provider={fixtureProvider}
       />,
     );
+    await waitFor(() => expect(container.querySelector(".subagents")).not.toBeNull());
     const panel = container.querySelector(".subagents");
     if (panel === null) throw new Error("missing subagents panel");
     expect(panel.textContent).toContain("(2)");
@@ -70,7 +73,7 @@ describe("SubagentPanel", () => {
     expect(planRow.textContent).toContain("1m ago");
   });
 
-  it("navigates to the child's own drill-down on click", () => {
+  it("navigates to the child's own drill-down on click", async () => {
     const { container } = render(
       <SessionDetail
         id={FIXTURE_MAIN_ID}
@@ -78,8 +81,10 @@ describe("SubagentPanel", () => {
         row={null}
         paletteOpen={false}
         sessions={CHILD_ROWS}
+        provider={fixtureProvider}
       />,
     );
+    await waitFor(() => expect(container.querySelector(".subagents")).not.toBeNull());
     const panel = container.querySelector(".subagents");
     if (panel === null) throw new Error("missing subagents panel");
     const exploreRow = within(panel as HTMLElement).getByText(
@@ -96,7 +101,7 @@ describe("SubagentPanel", () => {
     );
   });
 
-  it("shows an explicit empty state with no subagents", () => {
+  it("shows an explicit empty state with no subagents", async () => {
     render(
       <SessionDetail
         id={FIXTURE_SUB_ID}
@@ -104,9 +109,10 @@ describe("SubagentPanel", () => {
         row={null}
         paletteOpen={false}
         sessions={[]}
+        provider={fixtureProvider}
       />,
     );
-    expect(screen.getByText("No subagents in this session.")).toBeDefined();
+    expect(await screen.findByText("No subagents in this session.")).toBeDefined();
     expect(screen.getByText("(0)")).toBeDefined();
   });
 });

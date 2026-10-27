@@ -33,7 +33,7 @@ func testServer(t *testing.T, cfg ports.Config, opts ...HubOption) (*Server, *Hu
 // apiResponse is the closed set of decodable API bodies. The union keeps
 // decodeGet typed without an untyped escape hatch.
 type apiResponse interface {
-	HealthResponse | FleetResponse | SessionDetailResponse | SessionToolsResponse | DebugResponse
+	HealthResponse | FleetResponse | SessionDetailResponse | SessionToolsResponse | SessionExportResponse | DebugResponse
 }
 
 // defaultTestConfig returns Config with loopback bind and test DataDir.
@@ -573,13 +573,14 @@ func Test_No_CORS_on_API(t *testing.T) {
 	// Given
 	srv, h, baseURL := testServer(t, defaultTestConfig())
 	srv.SetDetailSource(&fakeDetail{detail: liveDetailFixture()})
+	srv.SetExportSource(&fakeExport{payload: exportFixture()})
 	if err := h.Publish(context.Background(), fixtureSnapshot(51, 1)); err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
 
 	// When / Then
 	client := &http.Client{Timeout: 10 * time.Second}
-	for _, path := range []string{"/api/healthz", "/api/fleet", "/api/sessions/ses_x", "/api/sessions/ses_x/tools", "/api/debug/hub"} {
+	for _, path := range []string{"/api/healthz", "/api/fleet", "/api/sessions/ses_x", "/api/sessions/ses_x/tools", "/api/sessions/ses_x/export", "/api/debug/hub"} {
 		resp, err := client.Get(baseURL + path)
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)

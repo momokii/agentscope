@@ -41,6 +41,12 @@ The agent must **always ask** before running any Compose command that is not
 clearly development. If the project already uses different file names,
 document and follow the existing names.
 
+> **This repo (verified 2026-10-27):** there is one `docker-compose.yml` and a
+> `deploy.sh` wrapper (`--port N`, `--down`); no `compose.override.yaml` /
+> `compose.prod.yaml` split. `APP_ENV` is an agent policy label only — the Go
+> binary reads `PORT`, `BIND_ADDR`, `DATA_DIR`, `DASHBOARD_AUTH`,
+> `POLL_INTERVAL`, `DB_TIMEOUT`, `ACTIVE_WINDOW`, and `TZ` (see `README.md`).
+
 ## Environment Files
 
 ```text

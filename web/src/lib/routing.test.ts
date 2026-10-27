@@ -63,7 +63,7 @@ describe("hash routing", () => {
     expect(buildSessionHash("ses_abc123", "transcript")).toBe(
       "#/sessions/ses_abc123",
     );
-    for (const tab of ["turns", "timeline", "tools", "cost", "raw"] as const) {
+    for (const tab of ["turns", "timeline", "tools", "cost", "raw", "screen"] as const) {
       const hash = buildSessionHash("ses_abc123", tab);
       expect(hash).toBe(`#/sessions/ses_abc123/${tab}`);
       expect(parseHash(hash)).toEqual({

@@ -21,11 +21,11 @@ import {
   FIXTURE_MAIN_ID,
   FIXTURE_SUB2_ID,
   FIXTURE_SUB_ID,
-  fixtureProvider,
+  fixtureDetail,
 } from "../testutils/sessionDetail.fixture";
 
 function mainData() {
-  const data = fixtureProvider.getSessionDetail(FIXTURE_MAIN_ID);
+  const data = fixtureDetail(FIXTURE_MAIN_ID);
   if (data === null) throw new Error("fixture missing main session");
   return data;
 }
@@ -180,7 +180,7 @@ describe("buildTurns + summarizeTurn", () => {
 describe("export parity (fixture info block)", () => {
   it("assistant token roll-up + cost equal the fixture info block per session", () => {
     for (const id of [FIXTURE_MAIN_ID, FIXTURE_SUB_ID, FIXTURE_SUB2_ID]) {
-      const data = fixtureProvider.getSessionDetail(id);
+      const data = fixtureDetail(id);
       if (data === null) throw new Error(`fixture missing ${id}`);
       const assistant = data.detail.messages.filter(
         (m) => m.info.role === "assistant",

@@ -1,28 +1,108 @@
-# TASK_QUEUE — Ordered Backlog
+# TASK_QUEUE — Board at HEAD `6f72903`
 
-## TASK-001: Establish project foundation
-- **Priority:** High | **Complexity:** M | **Status:** TODO
-- **Depends On:** user confirmation of purpose and stack
-- **Scope:** confirm purpose and stack with the user; extend `.gitignore` for the
-  stack; set up formatter, linter, type check, and test tooling; set up the
-  Compose dev/prod pattern if containerized; update `CODING_STANDARDS.md`,
-  `SECURITY_STANDARDS.md`, `ENVIRONMENT_GUIDE.md`, `HOW_TO_RESUME.md` commands,
-  the `CLAUDE.md` Commands table, and propose a stack-specific `settings.json`
-  allow-list.
-- **Acceptance Criteria:** one command each to run, test, lint, and health-check;
-  all `.claude/` files reflect the real stack.
-- **Security Concerns:** new tooling + dependencies must be verified, pinned,
-  audited, and logged; no secrets in config.
-- Perform as part of, or immediately before, the user's first real task.
+> Status: DONE → NEXT → BACKLOG. Verification commands are exact; run them before
+> claiming a task complete. Plan detail: `.omo/plans/opencode-dashboard.md`.
 
-## TASK-002: Add automated security guardrails
+## DONE
+
+| ID | Task | Evidence at HEAD |
+|---|---|---|
+| W1 | Collector + DB/runtime/hub seams (plan W1-1…W1-4) | `internal/{db,runtime,hub,collector}`, `go test -count=1 ./...` |
+| W2 | Fleet shell, KPI strip, ticker, CmdBar, pins, hash routing | `web/src/{App.tsx,views/Fleet.tsx,components}` |
+| W3 | Session detail tabs, Compare, Global timeline, screen endpoint | `web/src/views/SessionDetail*.tsx`, `internal/runtime/screen.go` |
+| W4 | Entrypoint, image, compose, Basic auth, security + VM runbooks | `cmd/dashboard`, `Dockerfile`, `docker-compose.yml`, `docs/*` |
+| F1 | Data fidelity (live DB detail, token/cost reconciliation) | plan F1 `[x]`; issues ledger 2026-10-24 |
+| F3 | Design gate (token-only hex, no color-only status) | plan F3 `[x]`; token gate below |
+| F4 | Security/deploy gate | plan F4 `[x]`; `docs/SECURITY.md` §5 |
+| — | Host networking fix (bridge was healthy-but-unreachable) | `6c8c5e3`, compose header |
+| — | `BIND_ADDR` opt-in + auth guard | `77ccacc`, `cmd/dashboard/selfcheck.go` |
+| — | Authenticated healthcheck + deploy proofs | `a6c108d` |
+| — | Incremental event tail + `DB_TIMEOUT` | `28d2088` |
+| — | Recency-gated statuses + honest pane join | `08f2f86` |
+| — | RW zellij socket + independent scans | `1004a12`, `ef84984` |
+| — | Newest-turn error truth | `b595687` |
+| — | Cookie SSE + message-level metrics + Projects | `07705be` |
+| — | Local-midnight cost, pane-based presence, TZ forwarding | `6a3fc5d`, `6f72903` |
+
+Verify the fleet baseline with:
+
+```bash
+go test -count=1 ./...
+npm test --prefix web -- --run
+npm run lint --prefix web
+npm run build --prefix web
+grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
+```
+
+## NEXT
+
+### TASK-101: Run the F2 VM truth matrix (human-gated)
 - **Priority:** High | **Complexity:** M | **Status:** TODO
-- **Depends On:** TASK-001
-- **Scope:** propose and, with user confirmation, add pre-commit secret scanning,
-  dependency audit, static analysis, image scanning if containerized, and a CI
-  pipeline running tests, lint, type checks and scans.
-- **Acceptance Criteria:** scans run locally and in CI; failures block merge.
-- **Security Concerns:** guardrails themselves must not leak secrets in logs.
+- **Depends On:** a live VM with zellij + opencode; `./deploy.sh` already verified there
+- **Scope:** execute `docs/VM_DEPLOY.md` §0–§3 (T1–T7): three live panes, one orphan,
+  one EXITED, one zombie, one CWD-vs-directory mismatch. Record observed values.
+- **Acceptance:** every row ticked with pasted evidence; plan F2 flips `[~]` → `[x]`.
+- **Verify:** `curl -s 127.0.0.1:$PORT/api/healthz`; `curl -s 127.0.0.1:$PORT/api/fleet`;
+  `GET /api/sessions/:id/screen` returns 200 for a live pane and 409 for the orphan.
+- **Security:** agents must not kill live sessions to fabricate the matrix.
+
+## BACKLOG
+
+### TASK-102: Wire SessionDetail + pane text to the live APIs
+- **Priority:** High (handoff-truth gap) | **Complexity:** M | **Status:** TODO
+- **Depends On:** none; backend routes already serve live data
+- **Scope:** implement a fetch-backed `SessionDataProvider` for
+  `GET /api/sessions/:id` (+ `/tools` where needed) and swap
+  `fixtureProvider` in `web/src/views/SessionDetail.tsx`. Map the API's
+  `SessionDetailResponse` (`session`, `messages`, `todos`, `children`) into the existing
+  `ExportSession` view shape without changing the view contract. Add a view for
+  `GET /api/sessions/:id/screen` (200 text/plain; render the 409 DB-only notice
+  honestly).
+- **Acceptance:** clicking a real fleet row renders its real transcript/turns/
+  timeline/tools/cost/raw and live pane text; unknown ids still render the empty state;
+  fixture tests keep passing (fixture provider remains test-only).
+- **Verify:** `npm test --prefix web -- --run`; manual click-through on a live session.
+- **Security:** read-only GET only; no new auth headers (cookie/Basic already cover it).
+
+### TASK-103: Deferred actions wave (abort/resurrect)
+- **Priority:** Low | **Complexity:** L | **Status:** BLOCKED on design
+- **Depends On:** TASK-101 (runtime truth), a security-model re-open
+- **Scope:** implement only what `docs/ACTIONS_DEFERRED.md` resolves: owner discovery
+  (session → pane → PID → per-instance port), auth story, result semantics,
+  compaction behavior, UI warning that resurrect re-runs commands.
+- **Acceptance:** the doc's §5 acceptance list is met; Security Gate re-passes.
+- **Verify:** owner-resolution + abort-mapping tests; manual abort/resurrect proof.
+- **Security:** do not ship any action route before re-opening the threat model.
+
+### TASK-104: Multi-host seam
+- **Priority:** Low | **Complexity:** L | **Status:** TODO
+- **Depends On:** design decision (not in v1)
+- **Scope:** add a host dimension (`host_id`) to the collector/snapshot/UI without
+  breaking the single-host contract. Not implemented today: the collector is single-host.
+- **Acceptance:** two hosts can publish distinguishable snapshots; UI groups by host.
+- **Verify:** new seam tests + a two-source integration test.
+
+### TASK-105: Narrow/phone layout
+- **Priority:** Low | **Complexity:** M | **Status:** TODO
+- **Scope:** responsive layout for the Projects/Fleet/detail views at phone widths.
+  Current layout is desktop-first; no phone-specific breakpoints are shipped.
+- **Acceptance:** no horizontal overflow at 375px; primary filters remain reachable.
+- **Verify:** manual browser check + existing web suite green.
+
+### TASK-106: Event-tail / dedupe stress tests
+- **Priority:** Low | **Complexity:** M | **Status:** TODO
+- **Scope:** harden tests around the incremental event tail (duplicate rows, backfill,
+  eviction, watermark reseed) and recomposition against a full scan.
+- **Acceptance:** revert-to-full-scan equality remains proven at larger dummy sizes.
+- **Verify:** `go test -count=1 ./internal/db/ ./internal/collector/`.
+
+### TASK-107: CI + automated security scans
+- **Priority:** Medium | **Complexity:** M | **Status:** TODO
+- **Scope:** CI running Go tests/vet/build, web tests/typecheck/build, token gate, secret
+  scan, dependency audit, image scan (original TASK-002). Requires user confirmation for
+  new tooling/dependencies.
+- **Acceptance:** failures block merge; no secrets in logs.
+- **Verify:** pipeline run on a scratch branch.
 
 ---
 

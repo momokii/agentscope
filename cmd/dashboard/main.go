@@ -34,8 +34,8 @@ import (
 
 	dashboardweb "opencode-dashboard/web"
 
-	"opencode-dashboard/internal/collector"
 	"opencode-dashboard/internal/auth"
+	"opencode-dashboard/internal/collector"
 	"opencode-dashboard/internal/db"
 	"opencode-dashboard/internal/hub"
 	"opencode-dashboard/internal/ports"
@@ -103,6 +103,7 @@ func run(ctx context.Context) error {
 	srv := hub.NewServer(cfg, hub.NewHub())
 	srv.SetScreenSource(source)
 	srv.SetDetailSource(reader)
+	srv.SetExportSource(reader)
 	col, err := collector.NewCollector(reader, source, srv.Hub(), cfg)
 	if err != nil {
 		return fmt.Errorf("wire collector: %w", err)

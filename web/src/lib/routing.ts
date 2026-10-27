@@ -53,6 +53,7 @@ export const SESSION_TABS = [
   "tools",
   "cost",
   "raw",
+  "screen",
 ] as const;
 
 export type SessionTab = (typeof SESSION_TABS)[number];
