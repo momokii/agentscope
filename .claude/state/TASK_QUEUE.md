@@ -37,37 +37,43 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 
 ## NEXT
 
-### TASK-321: live_panes counts agent panes only (validity)
-- **Priority:** High | **Complexity:** S | **Status:** TODO
+### TASK-321: live_panes counts agent panes only (DONE 2026-10-27)
+- **Evidence:** KPI 6 == Σ project panes 6 live; shells excluded; tests + docs updated
+- **Priority:** High | **Complexity:** S | **Status:** DONE
 - **Scope:** KPI `live_panes` counts non-exited opencode/pi panes only (today: every pane incl. shells), matching project cards; docs + tests updated.
 - **Acceptance:** KPI equals Σ project live_panes (+ session-less dirs); `go test ./internal/runtime/` green.
 - **Verify:** live curl proof
 
-### TASK-322: RateChart hover readout per tick
-- **Priority:** Medium | **Complexity:** S | **Status:** TODO
+### TASK-322: RateChart hover readout per tick (DONE 2026-10-27)
+- **Evidence:** persistent caption readout on hover/focus + 8px hit targets; tests green
+- **Priority:** Medium | **Complexity:** S | **Status:** DONE
 - **Scope:** hovering/focusing a dot shows its value persistently in the caption area (native title stays as fallback); bigger hit targets.
 - **Acceptance:** readout follows hover; keyboard focus works.
 - **Verify:** web suite green
 
-### TASK-323: Page-size selector (5/10/20/25/50)
-- **Priority:** Medium | **Complexity:** S | **Status:** TODO
+### TASK-323: Page-size selector (DONE 2026-10-27)
+- **Evidence:** select in Pagination (fleet + landing); page resets to 1; tests green
+- **Priority:** Medium | **Complexity:** S | **Status:** DONE
 - **Scope:** Pagination gains optional size select; Fleet (default 50) + Projects (default 10); page resets to 1.
 - **Verify:** web suite green
 
-### TASK-324: KPIs follow the date/bucket scope
-- **Priority:** High | **Complexity:** M | **Status:** TODO
+### TASK-324: KPIs follow the date/bucket scope (DONE 2026-10-27)
+- **Evidence:** Active/Waiting/Errors scoped (fleet KpiStrip, landing, project header+insight); lifetime costs + live presence stay global; live proof 22→3 projects under 24h
+- **Priority:** High | **Complexity:** M | **Status:** DONE
 - **Scope:** Active/Waiting/Errors computed over date+bucket+harness+search-filtered rows (not the status chip); Projects summary + project detail (header + insight) follow their date filter; lifetime tokens/cost stay labeled.
 - **Acceptance:** changing 24h/7d changes the counts; status chips still slice.
 - **Verify:** web suite green + screenshots
 
-### TASK-325: Manual refresh button beside Live
-- **Priority:** Medium | **Complexity:** S | **Status:** TODO
+### TASK-325: Manual refresh button beside Live (DONE 2026-10-27)
+- **Evidence:** RefreshButton in both toolbars → GET /api/fleet through the snapshot pipeline; works paused
+- **Priority:** Medium | **Complexity:** S | **Status:** DONE
 - **Scope:** App-level `onRefresh` (GET /api/fleet → apply pipeline) wired to a Refresh button in Fleet + Projects toolbars.
 - **Acceptance:** click replaces snapshot + resets ages; works paused.
 - **Verify:** web suite green
 
-### TASK-326: DataGuide accuracy pass
-- **Priority:** Low | **Complexity:** S | **Status:** TODO
+### TASK-326: DataGuide glossary accuracy (DONE 2026-10-27)
+- **Evidence:** updated for agent-only panes + KPI scoping + readout; verified rendered
+- **Priority:** Low | **Complexity:** S | **Status:** DONE
 - **Scope:** guide reflects agent-only panes, KPI scoping, tick readout.
 
 ### TASK-311: Hide global KPIs in project detail (DONE 2026-10-27)
