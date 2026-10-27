@@ -178,6 +178,7 @@ export default function Projects({
           prevKpis={prevKpis}
           phase={live ? phase : "closed"}
           lastSeq={lastSeq}
+          frameAgeMs={snapshotAgeMs}
         />
       )}
 

@@ -48,6 +48,26 @@ describe("KpiStrip", () => {
     expect(screen.getByText("+$0.40")).toBeDefined(); // cost up
   });
 
+  it("ticks metrics age live from the frame age instead of freezing", () => {
+    const { kpis } = buildFixtureSnapshot();
+    const withAge = { ...kpis, metrics_age_ms: 4000 };
+    const { rerender } = render(
+      <KpiStrip kpis={withAge} prevKpis={null} phase="connected" lastSeq={42} />,
+    );
+    expect(screen.getByText("4s")).toBeDefined();
+    // 30s after the frame arrived, the same snapshot reads 34s.
+    rerender(
+      <KpiStrip
+        kpis={withAge}
+        prevKpis={null}
+        phase="connected"
+        lastSeq={42}
+        frameAgeMs={30000}
+      />,
+    );
+    expect(screen.getByText("34s")).toBeDefined();
+  });
+
   it("labels the SSE dot state per connection phase", () => {
     const { kpis } = buildFixtureSnapshot();
     const { rerender } = render(

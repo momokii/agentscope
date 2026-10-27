@@ -146,6 +146,16 @@ a:focus-visible {
   font-variant-numeric: var(--tnum);
   color: var(--ink-400);
   white-space: nowrap;
+  /* Narrow cards must clip, not overflow: the label shortens with an
+     ellipsis instead of spilling outside the card border. */
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.kpi-delta > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .kpi-delta svg {

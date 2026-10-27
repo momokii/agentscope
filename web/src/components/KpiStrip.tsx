@@ -135,9 +135,23 @@ export interface KpiStripProps {
   prevKpis?: KPIs | null;
   phase: ConnectionPhase;
   lastSeq: number;
+  /**
+   * Ms since the displayed snapshot frame was applied (App's receivedAt
+   * clock). Added to the snapshot's metrics_age_ms so the age ticks live
+   * every second instead of freezing at the last publish during quiet
+   * (watermark-skipped) stretches. Null/unknown renders the snapshot
+   * value as-is.
+   */
+  frameAgeMs?: number | null;
 }
 
-export default function KpiStrip({ kpis, prevKpis, phase, lastSeq }: KpiStripProps) {
+export default function KpiStrip({
+  kpis,
+  prevKpis,
+  phase,
+  lastSeq,
+  frameAgeMs = null,
+}: KpiStripProps) {
   const prev = prevKpis ?? null;
   const tokensDelta = infoDelta(kpis.tokens_per_hour, prev?.tokens_per_hour ?? null);
   const costDelta = infoDelta(
@@ -243,9 +257,17 @@ export default function KpiStrip({ kpis, prevKpis, phase, lastSeq }: KpiStripPro
         </div>
         <div
           className="kpi-value"
-          title={hasMetricsAge ? undefined : METRICS_AGE_ABSENT_TITLE}
+          title={
+            hasMetricsAge
+              ? "Live age: snapshot sample age plus time since this frame arrived"
+              : METRICS_AGE_ABSENT_TITLE
+          }
         >
-          {hasMetricsAge ? formatAgeShort(kpis.metrics_age_ms as number) : "—"}
+          {hasMetricsAge
+            ? formatAgeShort(
+                (kpis.metrics_age_ms as number) + (frameAgeMs ?? 0),
+              )
+            : "—"}
         </div>
         <DeltaLine
           delta={{

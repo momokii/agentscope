@@ -485,12 +485,17 @@ export default function Fleet({
         onChangeDate={changeDate}
       />
 
-      <KpiStrip
-        kpis={kpis}
-        prevKpis={prevSnapshot?.kpis ?? null}
-        phase={live ? phase : "closed"}
-        lastSeq={snapshot?.seq ?? 0}
-      />
+      {/* Fleet-wide strip only: the project drill-in reports scoped
+          numbers via ProjectHeader + ProjectInsight instead. */}
+      {projectDirectory === null && (
+        <KpiStrip
+          kpis={kpis}
+          prevKpis={prevSnapshot?.kpis ?? null}
+          phase={live ? phase : "closed"}
+          lastSeq={snapshot?.seq ?? 0}
+          frameAgeMs={snapshotAgeMs}
+        />
+      )}
 
       <StatusDistribution
         counts={statusCounts.counts}
