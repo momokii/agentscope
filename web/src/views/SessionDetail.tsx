@@ -595,6 +595,26 @@ export default function SessionDetail({
   }
 
   if (data === null) {
+    // Pi rows have no export-shaped detail until P6, but their Live pane
+    // works today via the harness-scoped screen route — so the screen tab
+    // renders from the fleet row alone instead of the empty state.
+    if (tab === "screen" && row?.harness === "pi") {
+      return (
+        <div className="session-detail">
+          <a className="stub-back mono" href={buildFleetHash()}>
+            <ArrowLeft aria-hidden="true" size={12} />
+            <span>back to fleet</span>
+          </a>
+          <div className="detail-head">
+            <StatusBadge status={row.status} />
+            <HarnessBadge harness={row.harness} />
+            <span className="detail-title">{row.title}</span>
+          </div>
+          <DetailTabBar id={id} active={tab} />
+          <ScreenTab sessionId={id} />
+        </div>
+      );
+    }
     return (
       <div className="session-detail">
         <a className="stub-back mono" href={buildFleetHash()}>

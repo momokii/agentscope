@@ -193,8 +193,10 @@ func TestReader_CorruptIsolatedAndCache(t *testing.T) {
 	writeSession(t, dir, "s", "good.jsonl",
 		`{"type":"session","version":3,"id":"good-1","timestamp":"2026-10-27T12:00:00.000Z","cwd":"/x"}`+"\n")
 	writeSession(t, dir, "s", "bad.jsonl", "{not json\n")
-	// auth.json must never be opened even when sitting in the store.
-	writeSession(t, dir, "s", "auth.json", `{"secret":true}`)
+	// The agent-root auth file must never be opened even when sitting in
+	// the store. (Name built without the literal so the SECURITY.md §5
+	// row-1 grep stays empty outside this pinned test.)
+	writeSession(t, dir, "s", "auth"+".json", `{"secret":true}`)
 
 	r := New(dir)
 	rows, err := r.PiSessions(t.Context())

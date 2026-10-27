@@ -1,10 +1,10 @@
 # CURRENT_STATUS
 
 ## Project Phase
-v1 feature-complete on `main` (22 commits, HEAD `6f72903` at reconciliation time).
-Single-host, read-only monitoring is live. The only release gate still open is the
-human-run **F2 VM truth matrix** (`docs/VM_DEPLOY.md` §3; plan F2 is `[~]`, 19/20
-checkboxes done).
+v1 feature-complete + **Wave 5 multi-harness (opencode + pi)** shipped on `main`.
+Single-host, read-only monitoring is live for both harnesses. Still open: the
+human-run **F2 VM truth matrix** (`docs/VM_DEPLOY.md` §3; plan F2 is `[~]`) and
+the P6 pi transcript drill-down (backlog).
 
 ## Completed
 - [x] Collector: 10s poll, batched indexed DB reads, incremental event tail, per-source
@@ -12,7 +12,11 @@ checkboxes done).
 - [x] Status truth: recency-gated lifecycle (`ACTIVE_WINDOW` 2m); error only from the
   newest assistant turn; running outranks error; archived wins.
 - [x] Runtime join: zellij CLI + `/proc`; zombie `Z` = dead; orphan detection; newest
-  session per directory claims the pane; on-demand `dump-screen`.
+  session per (directory,harness) claims the pane; on-demand `dump-screen`.
+- [x] Wave 5 pi harness: `internal/pi` JSONL reader (mtime cache, shared status
+  gate), `SessionRow.Harness` (OC/π chips, harness filter URL-serialized),
+  `PI_DATA_DIR`, pi rows deep-link to the Live pane tab (+ SessionDetail pi
+  screen fallback; export-shaped transcript drill-down is P6).
 - [x] APIs: healthz, fleet (+`projects`/KPIs), session detail, tools, export
   (`opencode export` shape for the session + capped children), screen, SSE
   (`Last-Event-ID` resume), hub debug; embedded SPA fallback.

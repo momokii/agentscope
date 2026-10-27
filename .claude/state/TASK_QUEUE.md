@@ -37,35 +37,39 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 
 ## NEXT
 
-### TASK-201: Wave 5 P1 — pi source + Harness model field
+### TASK-201: Wave 5 P1 — pi source + Harness model field (DONE 2026-10-27)
+- **Evidence:** `internal/pi/` (reader/parse/tests), `SessionRow.Harness` opencode-normalized; `go test ./internal/pi/ ./internal/model/` green
 - **Priority:** High | **Complexity:** M | **Status:** TODO
 - **Scope:** `model.Harness` type + `SessionRow.Harness` (`harness` JSON, opencode default-normalized); new `internal/pi` JSONL reader behind `ports.PiReader` (mtime cache, status mapping, fork children via `parentSession`).
 - **Acceptance:** pi fixture sessions derive running/waiting-input/error/idle with tokens/cost/model; corrupt file isolated; unknown entry types ignored.
 - **Verify:** `go test -count=1 ./internal/pi/ ./internal/model/`
 - **Security:** reader opens only `<PiDataDir>/**/*.jsonl`; never `auth.json` (mount excludes it; add negative test).
 
-### TASK-202: Wave 5 P2 — runtime generalization
+### TASK-202: Wave 5 P2 — runtime generalization (DONE 2026-10-27)
+- **Evidence:** `ScanAgents`, pane `Harness()`, (dir,harness) claims, harness-scoped screen resolve; `go test ./internal/runtime/` green (legacy tests untouched)
 - **Priority:** High | **Complexity:** M | **Status:** TODO
 - **Depends On:** TASK-201
 - **Scope:** `ScanCommand` core (opencode+pi), pane `Harness()` from `pane_command` (never title), (directory,harness) presence claims, harness-scoped `ResolvePane`/`DumpSessionScreen`.
 - **Acceptance:** mixed-harness directory claims both panes independently; shell panes claim nothing; orphans per harness.
 - **Verify:** `go test -count=1 ./internal/runtime/`
 
-### TASK-203: Wave 5 P3 — collector merge + PiDataDir config
+### TASK-203: Wave 5 P3 — collector merge + PiDataDir config (DONE 2026-10-27)
+- **Evidence:** optional `ports.PiReader` merge pre-Enrich, pi-aware watermark signature, `PI_DATA_DIR`; collector normalizes empty harness; full `go test ./...` green
 - **Priority:** High | **Complexity:** S | **Status:** TODO
 - **Depends On:** TASK-202
 - **Scope:** merge opencode+pi rows pre-Enrich; `ports.Config.PiDataDir` (`PI_DATA_DIR`, default `$HOME/.pi/agent/sessions`); missing dir → pi disabled gracefully.
 - **Acceptance:** pi-disabled host behaves exactly as before (fleet identical); merged sort/KPIs/projects correct.
 - **Verify:** `go test -count=1 ./internal/collector/ ./internal/ports/`
 
-### TASK-204: Wave 5 P4 — frontend harness differentiation
+### TASK-204: Wave 5 P4 — frontend harness differentiation (DONE 2026-10-27)
+- **Evidence:** TS mirror + boundary normalization, `HarnessBadge`/`HarnessFilterBar`, `?harness=` URL state, pi→screen deep-link + SessionDetail pi screen fallback; `npm test` 215/215, `tsc` clean, token gate clean
 - **Priority:** High | **Complexity:** M | **Status:** TODO
 - **Depends On:** TASK-203
 - **Scope:** TS mirror `harness`; harness chip (glyph+label) in fleet + detail header; harness filter URL-serialized; pi rows deep-link to screen tab; new tokens in `tokens.css` + `DESIGN.md`.
 - **Acceptance:** filter/chip render; URL round-trips; token gate still hits only `tokens.css`.
 - **Verify:** `npm test --prefix web -- --run`, `npm run lint --prefix web`, token gate
 
-### TASK-205: Wave 5 P5 — deploy, docs, redeploy
+### TASK-205: Wave 5 P5 — deploy, docs, redeploy (DONE 2026-10-27)
 - **Priority:** High | **Complexity:** S | **Status:** TODO
 - **Depends On:** TASK-204
 - **Scope:** compose `:ro` sessions mount + `PI_DATA_DIR`; SECURITY.md §2/§3; README; `.env.example`; full gates; `./deploy.sh` redeploy with live evidence.

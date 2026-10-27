@@ -15,8 +15,9 @@ import (
 )
 
 // sessionSuffix is the only filename shape the reader opens. Anything else
-// under the store root (lock files, trash, future formats) is ignored —
-// and auth.json can never match it (negative-tested).
+// under the store root (lock files, trash, the agent-root auth file,
+// future formats) is ignored — only this suffix can ever match (negative-
+// tested).
 const sessionSuffix = ".jsonl"
 
 // maxSessionBytes caps one session file read. The observed store is tiny

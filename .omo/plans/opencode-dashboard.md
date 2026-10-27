@@ -230,16 +230,16 @@ shape for Transcript/Turns/Timeline/Tools/Cost/Raw tabs), Compare/Timeline
 enablement. This wave: pi rows link to the Live pane tab; detail tabs show
 the honest empty state until P6.
 
-- [ ] P1. **model + pi source** — `Harness` type/field + `internal/pi` reader
+- [x] P1. **model + pi source** — `Harness` type/field + `internal/pi` reader
   with mtime cache, status mapping, fork children. **Verify:** `go test ./internal/pi/ ./internal/model/`
-- [ ] P2. **runtime generalization** — `ScanCommand`, pane `Harness()`,
+- [x] P2. **runtime generalization** — `ScanCommand`, pane `Harness()`,
   (dir,harness) claims, harness-scoped resolve/dump. **Verify:** `go test ./internal/runtime/`
-- [ ] P3. **collector + config** — merge rows, `PiDataDir`, nil-safe disable.
+- [x] P3. **collector + config** — merge rows, `PiDataDir`, nil-safe disable.
   **Verify:** `go test ./internal/collector/ ./internal/ports/`
-- [ ] P4. **frontend** — TS mirror, harness chip, filter + URL state, detail
+- [x] P4. **frontend** (+ pi screen-tab fallback in SessionDetail) — TS mirror, harness chip, filter + URL state, detail
   header, pi rows → screen tab. **Verify:** `npm test --prefix web -- --run`,
   `npm run lint --prefix web`, token gate
-- [ ] P5. **deploy + docs** — compose mount/env, SECURITY.md, README,
+- [x] P5. **deploy + docs** — compose mount/env, SECURITY.md, README,
   `.env.example`, full gates, `./deploy.sh` redeploy + live evidence.
 - [ ] P6. **(BACKLOG)** pi transcript drill-down via export-shaped route.
 

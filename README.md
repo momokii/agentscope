@@ -24,10 +24,16 @@ To expose it on your tailnet afterwards: `tailscale serve --bg --https=443 http:
 - **Fleet table:** status chips (running / waiting-input / idle / error / archived) with
   counts, a Live-only toggle, search, pins, subagent expansion, and per-row
   tokens/sparkline/cost/relative time.
+- **Multi-harness (Wave 5):** pi sessions (JSONL store) merge into the same
+  fleet next to opencode rows. Every row carries a harness chip (OC / π,
+  glyph + label, never color alone); a harness slice (all / opencode / pi)
+  filters the fleet and is URL-serialized. Pi rows deep-link to the Live
+  pane tab (transcript drill-down is the P6 follow-up; other tabs show the
+  honest empty state until then).
 - **Recency honesty:** idle sessions split into Recent ≤24h / Stale 1–7d / Old >7d,
   defaulting to Active+Recent; date presets Today / 24h / 7d / 30d plus a custom `from`.
-- **Pagination and URL state:** 50 rows/page; status, live-only, bucket, date, `from`,
-  and page are serialized in the hash so links survive reload/back-forward.
+- **Pagination and URL state:** 50 rows/page; status, live-only, harness, bucket,
+  date, `from`, and page are serialized in the hash so links survive reload/back-forward.
 - **Live updates:** SSE snapshot stream with reconnect/backoff/resume, a stale/paused
   chip, a KPI strip, and an event ticker.
 - **Session view:** Transcript / Turns / Timeline / Tools / Cost / Raw tabs plus a
@@ -68,6 +74,7 @@ To expose it on your tailnet afterwards: `tailscale serve --bg --https=443 http:
 | `DB_TIMEOUT` | host env → compose | `10s` | Per-source bound for `PollState`/`Sessions` each tick. Malformed/non-positive falls back to default. A tick slower than 2× the poll interval is published as `stale`, never blanked |
 | `ACTIVE_WINDOW` | host env → compose | `2m` | Status recency gate: only sessions whose `time_updated` is inside this window may show running/waiting-input/error; older rows derive `idle` (archived wins). Malformed/non-positive falls back to default |
 | `DATA_DIR` | compose `environment` | `/data/opencode` | Read-only opencode data root in-container (parent dir mount keeps `-wal`/`-shm` sidecars visible) |
+| `PI_DATA_DIR` | compose `environment` | `/data/pi-sessions` | Read-only pi session-store root in-container (`sessions/` subdir only — `auth.json` never mounted). Default `$HOME/.pi/agent/sessions` locally. Missing/unreadable store = pi merge degrades warn-once, opencode fleet unaffected |
 | `DASHBOARD_AUTH` | host env | unset (= open tailnet-trust mode) | `user:pass` (split on first colon) enables the Basic gate; malformed (no colon/empty part) = fail-closed refuse-to-serve. Successful Basic also mints the `ocd_session` cookie used by SSE. Value never logged |
 | `TZ` | host env (`deploy.sh` detects) | host zone | Local-time attribution for `cost_today` (message spend since **local midnight**) and log stamps. Compose also mounts `/etc/localtime:ro`, so Go resolves the host zone even when `TZ` is empty |
 | `UID` / `GID` | host (`export UID`; `GID=$(id -g)`) | `1000:1000` | Container user — MUST equal host user (zellij sockets are 0700, same-user effectively mandatory) |

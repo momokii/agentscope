@@ -123,6 +123,48 @@ describe("SessionDetail production data seam", () => {
     );
   });
 
+  it("renders the Live pane tab for pi rows without export detail (P6 pending)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 409,
+      ok: false,
+      json: async () => ({ db_only: true, hint: "no pane" }),
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    const provider: SessionDataProvider = { getSessionDetail: () => null };
+    const { makeRow } = await import("../testutils/fixture");
+    render(
+      <SessionDetail
+        id="pi-9"
+        tab="screen"
+        row={makeRow({ id: "pi-9", harness: "pi", title: "pi work" })}
+        paletteOpen={false}
+        provider={provider}
+      />,
+    );
+    // Screen tab content (not the transcript empty state) with the pi chip.
+    expect(await screen.findByText("DB-only")).toBeDefined();
+    expect(screen.getByText("pi work")).toBeDefined();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sessions/pi-9/screen?full=1",
+      expect.objectContaining({ credentials: "same-origin" }),
+    );
+  });
+
+  it("keeps the empty state for pi rows on transcript tabs until P6", async () => {
+    const provider: SessionDataProvider = { getSessionDetail: () => null };
+    const { makeRow } = await import("../testutils/fixture");
+    render(
+      <SessionDetail
+        id="pi-9"
+        tab="transcript"
+        row={makeRow({ id: "pi-9", harness: "pi" })}
+        paletteOpen={false}
+        provider={provider}
+      />,
+    );
+    expect(await screen.findByText(/has no live detail/)).toBeDefined();
+  });
+
   it("shows loading until a pending provider resolves", async () => {
     let resolve!: (value: SessionDetailData | null) => void;
     const pending = new Promise<SessionDetailData | null>((done) => {

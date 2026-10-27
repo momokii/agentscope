@@ -31,10 +31,12 @@ review gate — any mount not on it blocks the F4 release.
 | `/run/user/<uid>/zellij` | `/run/user/<uid>/zellij` | `:rw` (REQUIRED — the zellij CLI mints a per-invocation client socket here; `:ro` kills every pane query with EROFS) | zellij CLI socket dir listing = pane liveness #1 | Read-only queries only (`list-sessions`/`list-panes`/`dump-screen` — no attach/kill/resurrect); same-UID parity already mandatory |
 | `~/.local/share/opencode` (parent dir: db + `-wal`/`-shm` + storage) | `/data/opencode` | `:ro` | Read-only WAL snapshot queries (indexed/sliced allowlist, `internal/db`); service active file attachments | Parent-dir mount keeps WAL sidecars visible; 8.2 GB danger: full `part.data LIKE` scans banned; read-only open never disturbs live TUIs |
 | `~/.cache/zellij` | `/data/zellij-cache` | `:ro` | EXITED-session semantics (resurrect re-runs, does not resume) | Dead-pane forensics only |
+| `~/.pi/agent/sessions` | `/data/pi-sessions` | `:ro` | Pi JSONL session store (Wave 5 second harness: status/tokens/cost from message usage) | Mounts ONLY the sessions subdir — `~/.pi/agent/auth.json` (0600 provider OAuth) and the store root never enter |
 | `/etc/localtime` | `/etc/localtime` | `:ro` | Local-midnight attribution for `cost_today` | Timezone data only |
 
 **Never mounted, never will be:** `~/.local/share/opencode/auth.json`
-(opencode server password + provider OAuth), any `credential`/`account*`
+(opencode server password + provider OAuth), `~/.pi/agent/auth.json`
+(pi provider OAuth — only `sessions/` is mounted), any `credential`/`account*`
 stores. Proof commands in §5 (`docker inspect` + repo greps).
 
 ## 3. Secret inventory (where each lives + proof it never leaks)
@@ -42,6 +44,7 @@ stores. Proof commands in §5 (`docker inspect` + repo greps).
 | Secret | Lives in | Enters image? | Enters API/logs? | Proof |
 |---|---|---|---|---|
 | `auth.json` (opencode server password, provider tokens) | Host `~/.local/share/opencode/` only | No — never mounted (§2) | No — no code reads it; Raw tab strips credential/account payloads | `docker inspect` mount check + repo grep, §5 rows 1–2 |
+| `auth.json` (pi provider OAuth, 0600) | Host `~/.pi/agent/` only | No — only `sessions/` is mounted (§2); the Go reader opens `*.jsonl` exclusively | No — no code reads it (suffix allowlist, negative-tested) | `docker inspect` mount check + repo grep, §5 rows 1–2 |
 | `credential` / `account*` tables (opencode.db) | Host DB file | No (file is mounted `:ro` but no query touches those tables) | No — `internal/db` query allowlist has no `credential`/`account` statement; API shapes are frozen (`SessionRow`, `KPIs`) | repo grep, §5 rows 3–4 |
 | `DASHBOARD_AUTH` (`user:pass`) | Operator's env / compose `environment:` only | No — build-time env is not baked in (W4-1: no `ARG`/`ENV` for it in Dockerfile) | No — `internal/auth` has no log/slog/fmt path (test-pinned); 401 body is empty; `WWW-Authenticate` carries only the realm | `docker history` scan + unit test + grep, §5 rows 5–7 |
 | Dashboard gate password (at rest) | Nowhere — compared in memory at request time, never persisted | n/a | n/a | By construction: no file/database store. A successful Basic check mints an `ocd_session` **token** (32 random bytes, HttpOnly, 12h TTL, bounded 32-entry in-memory store) — the token is not the password and carries no user identity |
@@ -136,12 +139,19 @@ grep -rni 'auth\.json' --include='*.go' --include='*.ts' --include='*.tsx' \
   internal/ web/src/ .env.example
 # EXPECTED: (no output) exit 1
 # ACTUAL (2026-10-27): no output, exit 1 — clean
+# ACTUAL (Wave 5, 2026-10-27): no output, exit 1 — clean. The pi negative
+# test names the credential file only via string concatenation
+# (internal/pi/pi_test.go) so the literal grep stays empty.
 
-# 2. No credential/account table access (expect: only auth-wiring comments)
+# 2. No credential/account table access (expect: only auth-wiring comments
+#    plus the fetch API cookie option — never credential VALUES)
 grep -rni 'credential' internal/ web/src | grep -v internal/auth
-# EXPECTED: (no output) exit 1
-# ACTUAL (2026-10-27): one comment in internal/hub/handlers.go showing the
-# auth wiring snippet — no table access
+# EXPECTED: one comment in internal/hub/handlers.go (auth wiring snippet)
+# plus `credentials: "same-origin"` fetch options (same-origin cookies,
+# no values) — no table access, no secrets
+# ACTUAL (2026-10-27): handlers.go comment only (fetch hits pre-date the note)
+# ACTUAL (Wave 5, 2026-10-27): handlers.go comment + 5 pre-existing
+# `credentials: "same-origin"` fetch/test hits — no values, no table access
 grep -rni 'account' --include='*.go' internal/db/ internal/collector/ internal/hub/
 # EXPECTED: (no output) exit 1
 # ACTUAL (2026-10-27): no output, exit 1 — clean
@@ -167,9 +177,10 @@ deploy host/VM after `./deploy.sh`; `<container>`/`<image>` are the running
 dashboard container and `opencode-dashboard:0.1.0`):
 
 ```bash
-# 6. Mount allowlist: exact output must equal §2 (no auth.json; data/cache/localtime :ro, socket dir :rw)
+# 6. Mount allowlist: exact output must equal §2 (no auth.json; data/cache/pi-sessions/localtime :ro, socket dir :rw)
 docker inspect <container> --format '{{json .Mounts}}' | python3 -m json.tool
-# EXPECTED: only the 4 §2 mounts; data/cache/localtime "Mode": "ro" / "RW": false, socket dir "RW": true
+# EXPECTED: only the 5 §2 mounts; opencode/pi-sessions/zellij-cache/localtime
+# "Mode": "ro" / "RW": false, socket dir "RW": true
 
 # 7. No secret baked into image layers
 docker history --no-trunc <image> | grep -i 'auth\|pass\|secret\|token\|credential'

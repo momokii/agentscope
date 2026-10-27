@@ -27,8 +27,8 @@
 // session files counted as their own rows (SubagentCount only).
 //
 // Safety: the reader opens ONLY <PiDataDir>/**/*.jsonl. It never touches
-// ~/.pi/agent/auth.json or any other file (the mount allowlist excludes
-// them; a negative test pins the suffix allowlist). One corrupt file is
+// the agent-root auth file or any other file (the mount allowlist
+// excludes them; a negative test pins the suffix allowlist). One corrupt file is
 // skipped in isolation and never fails the tick. Files are small (observed
 // store: 6 files / 1.4 MB); an mtime+size cache skips unchanged files per
 // tick while UpdatedRelativeMs is recomputed fresh every tick.

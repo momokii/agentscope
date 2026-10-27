@@ -7,11 +7,13 @@
 #
 # Mount allowlist (NOTHING else enters the container):
 #   - opencode/ parent dir :ro  -> /data/opencode   (DB + storage; WAL decision below)
+#   - pi sessions dir     :ro  -> /data/pi-sessions (JSONL session store, Wave 5)
 #   - zellij socket dir   :rw  -> same path         (CLI liveness + dump-screen;
 #     read-write is REQUIRED, see the socket volume note below)
 #   - zellij cache dir    :ro  -> /data/zellij-cache (EXITED-session metadata)
-#   NEVER mounted: auth.json, credential/account* tables, the whole home dir.
-#   The dashboard needs no opencode credentials for read-only monitoring.
+#   NEVER mounted: opencode auth.json, ~/.pi/agent/auth.json,
+#   credential/account* tables, the whole home dir. The dashboard needs no
+#   agent credentials for read-only monitoring.
 #
 # WAL-MOUNT DECISION (binding): mount the PARENT .../opencode/ directory
 # read-only — NOT the opencode.db file alone. SQLite WAL mode keeps live
@@ -88,9 +90,17 @@ services:
       # /etc/localtime is bind-mounted below (Go resolves the host zone even
       # when TZ is empty); deploy.sh exports TZ from the host automatically.
       TZ: "${TZ:-}"
+      # Pi session store root (Wave 5): the dashboard reads ONLY the
+      # sessions/ subdir (JSONL) — never ~/.pi/agent itself, so auth.json
+      # (0600, provider OAuth) cannot enter the container. Missing dir on
+      # opencode-only hosts is fine (empty mount → pi merge degrades
+      # warn-once per process, fleet identical to before).
+      PI_DATA_DIR: /data/pi-sessions
     volumes:
       # WAL decision (see header): parent dir :ro keeps -wal/-shm visible.
       - ${HOME:-/home/hostuser}/.local/share/opencode:/data/opencode:ro
+      # Pi JSONL session store (read-only).
+      - ${HOME:-/home/hostuser}/.pi/agent/sessions:/data/pi-sessions:ro
       # EXITED/resurrect metadata (read-only).
       - ${HOME:-/home/hostuser}/.cache/zellij:/data/zellij-cache:ro
       # Live zellij sockets (0700 — requires user: parity above). Source
