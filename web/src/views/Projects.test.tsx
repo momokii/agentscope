@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 
 import Projects from "./Projects";
 import { buildProjectHash } from "../lib/routing";
-import { buildFixtureSnapshot, makeProject } from "../testutils/fixture";
+import { buildFixtureSnapshot, makeProject, makeRow } from "../testutils/fixture";
 
 afterEach(cleanup);
 
@@ -268,6 +268,33 @@ describe("Projects landing", () => {
     fireEvent.click(screen.getByRole("button", { name: "24h" }));
     expect(summary()).toContain("2 procs");
     expect(summary()).not.toContain("5 procs");
+  });
+
+  it("scopes landing KPI counts to the active-since window", () => {
+    const { kpis } = buildFixtureSnapshot();
+    render(
+      <Projects
+        nowMs={NOON}
+        projects={[makeProject({ directory: "/srv/a", last_activity_ms: 5_000 })]}
+        sessions={[
+          makeRow({ id: "r1", directory: "/srv/a", status: "running", updated_relative_ms: 5_000 }),
+          makeRow({ id: "r2", directory: "/srv/a", status: "error", updated_relative_ms: 10 * 24 * 3_600_000 }),
+        ]}
+        kpis={kpis}
+      />,
+    );
+    const kpiText = (label: string): string | undefined => {
+      const cards = Array.from(document.querySelectorAll(".kpi-card"));
+      const card = cards.find((c) => c.textContent?.includes(label));
+      return card?.querySelector(".kpi-value")?.textContent ?? undefined;
+    };
+    // Unfiltered: both sessions count.
+    expect(kpiText("Active")).toBe("1");
+    expect(kpiText("Errors")).toBe("1");
+    fireEvent.click(screen.getByRole("button", { name: "24h" }));
+    // 24h window drops the 10-day-old error row.
+    expect(kpiText("Active")).toBe("1");
+    expect(kpiText("Errors")).toBe("0");
   });
 
   it("renders em dashes for absent optional project fields", () => {

@@ -1,7 +1,12 @@
 import { useMemo, useState } from "react";
 import { Activity, Pause, Play, Search } from "lucide-react";
 
-import type { ConnectionPhase, KPIs, ProjectSummary } from "../lib/sse";
+import type {
+  ConnectionPhase,
+  KPIs,
+  ProjectSummary,
+  SessionRow,
+} from "../lib/sse";
 import { formatAge, formatCompact, formatUSD } from "../lib/format";
 import {
   DATE_PRESETS,
@@ -24,6 +29,8 @@ import RelativeTime from "../components/RelativeTime";
 
 export interface ProjectsProps {
   projects: readonly ProjectSummary[];
+  /** Fleet sessions (for date-scoped KPI counts on the landing). */
+  sessions?: readonly SessionRow[];
   nowMs?: number;
   live?: boolean;
   onToggleLive?: () => void;
@@ -86,6 +93,7 @@ function presenceTitle(project: ProjectSummary): string {
 
 export default function Projects({
   projects,
+  sessions = [],
   nowMs,
   live = true,
   onToggleLive,
@@ -144,6 +152,28 @@ export default function Projects({
     }
     return { live_procs, running, waiting_input, live_projects };
   }, [rows]);
+
+  /**
+   * Landing KPI scope: Active/Waiting/Errors count sessions in the visible
+   * (searched + dated) projects and the active-since window — the global
+   * numbers yield to the selected time slice. Throughput, costs, and live
+   * presence stay global measurements.
+   */
+  const scopedKpis = useMemo((): KPIs | null => {
+    if (kpis === undefined) return null;
+    const dirs = new Set(rows.map((p) => p.directory));
+    let active = 0;
+    let waiting = 0;
+    let errors = 0;
+    for (const row of sessions) {
+      if (!dirs.has(row.directory)) continue;
+      if (!matchesDateFilter(row.updated_relative_ms, { preset: since, from: null }, now)) continue;
+      if (row.status === "running") active++;
+      else if (row.status === "waiting-input") waiting++;
+      else if (row.status === "error") errors++;
+    }
+    return { ...kpis, active, waiting_input: waiting, errors };
+  }, [kpis, rows, sessions, since, now]);
 
   const resetQuery = () => {
     setQuery("");
@@ -250,9 +280,9 @@ export default function Projects({
         </div>
       )}
 
-      {kpis !== undefined && (
+      {scopedKpis !== null && (
         <KpiStrip
-          kpis={kpis}
+          kpis={scopedKpis}
           prevKpis={prevKpis}
           phase={live ? phase : "closed"}
           lastSeq={lastSeq}

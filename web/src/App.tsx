@@ -369,6 +369,7 @@ export default function App() {
         ) : hasProjects(snapshot) ? (
           <Projects
             projects={snapshot.projects}
+            sessions={snapshot.sessions}
             live={live}
             onToggleLive={() => setLive((v) => !v)}
             phase={status.state}
