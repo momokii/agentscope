@@ -4,6 +4,12 @@ import { Activity, Pause, Play, Search } from "lucide-react";
 import type { ConnectionPhase, KPIs, ProjectSummary } from "../lib/sse";
 import { formatAge, formatCompact, formatUSD } from "../lib/format";
 import {
+  DATE_PRESETS,
+  DATE_PRESET_LABELS,
+  matchesDateFilter,
+} from "../lib/fleetSort";
+import type { DatePreset } from "../lib/fleetSort";
+import {
   filterProjects,
   projectDisplayName,
   projectIsLive,
@@ -11,6 +17,7 @@ import {
 } from "../lib/projects";
 import { buildProjectHash } from "../lib/routing";
 import KpiStrip from "../components/KpiStrip";
+import Pagination from "../components/Pagination";
 import RelativeTime from "../components/RelativeTime";
 
 export interface ProjectsProps {
@@ -42,6 +49,9 @@ function usdText(value: number | undefined): string {
     ? formatUSD(value)
     : "—";
 }
+
+/** Cards per landing page (local state; the landing has no URL query). */
+const PROJECTS_PAGE_SIZE = 12;
 
 const PANES_TITLE =
   "OpenCode panes in this directory (presence signal; may briefly include a pane whose process just exited)";
@@ -82,10 +92,30 @@ export default function Projects({
   lastSeq = 0,
 }: ProjectsProps) {
   const [query, setQuery] = useState("");
+  const [since, setSince] = useState<DatePreset>("all");
+  const [page, setPage] = useState(1);
+  const now = nowMs ?? Date.now();
 
-  const rows = useMemo(
-    () => sortProjects(filterProjects(projects, query)),
-    [projects, query],
+  const rows = useMemo(() => {
+    const searched = filterProjects(projects, query);
+    const dated =
+      since === "all"
+        ? searched
+        : searched.filter((p) =>
+            matchesDateFilter(p.last_activity_ms ?? Number.POSITIVE_INFINITY, { preset: since, from: null }, now),
+          );
+    return sortProjects(dated);
+  }, [projects, query, since, now]);
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / PROJECTS_PAGE_SIZE));
+  const safePage = Math.min(Math.max(1, page), pageCount);
+  const pageRows = useMemo(
+    () =>
+      rows.slice(
+        (safePage - 1) * PROJECTS_PAGE_SIZE,
+        safePage * PROJECTS_PAGE_SIZE,
+      ),
+    [rows, safePage],
   );
 
   const totals = useMemo(() => {
@@ -102,7 +132,19 @@ export default function Projects({
     return { live_procs, running, waiting_input, live_projects };
   }, [projects]);
 
-  const resetQuery = () => setQuery("");
+  const resetQuery = () => {
+    setQuery("");
+    setSince("all");
+    setPage(1);
+  };
+  const changeSince = (preset: DatePreset) => {
+    setSince(preset);
+    setPage(1);
+  };
+  const changeQuery = (value: string) => {
+    setQuery(value);
+    setPage(1);
+  };
 
   return (
     <div className="projects">
@@ -143,11 +185,32 @@ export default function Projects({
           <input
             type="search"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => changeQuery(event.target.value)}
             placeholder="Filter name or path…"
             aria-label="Filter projects"
           />
         </label>
+        <div
+          className="filter-bar projects-since"
+          role="group"
+          aria-label="Filter projects by last activity"
+        >
+          {DATE_PRESETS.map((preset) => {
+            const selected = since === preset;
+            return (
+              <button
+                key={preset}
+                type="button"
+                className={selected ? "filter-chip filter-chip-on" : "filter-chip"}
+                aria-pressed={selected}
+                onClick={() => changeSince(preset)}
+              >
+                {selected && <span aria-hidden="true">✓</span>}
+                <span>{DATE_PRESET_LABELS[preset]}</span>
+              </button>
+            );
+          })}
+        </div>
         <button
           type="button"
           className="live-toggle"
@@ -189,14 +252,18 @@ export default function Projects({
         </div>
       ) : rows.length === 0 ? (
         <div className="empty-state">
-          <p>No projects match “{query.trim()}”.</p>
+          <p>
+            No projects match
+            {query.trim() !== "" && <> “{query.trim()}”</>}
+            {since !== "all" && <> active {DATE_PRESET_LABELS[since].toLowerCase()}</>}.
+          </p>
           <button type="button" className="empty-reset" onClick={resetQuery}>
             Show all projects
           </button>
         </div>
       ) : (
         <ul className="projects-list" aria-label="Projects ranked by activity">
-          {rows.map((project) => {
+          {pageRows.map((project) => {
             const isLive = projectIsLive(project);
             const name = projectDisplayName(project);
             const lastActivity = project.last_activity_ms;
@@ -286,6 +353,15 @@ export default function Projects({
             );
           })}
         </ul>
+      )}
+      {pageCount > 1 && (
+        <Pagination
+          page={safePage}
+          totalPages={pageCount}
+          total={rows.length}
+          onPageChange={setPage}
+          pageSize={PROJECTS_PAGE_SIZE}
+        />
       )}
     </div>
   );

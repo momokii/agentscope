@@ -218,6 +218,35 @@ describe("Projects landing", () => {
     expect(cards()).toHaveLength(0);
   });
 
+  it("filters cards by last-activity presets", () => {
+    render(
+      <Projects
+        nowMs={NOON}
+        projects={[
+          makeProject({ directory: "/srv/fresh", last_activity_ms: 5_000 }),
+          makeProject({ directory: "/srv/old", last_activity_ms: 10 * 24 * 3_600_000 }),
+        ]}
+      />,
+    );
+    expect(cards()).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "24h" }));
+    expect(cards().map((c) => c.getAttribute("data-directory"))).toEqual([
+      "/srv/fresh",
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(cards()).toHaveLength(2);
+  });
+
+  it("paginates cards at twelve per page", () => {
+    const projects = Array.from({ length: 13 }, (_, i) =>
+      makeProject({ directory: `/srv/p${i}`, last_activity_ms: 1_000 }),
+    );
+    render(<Projects nowMs={NOON} projects={projects} />);
+    expect(cards()).toHaveLength(12);
+    fireEvent.click(screen.getByRole("button", { name: /next page/i }));
+    expect(cards()).toHaveLength(1);
+  });
+
   it("renders em dashes for absent optional project fields", () => {
     render(<Projects projects={[{ directory: "/srv/bare" }]} />);
     const bare = cards()[0] as HTMLElement;
