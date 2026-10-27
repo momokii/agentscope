@@ -26,6 +26,7 @@ import {
   paginateRows,
   sortFleetRows,
 } from "../lib/fleetSort";
+import { sumSparks } from "../lib/rate";
 import type {
   DateFilter,
   HarnessFilter,
@@ -39,6 +40,8 @@ import HarnessBadge from "../components/HarnessBadge";
 import HarnessFilterBar, {
   HARNESS_FILTER_LABELS,
 } from "../components/HarnessFilterBar";
+import ProjectInsight from "../components/ProjectInsight";
+import RateChart from "../components/RateChart";
 import KpiStrip from "../components/KpiStrip";
 import Pagination from "../components/Pagination";
 import ProjectHeader from "../components/ProjectHeader";
@@ -374,6 +377,21 @@ export default function Fleet({
     ];
   };
 
+  /** Project member rows (directory-scoped, unfiltered) feed the insight. */
+  const projectRows = useMemo(
+    () =>
+      projectDirectory === null || !snapshot
+        ? []
+        : snapshot.sessions.filter((row) => row.directory === projectDirectory),
+    [snapshot, projectDirectory],
+  );
+
+  /** Fleet-wide token rate (element-wise spark sums, live data only). */
+  const fleetRate = useMemo(
+    () => (snapshot ? sumSparks(snapshot.sessions) : []),
+    [snapshot],
+  );
+
   return (
     <div className="fleet">
       {projectDirectory !== null && (
@@ -381,6 +399,9 @@ export default function Fleet({
           header={resolveProjectHeader(snapshot, projectDirectory)}
           nowMs={now}
         />
+      )}
+      {projectDirectory !== null && projectRows.length > 0 && (
+        <ProjectInsight rows={projectRows} />
       )}
       <div className="fleet-toolbar">
         <span className="fleet-title">
@@ -435,6 +456,10 @@ export default function Fleet({
             {snapshot?.seq ?? 0})
           </span>
         </div>
+      )}
+
+      {snapshot && projectDirectory === null && (
+        <RateChart values={fleetRate} label="Fleet" />
       )}
 
       <StatusFilterBar

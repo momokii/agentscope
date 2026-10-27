@@ -101,6 +101,21 @@ describe("project drill-in", () => {
     expect(within(header).getByText("9.0k")).toBeDefined();
   });
 
+  it("renders the project insight with distribution and rate from member rows", () => {
+    renderProject();
+    // One running member row in /srv/alpha: distribution + rate reconcile.
+    const section = screen.getByLabelText("Project detail: 1 sessions");
+    expect(section).toBeDefined();
+    expect(
+      screen.getByRole("img", {
+        name: /status mix: 1 running, 0 needs input, 0 idle/i,
+      }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("img", { name: /project token rate/i }),
+    ).toBeDefined();
+  });
+
   it("degrades to derived counts and em dashes for live procs and panes", () => {
     renderProject();
     const header = screen.getByLabelText("Project alpha");

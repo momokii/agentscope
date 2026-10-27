@@ -188,4 +188,11 @@ describe("Fleet", () => {
     );
     expect(onTogglePin).toHaveBeenCalledWith("ses_running1");
   });
+
+  it("renders the fleet token-rate strip from live snapshot sparks", () => {
+    renderFleet();
+    expect(
+      screen.getByRole("img", { name: /fleet token rate/i }),
+    ).toBeDefined();
+  });
 });
