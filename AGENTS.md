@@ -93,9 +93,10 @@ v1 is feature-complete on `main`. The plan is 19/20 checked; the only open plan
 item is **F2**, the human-run VM truth matrix in `docs/VM_DEPLOY.md` §0–§3
 (`[~]`, not done — agents must not fabricate it by killing live sessions).
 
-Known handoff gap: the backend detail/tools/screen APIs are live, but
-`web/src/views/SessionDetail.tsx` still calls `fixtureProvider`, and no view
-calls the screen API. Do not describe drill-down or pane text as live UI.
+Drill-down and the Live pane tab are live: `GET /api/sessions/:id/export`
+serves the real session plus children (export-shaped), and
+`GET /api/sessions/:id/screen` returns live pane text (409 when a session has no
+pane). The fixture in `web/src/testutils/` is test-only.
 
 ## Where to read more
 

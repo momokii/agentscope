@@ -164,8 +164,26 @@ screen endpoint has no view. Both are handoff gaps (TASK-102), not live UI featu
 **Alternatives Rejected:** Shipping an abort button that can target the wrong process.
 **Security Implications:** Read-only posture is preserved; this is also a known handoff gap
 (TASK-102), not a feature to describe as live.
-**Impact:** `docs/ACTIONS_DEFERRED.md`, `web/src/views/SessionDetail.tsx`,
-`web/src/testutils/sessionDetail.fixture.ts`.
+**Impact:** Superseded 2026-10-27 — `docs/ACTIONS_DEFERRED.md`,
+`web/src/views/SessionDetail.tsx`, `web/src/testutils/sessionDetail.fixture.ts`.
+
+---
+
+**Decision:** Live drill-down shipped — export-backed detail + Live pane tab
+**Date:** 2026-10-27
+**Context:** A monitoring tool must never render fixture data; the export and screen
+routes now serve real session data, so the earlier fixture-driven drill-down is obsolete.
+**Rationale:** `/api/sessions/:id/export` (info + messages with raw parts, per-session
+capped) feeds a fetch-backed provider; `/screen` is wired in a Live pane tab with honest
+409/504/503 handling. The fixture remains test-only.
+**Alternatives Rejected:** Keeping the fixture-driven drill-down; adding a separate export
+view instead of reusing the existing `SessionDataProvider` seam.
+**Security Implications:** Read-only GET only; `/screen` surfaces live pane text and fails
+closed (409/504/503) when no pane exists or capture fails.
+**Impact:** `web/src/lib/sessionProvider.ts`, `web/src/views/SessionDetail.tsx`,
+`web/src/views/ScreenTab.tsx`, `web/src/testutils/sessionDetail.fixture.ts` (test-only).
+**Evidence:** Export-vs-CLI parity (871 messages, identical tokens/cost, 11 children);
+Go/web suites green.
 
 ---
 

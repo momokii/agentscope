@@ -23,6 +23,7 @@
 | — | Newest-turn error truth | `b595687` |
 | — | Cookie SSE + message-level metrics + Projects | `07705be` |
 | — | Local-midnight cost, pane-based presence, TZ forwarding | `6a3fc5d`, `6f72903` |
+| TASK-102 | Wire SessionDetail + pane text to the live APIs — acceptance: clicking a real fleet row renders its real transcript/turns/timeline/tools/cost/raw and live pane text; unknown ids still render the empty state; fixture tests keep passing (fixture provider remains test-only) | `GET /api/sessions/:id/export` + **Live pane** tab (`/api/sessions/:id/screen`) shipped; `go test -count=1 ./...`, `npm test --prefix web -- --run`, `npm run lint --prefix web`; live export-vs-CLI parity (871 messages, identical tokens/cost, 11 children) |
 
 Verify the fleet baseline with:
 
@@ -47,22 +48,6 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 - **Security:** agents must not kill live sessions to fabricate the matrix.
 
 ## BACKLOG
-
-### TASK-102: Wire SessionDetail + pane text to the live APIs
-- **Priority:** High (handoff-truth gap) | **Complexity:** M | **Status:** TODO
-- **Depends On:** none; backend routes already serve live data
-- **Scope:** implement a fetch-backed `SessionDataProvider` for
-  `GET /api/sessions/:id` (+ `/tools` where needed) and swap
-  `fixtureProvider` in `web/src/views/SessionDetail.tsx`. Map the API's
-  `SessionDetailResponse` (`session`, `messages`, `todos`, `children`) into the existing
-  `ExportSession` view shape without changing the view contract. Add a view for
-  `GET /api/sessions/:id/screen` (200 text/plain; render the 409 DB-only notice
-  honestly).
-- **Acceptance:** clicking a real fleet row renders its real transcript/turns/
-  timeline/tools/cost/raw and live pane text; unknown ids still render the empty state;
-  fixture tests keep passing (fixture provider remains test-only).
-- **Verify:** `npm test --prefix web -- --run`; manual click-through on a live session.
-- **Security:** read-only GET only; no new auth headers (cookie/Basic already cover it).
 
 ### TASK-103: Deferred actions wave (abort/resurrect)
 - **Priority:** Low | **Complexity:** L | **Status:** BLOCKED on design

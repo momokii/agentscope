@@ -13,8 +13,9 @@ React SPA) deployed as one Docker container behind `tailscale serve`.
 - Live state: `state/CURRENT_STATUS.md`
 - Work board: `state/TASK_QUEUE.md`
 - Plan: `.omo/plans/opencode-dashboard.md`
-- Known gap: the SPA `SessionDetail` still reads a fixture provider even though the
-  backend detail API is live (see `TASK_QUEUE.md` TASK-102).
+- Drill-down is live via `/api/sessions/:id/export` and the Live pane tab
+  (`/api/sessions/:id/screen`); the fixture is test-only. TASK-102 is DONE (see
+  `TASK_QUEUE.md`).
 
 ## Repository at a Glance
 

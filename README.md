@@ -2,9 +2,9 @@
 
 Single-container, read-only monitoring dashboard for opencode agent sessions running on one VM (opencode inside zellij panes, reached via tailscale). Open one URL and see every session's status (running / idle / waiting-input / error / archived), tokens/cost, and directory-level projects — with zero ability to leak credentials and zero public exposure.
 
-**Scope caveat (read this before demoing):** fleet rows, KPIs, projects and the event ticker are live in the SPA. Two gaps: (1) the in-app drill-down tabs (Transcript/Turns/Timeline/Tools/Cost/Raw) still render a committed fixture even though the backend `GET /api/sessions/:id` serves live data; (2) the live pane-text endpoint (`/api/sessions/:id/screen`) is implemented server-side but has no SPA view yet. See [Known limitations](#known-limitations).
+**Scope caveat (read this before demoing):** fleet rows, KPIs, projects, the event ticker, and session drill-down are live in the SPA. `GET /api/sessions/:id/export` returns the real session plus children (export-shaped), and the **Live pane** tab calls `GET /api/sessions/:id/screen` on view (409 + `{db_only,hint}` when a session has no pane). See [Known limitations](#known-limitations).
 
-**Operator story:** you have three opencode TUIs burning tokens across projects and no idea which one is stuck waiting on you. You open the dashboard, the Projects landing ranks folders by live presence, you drill into the folder and the fleet table shows every session with live status plus any orphan (opencode running outside zellij), and the stuck one glows amber waiting-input — all without touching `auth.json`, provider keys, or the public internet. Pane text is available from the screen API; the transcript tabs are fixture-backed in this build (see the caveat above).
+**Operator story:** you have three opencode TUIs burning tokens across projects and no idea which one is stuck waiting on you. You open the dashboard, the Projects landing ranks folders by live presence, you drill into the folder and the fleet table shows every session with live status plus any orphan (opencode running outside zellij), and the stuck one glows amber waiting-input — all without touching `auth.json`, provider keys, or the public internet. The transcript tabs render live export data and pane text is available from the Live pane tab.
 
 ## 60-second quickstart
 
@@ -12,7 +12,7 @@ Single-container, read-only monitoring dashboard for opencode agent sessions run
 ./deploy.sh            # one command: prereqs → build → up → verified banner
 ```
 
-Open the printed URL (`http://127.0.0.1:8080` by default). You should see the **Projects** landing (one ranked card per directory with live presence and session counts), a KPI strip (active / waiting-input / tokens-hr / cost today / cost total / errors / live procs / live panes / metrics age / SSE dot), and a live event ticker. Click a project to drill into its Fleet table (status chips, recency buckets, pagination), then a row for the session view (detail tabs are fixture-backed in this build). Empty lists are fine on a host with no opencode running. Teardown: `./deploy.sh --down`.
+Open the printed URL (`http://127.0.0.1:8080` by default). You should see the **Projects** landing (one ranked card per directory with live presence and session counts), a KPI strip (active / waiting-input / tokens-hr / cost today / cost total / errors / live procs / live panes / metrics age / SSE dot), and a live event ticker. Click a project to drill into its Fleet table (status chips, recency buckets, pagination), then a row for the session view (detail tabs and the Live pane tab render live data; unknown ids show an empty state). Empty lists are fine on a host with no opencode running. Teardown: `./deploy.sh --down`.
 
 To expose it on your tailnet afterwards: `tailscale serve --bg --https=443 http://127.0.0.1:8080` (serve, never funnel — see security).
 
@@ -31,7 +31,8 @@ To expose it on your tailnet afterwards: `tailscale serve --bg --https=443 http:
 - **Live updates:** SSE snapshot stream with reconnect/backoff/resume, a stale/paused
   chip, a KPI strip, and an event ticker.
 - **Session view:** Transcript / Turns / Timeline / Tools / Cost / Raw tabs plus a
-  Subagents panel — **fixture-backed in this build** (see the caveat above).
+  Subagents panel, all backed by live `/api/sessions/:id/export` data, and a **Live
+  pane** tab backed by `/api/sessions/:id/screen`.
 - **Fleet-wide analysis:** Compare 2–4 sessions and a Global timeline (all sessions).
 - **Read-only by construction:** no prompt, abort, resurrect, or shell route.
 
@@ -139,10 +140,10 @@ npm run build --prefix web        # tsc + vite build → web/dist (committed fal
 | `internal/hub/` | SSE fan-out (resume + re-sync) + REST handlers + frozen response shapes |
 | `internal/model/` | `SessionRow`, `Snapshot`, status derivation |
 | `internal/auth/` | `DASHBOARD_AUTH` gate: Basic-or-cookie-or-open, fail-closed, zero logging (test-pinned) |
-| `web/src/views/` | `Projects` (default landing), `Fleet` (filters/pagination), `SessionDetail` (6 tabs, fixture-backed), `Compare`, `GlobalTimeline` |
+| `web/src/views/` | `Projects` (default landing), `Fleet` (filters/pagination), `SessionDetail` (6 live tabs + Live pane), `Compare`, `GlobalTimeline` |
 | `web/src/components/` | KpiStrip, EventTicker, CmdBar, StatusBadge, Sparkline, status/recency filters, Pagination, SubagentPanel |
 | `web/src/lib/` | `sse.ts` transport (reconnect/backoff/resume), sorting/filtering, projects, pins, routing, formatting |
-| `web/src/testutils/` | Snapshot + `sessionDetail.fixture.ts` (current `SessionDataProvider` implementation; not live data) |
+| `web/src/testutils/` | Snapshot + `sessionDetail.fixture.ts` (test-only `SessionDataProvider` implementation) |
 | `web/dist/` | Committed SPA build (fallback so containers build without Node) |
 | `docs/` | `DOCKER_VERIFY.md` (rerun playbook) · `VM_DEPLOY.md` (VM runbook + F2 truth matrix) · `SECURITY.md` (threat model + gate checklist) · `ACTIONS_DEFERRED.md` (why v1 is read-only) |
 | `.omo/` | Work plan + research notepads (decisions, issues, runtime-observability findings) |
@@ -174,13 +175,11 @@ Read-only v1: no prompt injection path, no shell exec from the UI. Mount allowli
   sketch + open questions: `docs/ACTIONS_DEFERRED.md`.
 - **Single host.** The collector joins one host's zellij + `/proc`; there is no `host_id`
   plumbing or multi-host fan-in yet.
-- **Drill-down UI is fixture-backed.** The backend detail/tools/screen routes are live,
-  but `web/src/views/SessionDetail.tsx` still calls `fixtureProvider`; real session ids
-  render an empty detail state. Fleet rows / Projects / KPIs / event ticker are the live
-  SPA surfaces.
-- **Pane text has no SPA view.** `GET /api/sessions/:id/screen` returns live
-  `text/plain` for a live pane (409 + `{db_only,hint}` for an orphan), but no view calls
-  it yet. It is an API-only surface in this build.
+- **Drill-down is live.** `GET /api/sessions/:id/export` returns the real session plus
+  children (export-shaped), and the SPA renders it; the **Live pane** tab calls
+  `GET /api/sessions/:id/screen` on view (409 + `{db_only,hint}` when a session has no
+  pane). The fixture in `web/src/testutils/` is test-only. Expect a loading state and an
+  empty state for unknown ids.
 - **`waiting-input` is a heuristic.** opencode has no pending/permission table; the state
   means “user spoke last, nothing in flight, recent” (plus compacting).
 - **Recency window can read idle during a long silent tool call.** `ACTIVE_WINDOW` (2m)

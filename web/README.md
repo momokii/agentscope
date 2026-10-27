@@ -26,7 +26,7 @@ src/
   app.css             all component styles, var() only
   views/Projects.tsx  default landing: directory cards ranked by live presence, drill-in
   views/Fleet.tsx     fleet table (status chips, recency buckets, date filter, pagination, pins)
-  views/SessionDetail.tsx  6 tabs (Transcript/Turns/Timeline/Tools/Cost/Raw) — FIXTURE-BACKED today
+  views/SessionDetail.tsx  6 tabs (Transcript/Turns/Timeline/Tools/Cost/Raw) + Live pane; live via fetch-backed provider
   views/Compare.tsx   2–4 session comparison
   views/GlobalTimeline.tsx  all-session swimlanes
   views/SessionStub.tsx     legacy summary view (no longer routed; kept for its test)
@@ -49,13 +49,14 @@ src/
     useCommandPalette.ts  `:`/Cmd+K open-state + isTypingTarget guard
   testutils/
     fixture.ts        Snapshot fixture mirroring Go `model` json tags
-    sessionDetail.fixture.ts  current SessionDataProvider (fixture — NOT live data)
+    sessionDetail.fixture.ts  test-only SessionDataProvider fixture
 ```
 
-> **Data-seam note:** `SessionDetail.tsx` reads through `SessionDataProvider` and
-> currently uses `fixtureProvider`. The backend `GET /api/sessions/:id` is live; a
-> fetch-backed provider swap is TASK-102. Do not treat drill-down content as real
-> session data in this build.
+> **Data-seam note:** `SessionDetail.tsx` reads through `SessionDataProvider`; production
+> uses the fetch-backed `liveProvider` in `src/lib/sessionProvider.ts`, which calls
+> `GET /api/sessions/:id/export` (the **Live pane** tab calls
+> `GET /api/sessions/:id/screen` on view). The committed fixture in `testutils/` is
+> test-only.
 
 ## Keyboard map (global handler ignores inputs/textareas/selects/contentEditable)
 
@@ -69,8 +70,9 @@ src/
 
 ## Extension points
 
-- **Live drill-down:** replace `fixtureProvider` with a fetch-backed
-  `SessionDataProvider` (TASK-102). The backend route and response shape already exist.
+- **Live drill-down (shipped):** `SessionDetail` uses the fetch-backed `liveProvider`
+  against `GET /api/sessions/:id/export`; the **Live pane** tab calls
+  `GET /api/sessions/:id/screen` on view. The fixture remains test-only.
 - **Mobile layout:** no phone-specific breakpoint is shipped; add one without
   introducing new colors (tokens only).
 - **Ticker boundary:** the ticker stays session-level by design. Per-session tool-call
