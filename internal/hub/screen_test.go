@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,7 +39,48 @@ func publishScreenSnapshot(t *testing.T, h *Hub, rows []model.SessionRow) {
 }
 
 func screenRow(id, dir string) model.SessionRow {
-	return model.SessionRow{ID: id, Directory: dir, Status: model.SessionIdle, Model: "m"}
+	return model.SessionRow{ID: id, Directory: dir, Status: model.SessionIdle, Model: "m",
+		Pane: model.PaneInfo{CWD: dir}}
+}
+
+func Test_Screen_nonclaimant_returns_409_naming_owner(t *testing.T) {
+	// Given: an idle session sharing /proj/x with a live claimant, but
+	// holding no pane claim itself (the fleet's newest-first rule).
+	cfg := defaultTestConfig()
+	s, h, baseURL := testServer(t, cfg)
+	fake := &fakeScreen{text: "must never be called"}
+	s.SetScreenSource(fake)
+	owner := screenRow("ses_owner", "/proj/x")
+	owner.UpdatedRelativeMs = 1_000
+	other := screenRow("ses_other", "/proj/x")
+	other.UpdatedRelativeMs = 60_000
+	other.Pane = model.PaneInfo{}
+	publishScreenSnapshot(t, h, []model.SessionRow{owner, other})
+
+	// When
+	status, _, body := getScreen(t, baseURL+"/api/sessions/ses_other/screen")
+
+	// Then: 409 DB-only naming the owner; the dump backend stays untouched.
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (body %q)", status, body)
+	}
+	var got struct {
+		Error  string `json:"error"`
+		DBOnly bool   `json:"db_only"`
+		Hint   string `json:"hint"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("409 body is not JSON: %v (%q)", err, body)
+	}
+	if got.Error != "no live pane" || !got.DBOnly {
+		t.Fatalf("409 body = %+v, want DB-only notice", got)
+	}
+	if !strings.Contains(got.Hint, "ses_owner") {
+		t.Fatalf("409 hint should name the pane owner, got %q", got.Hint)
+	}
+	if len(fake.dirs) != 0 {
+		t.Fatalf("non-claimant must never reach the dump backend, got %d calls", len(fake.dirs))
+	}
 }
 
 func getScreen(t *testing.T, url string) (int, http.Header, []byte) {

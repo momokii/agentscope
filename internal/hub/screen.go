@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -71,13 +72,11 @@ func (s *Server) handleSessionScreen(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusServiceUnavailable, "no snapshot")
 		return
 	}
-	var directory string
-	var orphan bool
-	var harness model.Harness
+	var self model.SessionRow
 	var found bool
 	for _, row := range snap.Sessions {
 		if row.ID == id {
-			directory, orphan, harness, found = row.Directory, row.Orphan, row.Harness, true
+			self, found = row, true
 			break
 		}
 	}
@@ -85,11 +84,18 @@ func (s *Server) handleSessionScreen(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusNotFound, "unknown session")
 		return
 	}
-	if orphan {
-		writeOrphanScreen(w)
+	// Claimant-only screen: the snapshot join awards each (directory,
+	// harness) pane to exactly one session. Serving the directory pane
+	// for a non-claimant would display ANOTHER session's (or a plain
+	// shell's) text as this session's live pane — a lie the fleet's
+	// orphan/Pane fields already let us refuse. Only the claimant row
+	// (live, non-exited pane claim) reaches dump-screen; everyone else
+	// gets the honest 409, naming the owner when one exists.
+	if self.Orphan || self.Pane.CWD == "" || self.Pane.Exited {
+		writeOrphanScreenWithOwner(w, snap.Sessions, self)
 		return
 	}
-	pane, text, err := s.screen.DumpSessionScreen(r.Context(), directory, harness, parseScreenFull(r))
+	pane, text, err := s.screen.DumpSessionScreen(r.Context(), self.Directory, self.Harness, parseScreenFull(r))
 	if err != nil {
 		switch {
 		case errors.Is(err, runtime.ErrNoLivePane), errors.Is(err, runtime.ErrPaneGone):
@@ -123,10 +129,33 @@ func parseScreenFull(r *http.Request) bool {
 
 // writeOrphanScreen sends the 409 DB-only notice for orphan sessions.
 func writeOrphanScreen(w http.ResponseWriter) {
+	writeOrphanScreenHint(w, orphanScreenHint)
+}
+
+// writeOrphanScreenWithOwner names the session that DOES hold this
+// (directory, harness) pair's live pane, when the snapshot knows one — so
+// the viewer can navigate to the owner instead of staring at a dead end.
+// The shape is unchanged (hint stays free text); empty owner keeps the
+// fixed hint byte-for-byte.
+func writeOrphanScreenWithOwner(w http.ResponseWriter, rows []model.SessionRow, self model.SessionRow) {
+	hint := orphanScreenHint
+	for _, row := range rows {
+		if row.ID == self.ID || row.Orphan || row.Pane.CWD == "" || row.Pane.Exited {
+			continue
+		}
+		if filepath.Clean(row.Directory) == filepath.Clean(self.Directory) && row.Harness == self.Harness {
+			hint = "session has no live pane of its own; the directory's live pane belongs to session " + row.ID
+			break
+		}
+	}
+	writeOrphanScreenHint(w, hint)
+}
+
+func writeOrphanScreenHint(w http.ResponseWriter, hint string) {
 	payload, err := json.Marshal(orphanScreenBody{
 		Error:  "no live pane",
 		DBOnly: true,
-		Hint:   orphanScreenHint,
+		Hint:   hint,
 	})
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "internal")
