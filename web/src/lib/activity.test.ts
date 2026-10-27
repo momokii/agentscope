@@ -129,6 +129,9 @@ describe("diffSnapshots", () => {
     const filler = Array.from({ length: ACTIVITY_RING_CAP + 10 }, (_, i) => ({
       kind: "status" as const,
       sessionId: `ses_fill${i}`,
+      sessionTitle: `fill ${i}`,
+      project: "fill-proj",
+      harness: "opencode" as const,
       text: `ses_fill${i} idle → running`,
       glyph: "●",
       seq: 100 + i,

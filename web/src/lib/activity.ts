@@ -11,7 +11,7 @@
  * top token/cost movers) and must NEVER fabricate tool names.
  */
 
-import type { SessionRow, Snapshot } from "./sse";
+import type { Harness, SessionRow, Snapshot } from "./sse";
 import { formatCompact, formatUSD } from "./format";
 
 /** Ring capacity: newest-first, oldest evicted past this length. */
@@ -43,12 +43,27 @@ export type ActivityKind =
 export interface ActivityEvent {
   kind: ActivityKind;
   sessionId: string;
+  /** Owning session title (link label + context). */
+  sessionTitle: string;
+  /** Owning project (directory basename) for fleet-wide context. */
+  project: string;
+  /** Owning harness (opencode/pi) for mixed-fleet context. */
+  harness: Harness;
   /** Session-level one-liner, e.g. "ses_abc running → idle · +12.4k tokens". */
   text: string;
   /** Glyph per DESIGN section 6 (● ◌ ▲ ✕ ▪ ◉ +). */
   glyph: string;
   /** Snapshot seq that produced this event (relative-time anchor). */
   seq: number;
+}
+
+/** Source context shared by every event push (one row, one owner). */
+function sourceOf(row: SessionRow): Pick<ActivityEvent, "sessionTitle" | "project" | "harness"> {
+  return {
+    sessionTitle: row.title,
+    project: row.project,
+    harness: row.harness ?? "opencode",
+  };
 }
 
 function glyphFor(kind: ActivityKind, status?: string): string {
@@ -107,6 +122,7 @@ export function diffSnapshots(
       events.push({
         kind: "appeared",
         sessionId: row.id,
+        ...sourceOf(row),
         text: `${row.id} appeared · ${row.status}`,
         glyph: glyphFor("appeared"),
         seq: next.seq,
@@ -117,6 +133,7 @@ export function diffSnapshots(
       events.push({
         kind: "status",
         sessionId: row.id,
+        ...sourceOf(row),
         text: `${row.id} ${old.status} → ${row.status}`,
         glyph: glyphFor("status", row.status),
         seq: next.seq,
@@ -125,6 +142,7 @@ export function diffSnapshots(
         events.push({
           kind: "waiting-raised",
           sessionId: row.id,
+          ...sourceOf(row),
           text: `${row.id} needs input ▲`,
           glyph: glyphFor("waiting-raised"),
           seq: next.seq,
@@ -134,6 +152,7 @@ export function diffSnapshots(
         events.push({
           kind: "waiting-cleared",
           sessionId: row.id,
+          ...sourceOf(row),
           text: `${row.id} input cleared ◌`,
           glyph: glyphFor("waiting-cleared"),
           seq: next.seq,
@@ -143,6 +162,7 @@ export function diffSnapshots(
         events.push({
           kind: "error",
           sessionId: row.id,
+          ...sourceOf(row),
           text: `${row.id} error ✕`,
           glyph: glyphFor("error"),
           seq: next.seq,
@@ -157,6 +177,7 @@ export function diffSnapshots(
         events.push({
           kind: "completed",
           sessionId: row.id,
+          ...sourceOf(row),
           text: `${row.id} running → idle · +${formatCompact(delta)} tokens`,
           glyph: glyphFor("completed"),
           seq: next.seq,
@@ -170,6 +191,7 @@ export function diffSnapshots(
       events.push({
         kind: "disappeared",
         sessionId: row.id,
+        ...sourceOf(row),
         text: `${row.id} disappeared`,
         glyph: glyphFor("disappeared"),
         seq: next.seq,
@@ -190,6 +212,7 @@ export function diffSnapshots(
     events.push({
       kind: "tokens-mover",
       sessionId: m.row.id,
+      ...sourceOf(m.row),
       text: `${m.row.id} +${formatCompact(m.delta)} tokens`,
       glyph: glyphFor("tokens-mover"),
       seq: next.seq,
@@ -209,6 +232,7 @@ export function diffSnapshots(
     events.push({
       kind: "cost-mover",
       sessionId: m.row.id,
+      ...sourceOf(m.row),
       text: `${m.row.id} +${formatUSD(m.delta)} cost`,
       glyph: glyphFor("cost-mover"),
       seq: next.seq,

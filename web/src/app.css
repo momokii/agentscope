@@ -729,6 +729,45 @@ a:focus-visible {
   white-space: nowrap;
 }
 
+.ticker-session {
+  color: var(--ink-100);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.ticker-source {
+  margin-left: auto;
+  color: var(--ink-400);
+  font-size: var(--fs-11);
+  white-space: nowrap;
+  flex: none;
+}
+
+.ticker-pages {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--ink-400);
+}
+
+.ticker-page-btn {
+  background: var(--ink-800);
+  border: var(--border);
+  border-radius: var(--radius-chip);
+  color: var(--ink-200);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  padding: 0 6px;
+}
+
+.ticker-page-btn:disabled {
+  opacity: 0.4;
+}
+
 .ticker-more {
   display: block;
   margin: 0 12px 8px;
