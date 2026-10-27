@@ -37,6 +37,7 @@ import type { FleetQuery } from "../lib/routing";
 import { formatAge, formatCompact, formatUSD } from "../lib/format";
 import { resolveProjectHeader } from "../lib/projects";
 import HarnessBadge from "../components/HarnessBadge";
+import DataGuide from "../components/DataGuide";
 import HarnessFilterBar, {
   HARNESS_FILTER_LABELS,
 } from "../components/HarnessFilterBar";
@@ -435,6 +436,7 @@ export default function Fleet({
             aria-label="Filter fleet sessions"
           />
         </label>
+        <DataGuide />
         <button
           type="button"
           className="live-toggle"

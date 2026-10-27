@@ -599,6 +599,66 @@ a:focus-visible {
   color: var(--ink-200);
 }
 
+/* ---------- data guide ---------- */
+
+.data-guide {
+  display: inline-flex;
+  align-items: center;
+}
+
+.guide-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--ink-800);
+  border: var(--border);
+  border-radius: var(--radius-chip);
+  color: var(--ink-200);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.guide-toggle-on {
+  background: var(--wash-accent);
+  color: var(--ink-100);
+}
+
+.guide-panel {
+  border-bottom: var(--border);
+  padding: 8px 12px;
+}
+
+.guide-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.guide-facts > div {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 8px;
+  font-size: var(--fs-12);
+}
+
+.guide-facts dt {
+  color: var(--ink-100);
+  text-transform: uppercase;
+  font-size: var(--fs-11);
+  letter-spacing: var(--label-tracking);
+}
+
+.guide-facts dd {
+  margin: 0;
+  color: var(--ink-200);
+  font-family: var(--font-sans);
+}
+
 /* ---------- SSE dot ---------- */
 
 .sse-dot {

@@ -16,6 +16,7 @@ import {
   sortProjects,
 } from "../lib/projects";
 import { buildProjectHash } from "../lib/routing";
+import DataGuide from "../components/DataGuide";
 import KpiStrip from "../components/KpiStrip";
 import Pagination from "../components/Pagination";
 import RelativeTime from "../components/RelativeTime";
@@ -211,6 +212,7 @@ export default function Projects({
             );
           })}
         </div>
+        <DataGuide />
         <button
           type="button"
           className="live-toggle"
