@@ -41,3 +41,27 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
   `.claude/README.md`, `README.md`, `web/README.md`, `docs/{VM_DEPLOY,DOCKER_VERIFY,SECURITY}.md`.
   Recorded the SPA detail fixture gap and corrected the test baseline to Go 229/10,
   web 193/26.
+
+## 2026-10-27 — Wave 5 multi-harness (pi monitoring) + global pi default model
+- P1 `e2da795`: `SessionRow.Harness` + `internal/pi` JSONL reader (mtime cache,
+  shared DeriveStatus gate, fork children, corrupt-file isolation).
+- P2 `91ffcb4`: `ScanAgents`, pane `Harness()` from `pane_command` (never titles),
+  per-(directory,harness) claims, harness-scoped screen resolve.
+- P3 `ddda0f2`: collector merge pre-Enrich + pi-aware watermark signature +
+  `PI_DATA_DIR` (nil-safe; opencode-only hosts byte-identical).
+- P4 `fe5c707`: TS mirror + boundary normalization, OC/π chips, harness filter
+  (`?harness=`), pi rows → Live pane tab; 215 web tests green.
+- P5 `d936e6b`: compose `:ro` sessions mount, SECURITY §2/§3/§5, README,
+  `.env.example` rewrite; fixed SessionDetail pi screen-tab fallback (null-data
+  empty state had made the screen tab unreachable) after review.
+- Redeployed `:8081` (clean rebuild after `--down`; note: healthy-stack re-runs
+  skip rebuild by design): fleet 1966 opencode + 6 pi, live pi running + pane
+  claimed, screen 200, export 404 (P6), 5-mount allowlist verified.
+- Whole-implementation check: full gates green (go build/vet/test, tsc, vitest
+  217/217, token gate, security greps rows 1–4); one web flake observed once,
+  green on 3 consecutive reruns; SECURITY row-2 note corrected for pre-existing
+  `credentials: "same-origin"` fetch hits.
+- Global pi default model switched `kimi-k3` → `muse-spark-1.3-contributor`
+  (`~/.pi/agent/settings.json`, same `opencode-go` provider; backup
+  `/tmp/settings.json.bak`). Live sessions keep their own model; new sessions
+  pick it up.

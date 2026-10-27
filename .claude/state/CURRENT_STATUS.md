@@ -1,10 +1,10 @@
 # CURRENT_STATUS
 
 ## Project Phase
-v1 feature-complete + **Wave 5 multi-harness (opencode + pi)** shipped on `main`.
-Single-host, read-only monitoring is live for both harnesses. Still open: the
-human-run **F2 VM truth matrix** (`docs/VM_DEPLOY.md` §3; plan F2 is `[~]`) and
-the P6 pi transcript drill-down (backlog).
+v1 feature-complete + **Wave 5 multi-harness (opencode + pi)** shipped and
+redeployed (`:8081`, fleet 1966 opencode + 6 pi, all gates green). Still open:
+the human-run **F2 VM truth matrix** (`docs/VM_DEPLOY.md` §3; plan F2 is `[~]`)
+and the P6 pi transcript drill-down (backlog).
 
 ## Completed
 - [x] Collector: 10s poll, batched indexed DB reads, incremental event tail, per-source

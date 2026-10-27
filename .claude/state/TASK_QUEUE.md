@@ -70,6 +70,7 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 - **Verify:** `npm test --prefix web -- --run`, `npm run lint --prefix web`, token gate
 
 ### TASK-205: Wave 5 P5 — deploy, docs, redeploy (DONE 2026-10-27)
+- **Evidence:** compose `:ro` sessions mount + `PI_DATA_DIR`; SECURITY §2/§3/§5, README, `.env.example`; redeployed `:8081` — fleet `1966 opencode + 6 pi`, live pi `running` + pane claimed, screen 200 (pane 3), export 404, 5-mount allowlist, SSE carries harness
 - **Priority:** High | **Complexity:** S | **Status:** TODO
 - **Depends On:** TASK-204
 - **Scope:** compose `:ro` sessions mount + `PI_DATA_DIR`; SECURITY.md §2/§3; README; `.env.example`; full gates; `./deploy.sh` redeploy with live evidence.

@@ -189,6 +189,46 @@ Go/web suites green.
 
 ## Template (copy for every new decision)
 
+---
+**Decision:** Fleet rows carry Harness; presence claims key on (directory, harness)
+**Date:** 2026-10-27
+**Context:** Wave 5 adds pi sessions to the same fleet; both agents can be
+live in one directory (different processes).
+**Rationale:** Additive `SessionRow.Harness` (opencode default-normalized,
+serialized `harness`); runtime claims per pair so panes/orphans never cross
+harnesses; global counts stay combined. Backend normalizes empty→opencode;
+TS mirrors with the same boundary rule.
+**Alternatives Rejected:** Separate pi view (splits the operator story);
+harness-agnostic claims (an opencode pane would mask a live pi session).
+**Security Implications:** None (read-only; pi `auth.json` never mounted).
+**Impact:** `internal/{model,db,pi,runtime,collector,hub}`, `web/src` fleet/detail,
+compose mount, SECURITY.md §2/§3/§5.
+
+---
+**Decision:** Trailing pi user message derives running, not waiting-input
+**Date:** 2026-10-27
+**Context:** Pi never persists streaming ("pending") messages, so an open
+turn sits at user-last for the whole generation.
+**Rationale:** Marking it waiting-input would paint every active generation
+amber; an open turn with no completed reply is in-flight work by definition.
+Matches the opencode heuristic's direction (user spoke last + recent).
+**Alternatives Rejected:** Mirroring opencode's latest-user→waiting-input
+literally (misleading for pi's persistence model).
+**Security Implications:** None.
+**Impact:** `internal/pi/parse.go` signalsOf.
+
+---
+**Decision:** Pane classification reads pane_command, never pane titles
+**Date:** 2026-10-27
+**Context:** Pi sets its own pane title (`π - <dir>` + spinner) but titles
+are undocumented UI; `list-panes -j` reports `pane_command` + `pane_cwd`.
+**Rationale:** Foreground-process matching is observed ground truth and
+survives title-format drift; unknown foregrounds stay legacy-claimable.
+**Alternatives Rejected:** Title regex (`π -` prefix — breaks on format drift
+or basename collisions).
+**Security Implications:** None.
+**Impact:** `internal/runtime/{zellij,runtime,screen}.go`.
+
 ```markdown
 ---
 **Decision:** [What was decided]
