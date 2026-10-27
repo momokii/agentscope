@@ -5,6 +5,8 @@
  * carry the numbers — the shape is never the only signal.
  */
 
+import { useState } from "react";
+
 import { ratePeak } from "../lib/rate";
 import { formatCompact } from "../lib/format";
 
@@ -72,10 +74,16 @@ export interface RateChartProps {
   label: string;
 }
 
+
+
 export default function RateChart({ values, label }: RateChartProps) {
   const peak = ratePeak(values);
   const title = `${label} token rate (tokens/min per tick): peak ${formatCompact(peak)}`;
   const dots = rateDots(values);
+  // Hovered/focused sample index; the readout below mirrors it in plain
+  // text because native <title> tooltips are hover-only and tiny-target.
+  const [hover, setHover] = useState<number | null>(null);
+  const hovered = hover !== null ? dots[hover] : undefined;
   // Axis labels live in HTML (never in the stretched SVG): each sample is
   // one poll tick, so the axis reads in ticks, honestly — not wall time.
   const axis =
@@ -86,7 +94,11 @@ export default function RateChart({ values, label }: RateChartProps) {
     <figure className="rate-chart" role="img" aria-label={`${title}; ${axis}`}>
       <figcaption className="rate-caption mono">
         <span>{label} token rate</span>
-        <span className="rate-peak">peak {formatCompact(peak)}/min</span>
+        <span className="rate-peak" aria-live="polite">
+          {hovered !== undefined
+            ? `${hovered.label}`
+            : `peak ${formatCompact(peak)}/min`}
+        </span>
       </figcaption>
       <svg
         className="rate-svg"
@@ -97,9 +109,21 @@ export default function RateChart({ values, label }: RateChartProps) {
         <path className="rate-area" d={rateAreaPath(values)} />
         <path className="rate-line" d={rateLinePath(values)} fill="none" />
         {dots.map((dot, i) => (
-          <circle key={i} className="rate-dot" cx={dot.x} cy={dot.y} r={2}>
-            <title>{dot.label}</title>
-          </circle>
+          <g
+            key={i}
+            tabIndex={0}
+            role="img"
+            aria-label={dot.label}
+            onMouseEnter={() => setHover(i)}
+            onMouseLeave={() => setHover(null)}
+            onFocus={() => setHover(i)}
+            onBlur={() => setHover(null)}
+          >
+            <circle className="rate-hit" cx={dot.x} cy={dot.y} r={8} />
+            <circle className="rate-dot" cx={dot.x} cy={dot.y} r={2}>
+              <title>{dot.label}</title>
+            </circle>
+          </g>
         ))}
       </svg>
       {values.length > 1 && (

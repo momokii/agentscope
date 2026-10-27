@@ -48,6 +48,18 @@ describe("RateChart", () => {
     expect(screen.getByText("latest")).toBeDefined();
     expect(screen.getByText(/1 sample ≈ 1 poll tick/)).toBeDefined();
   });
+
+  it("mirrors the hovered dot in the caption readout", async () => {
+    const { container } = render(<RateChart values={[10, 20, 30]} label="P" />);
+    const dots = container.querySelectorAll("g[role='img']");
+    expect(dots).toHaveLength(3);
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.mouseEnter(dots[1]);
+    const readout = document.querySelector(".rate-peak");
+    expect(readout?.textContent).toBe("sample 2 of 3 · 20/min");
+    fireEvent.mouseLeave(dots[1]);
+    expect(readout?.textContent).toBe("peak 30/min");
+  });
 });
 
 describe("ProjectInsight", () => {

@@ -548,6 +548,20 @@ a:focus-visible {
   opacity: 0.85;
 }
 
+/* Invisible hover/focus target: dots are 2px, fingers and cursors need 8px. */
+.rate-hit {
+  fill: transparent;
+}
+
+.rate-chart g:focus {
+  outline: none;
+}
+
+.rate-chart g:focus .rate-dot {
+  stroke: var(--ink-100);
+  stroke-width: 1.5;
+}
+
 .rate-axis text {
   fill: var(--ink-400);
   font-family: var(--font-mono);
