@@ -84,8 +84,10 @@ func Test_Enrich_ProcsByDir_falls_back_to_pane_presence_when_proc_cwd_unreadable
 	if liveProcs != 2 {
 		t.Errorf("LiveCounts procs = %d, want the real /proc count 2", liveProcs)
 	}
-	if livePanes != 4 {
-		t.Errorf("LiveCounts panes = %d, want 4 non-exited panes with CWD", livePanes)
+	// Agent panes only: the live zsh shell pane is excluded so the KPI
+	// reconciles with the per-project pane columns.
+	if livePanes != 3 {
+		t.Errorf("LiveCounts panes = %d, want 3 live agent panes (shell excluded)", livePanes)
 	}
 }
 

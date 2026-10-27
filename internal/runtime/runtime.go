@@ -208,7 +208,15 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 	if paneErr == nil {
 		for _, np := range livePanes {
 			if !np.pane.Exited {
-				liveCount++
+				// KPI live_panes counts agent panes only (opencode/pi
+				// foregrounds): plain shells and plugins carry no
+				// session, so including them made the KPI disagree
+				// with the per-project pane columns (which are
+				// agent-scoped). Session-less directories with an
+				// agent pane still count here — the KPI is fleet-wide.
+				if np.pane.Harness() != "" {
+					liveCount++
+				}
 				// Container fallback counts agent panes of either harness
 				// (presence, not an exact count — see below).
 				if np.pane.CWD != "" && np.pane.Harness() != "" {
@@ -323,10 +331,12 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 }
 
 // LiveCounts reports the last observed ground truth: live (non-exited)
-// zellij panes and alive agent processes (opencode + pi combined). Zero
-// before the first successful Enrich; last-known per source across infra
-// faults (a failed source never clobbers the other source's good
-// observation).
+// zellij panes running a known agent (opencode/pi) and alive agent
+// processes (both harnesses combined). Plain shells and plugins are
+// excluded from the pane count so the KPI reconciles with the per-project
+// pane columns. Zero before the first successful Enrich; last-known per
+// source across infra faults (a failed source never clobbers the other
+// source's good observation).
 func (s *Source) LiveCounts() (panes int, procs int) {
 	s.countsMu.Lock()
 	defer s.countsMu.Unlock()

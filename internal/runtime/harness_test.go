@@ -212,6 +212,44 @@ const fixtureBothLivePanes = `[
    "tab_id": 0, "tab_name": "Tab #1"}
 ]`
 
+func Test_Enrich_live_shell_pane_excluded_from_counts_but_claimable(t *testing.T) {
+	// Given: one live shell pane (no agent) and one live opencode pane.
+	panesJSON := `[
+  {"id": 1, "title": "shell",
+   "terminal_command": "zsh", "pane_command": "zsh",
+   "pane_cwd": "/proj/sh", "exited": false, "exit_status": null,
+   "tab_id": 0, "tab_name": "Tab #1"},
+  {"id": 2, "title": "OC | x",
+   "terminal_command": "opencode", "pane_command": "opencode",
+   "pane_cwd": "/proj/oc", "exited": false, "exit_status": null,
+   "tab_id": 0, "tab_name": "Tab #1"}
+]`
+	f := &fakeZellij{
+		sessionsOut: "main\n",
+		panes:       map[string]string{"main": panesJSON},
+	}
+	src := testSource(t, f, []string{"main"}, nil)
+
+	// When
+	got, err := src.Enrich(context.Background(), []model.SessionRow{
+		row("ses-sh", "/proj/sh"),
+		row("ses-oc", "/proj/oc"),
+	})
+
+	// Then: the shell pane still satisfies the legacy claim, but the
+	// fleet-wide pane count covers agent panes only.
+	if err != nil {
+		t.Fatalf("Enrich: %v", err)
+	}
+	byID := map[string]model.SessionRow{got[0].ID: got[0], got[1].ID: got[1]}
+	if byID["ses-sh"].Pane.CWD != "/proj/sh" {
+		t.Errorf("shell pane must stay legacy-claimable: %+v", byID["ses-sh"].Pane)
+	}
+	if panes, _ := src.LiveCounts(); panes != 1 {
+		t.Errorf("LiveCounts panes = %d, want 1 (shell excluded)", panes)
+	}
+}
+
 func Test_ResolvePane_harness_disambiguates_shared_directory(t *testing.T) {
 	// Given: /proj/both hosts a live opencode pane (id 11) and a live pi
 	// pane (id 12).
