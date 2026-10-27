@@ -37,6 +37,25 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 
 ## NEXT
 
+### TASK-301: Screen serves only the pane claimant (correctness fix)
+- **Priority:** High | **Complexity:** S | **Status:** TODO
+- **Scope:** `/screen` returns 409 DB-only for snapshot rows with no live pane claim (`Pane.CWD == ""`/exited/orphan) instead of resolving the directory's *other* session pane; 409 hint names the owning session when one exists.
+- **Acceptance:** non-claimant session → 409 (was 200 with чужой pane text); claimant path unchanged.
+- **Verify:** `go test -count=1 ./internal/hub/`, live curl proof
+- **Security:** read-only, no shape change (hint is free text).
+
+### TASK-302: Pi message-level metrics (tokens/hr + cost_today cover pi)
+- **Priority:** High | **Complexity:** M | **Status:** TODO
+- **Scope:** `internal/pi` records usage events (ts/tokens/cost); new `ports.PiReader.PiMessageMetrics` mirroring DB midnight/60s semantics; collector refresher combines both samples (either error → last-good).
+- **Acceptance:** pi-only activity moves `tokens_per_hour`/`cost_today`; opencode-only hosts unchanged.
+- **Verify:** `go test -count=1 ./internal/pi/ ./internal/collector/` + live proof
+
+### TASK-303: Project + fleet diagrams (real data only)
+- **Priority:** Medium | **Complexity:** M | **Status:** TODO
+- **Scope:** project drill-in header gains status distribution + totals + aggregate token-rate sparkline (element-wise spark sums); fleet gains a throughput strip; hand-rolled SVG, DESIGN tokens only, no new hues.
+- **Acceptance:** numbers reconcile with fleet rows; token gate clean.
+- **Verify:** `npm test --prefix web -- --run`, `npm run lint --prefix web`
+
 ### TASK-201: Wave 5 P1 — pi source + Harness model field (DONE 2026-10-27)
 - **Evidence:** `internal/pi/` (reader/parse/tests), `SessionRow.Harness` opencode-normalized; `go test ./internal/pi/ ./internal/model/` green
 - **Priority:** High | **Complexity:** M | **Status:** TODO

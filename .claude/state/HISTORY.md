@@ -75,3 +75,17 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
   password handed to operator, never committed). Live proofs: 401 without
   auth on both 127.0.0.1 and the tailnet IP; 200 + full fleet
   (1966 opencode + 6 pi) with auth. Now on `:8082` (8080/8081 squatted).
+
+## 2026-10-27 — Validity audit + screen fix + pi metrics + diagrams (operator round)
+- Validity audit: `buildProjects`/`buildKPIs` already RawCost-based (no double
+  count, both harnesses); found `tokens_per_hour`/`cost_today` opencode-only.
+  Fixed in TASK-302 (pi usage events + combined refresher sample).
+- Bug: `/screen` served the directory pane for 110 non-claimant sessions
+  ( чужой pane/shell text as own Live pane). Fixed in TASK-301: claimant-only
+  200, 409 + owner hint otherwise (live proof included).
+- TASK-303: `ProjectInsight` (distribution bar + harness split + aggregate
+  token-rate area) in project drill-in; fleet throughput strip; `lib/rate`
+  sums, hand-rolled SVG, DESIGN tokens only. Web 230/230 green.
+- Redeployed `:8082` (non-loopback + auth preserved): fleet 1966+6,
+  live_processes=4 (1 opencode + 3 pi), owner-hint 409 live, claimant 200,
+  served bundle matches committed dist.
