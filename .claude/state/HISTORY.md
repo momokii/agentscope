@@ -65,3 +65,13 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
   (`~/.pi/agent/settings.json`, same `opencode-go` provider; backup
   `/tmp/settings.json.bak`). Live sessions keep their own model; new sessions
   pick it up.
+
+## 2026-10-27 — Redeploy non-loopback (operator-requested tailnet access)
+- User reported `http://100.124.184.116:8081` (VM tailnet IP) unreachable after
+  the Wave 5 redeploy: it had used the default loopback-only bind, while the
+  previous setup bound non-loopback. Confirmed `.116` is this VM's tailnet IP
+  (tailscale exit-node container) with no `tailscale serve` configured.
+- Redeployed `BIND_ADDR=0.0.0.0` + generated `DASHBOARD_AUTH` (Basic gate;
+  password handed to operator, never committed). Live proofs: 401 without
+  auth on both 127.0.0.1 and the tailnet IP; 200 + full fleet
+  (1966 opencode + 6 pi) with auth. Now on `:8082` (8080/8081 squatted).
