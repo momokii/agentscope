@@ -274,7 +274,7 @@ func rowFixture(id string, status model.SessionStatus, total int64, cost float64
 }
 
 func newTestCollector(db *fakeDB, rt *fakeRuntime, sink *fakeSink) *Collector {
-	c, err := NewCollector(db, rt, sink, testConfig())
+	c, err := NewCollector(db, rt, sink, testConfig(), nil)
 	if err != nil {
 		panic(err)
 	}
@@ -648,7 +648,7 @@ func Test_Collector_SlowSink_never_stalls(t *testing.T) {
 	cfg := ports.Config{PollInterval: 20 * time.Millisecond}
 	db := &fakeDB{rows: []model.SessionRow{rowFixture("ses-1", model.SessionIdle, 1, 0)}, updMs: 1, evID: 1}
 	sink := &fakeSink{blockFor: 300 * time.Millisecond}
-	c, err := NewCollector(db, &fakeRuntime{}, sink, cfg)
+	c, err := NewCollector(db, &fakeRuntime{}, sink, cfg, nil)
 	if err != nil {
 		t.Fatalf("NewCollector: %v", err)
 	}
@@ -684,7 +684,7 @@ func Test_Collector_Run_stops_on_cancel(t *testing.T) {
 	// Given
 	db := &fakeDB{rows: []model.SessionRow{rowFixture("ses-1", model.SessionIdle, 1, 0)}, updMs: 1, evID: 1}
 	sink := &fakeSink{}
-	c, err := NewCollector(db, &fakeRuntime{}, sink, ports.Config{PollInterval: 10 * time.Millisecond})
+	c, err := NewCollector(db, &fakeRuntime{}, sink, ports.Config{PollInterval: 10 * time.Millisecond}, nil)
 	if err != nil {
 		t.Fatalf("NewCollector: %v", err)
 	}
@@ -726,7 +726,7 @@ func Test_NewCollector_rejects_nil_dependencies(t *testing.T) {
 		"nil runtime": {db, nil, sink},
 		"nil sink":    {db, rt, nil},
 	} {
-		if _, err := NewCollector(args.db, args.rt, args.sink, testConfig()); !errors.Is(err, ErrNilDependency) {
+		if _, err := NewCollector(args.db, args.rt, args.sink, testConfig(), nil); !errors.Is(err, ErrNilDependency) {
 			t.Errorf("%s: err = %v, want ErrNilDependency", name, err)
 		}
 	}
@@ -843,7 +843,7 @@ func Test_Collector_Status_canonicalized_through_derive(t *testing.T) {
 // Then: the 10s default applies (headroom past the old 5s constant that
 // starved every tick on the 8.2GB live db).
 func Test_Collector_DBTimeout_defaults_when_unset(t *testing.T) {
-	c, err := NewCollector(&fakeDB{}, &fakeRuntime{}, &fakeSink{}, testConfig())
+	c, err := NewCollector(&fakeDB{}, &fakeRuntime{}, &fakeSink{}, testConfig(), nil)
 	if err != nil {
 		t.Fatalf("NewCollector: %v", err)
 	}
@@ -892,7 +892,7 @@ func Test_Collector_DBTimeout_flows_to_db_calls(t *testing.T) {
 	sink := &fakeSink{}
 	cfg := testConfig()
 	cfg.DBTimeout = 60 * time.Millisecond
-	c, err := NewCollector(db, &fakeRuntime{}, sink, cfg)
+	c, err := NewCollector(db, &fakeRuntime{}, sink, cfg, nil)
 	if err != nil {
 		t.Fatalf("NewCollector: %v", err)
 	}

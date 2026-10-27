@@ -82,6 +82,10 @@ type Collector struct {
 	rt   ports.RuntimeSource
 	sink ports.SnapshotSink
 	cfg  ports.Config
+	// pi is the optional pi session source (nil = pi monitoring
+	// disabled). A nil pi keeps opencode-only hosts exactly on the old
+	// path: no extra work, no new failure modes.
+	pi ports.PiReader
 
 	clock          Clock
 	dbTimeout      time.Duration
@@ -92,6 +96,15 @@ type Collector struct {
 	havePublished bool
 	wmUpdateMs    int64
 	wmEventRowID  int64
+	// lastPiSig is the signature of the pi rows in the last published
+	// tick (empty when pi is disabled or contributed nothing). The DB
+	// watermark cannot see pi-only activity, so the skip path re-checks
+	// the (cheap, stat-cached) pi scan against this signature instead of
+	// skipping blindly.
+	lastPiSig string
+	// piWarned rate-limits the pi-unavailable notice to once per process:
+	// an opencode-only host must not log every tick.
+	piWarned atomic.Bool
 
 	prevTotals map[string]int64
 	sparks     map[string]*tokenRing
@@ -113,8 +126,10 @@ type Collector struct {
 }
 
 // NewCollector validates the ports seam (interfaces only — never sibling
-// implementations) and returns a Collector ready for Run/Tick.
-func NewCollector(db ports.DBReader, rt ports.RuntimeSource, sink ports.SnapshotSink, cfg ports.Config) (*Collector, error) {
+// implementations) and returns a Collector ready for Run/Tick. pi is the
+// optional pi session source: nil disables the pi merge (opencode-only
+// hosts), non-nil merges pi rows pre-Enrich every tick.
+func NewCollector(db ports.DBReader, rt ports.RuntimeSource, sink ports.SnapshotSink, cfg ports.Config, pi ports.PiReader) (*Collector, error) {
 	switch {
 	case db == nil:
 		return nil, fmt.Errorf("collector: db: %w", ErrNilDependency)
@@ -148,6 +163,7 @@ func NewCollector(db ports.DBReader, rt ports.RuntimeSource, sink ports.Snapshot
 		rt:              rt,
 		sink:            sink,
 		cfg:             cfg,
+		pi:              pi,
 		clock:           realClock{},
 		dbTimeout:       dbTimeout,
 		activeWindow:    activeWindow,
@@ -205,7 +221,7 @@ func (c *Collector) Tick(ctx context.Context) (bool, error) {
 	if wmErr != nil {
 		slog.ErrorContext(ctx, "collector pollstate failed", slog.Any("err", wmErr))
 	} else if c.havePublished && wmUpdateMs == c.wmUpdateMs && wmEventRowID == c.wmEventRowID &&
-		c.metricsSequence() == c.lastPublishedMetricsSeq {
+		c.metricsSequence() == c.lastPublishedMetricsSeq && c.piUnchanged(ctx) {
 		return false, nil
 	}
 
@@ -213,6 +229,17 @@ func (c *Collector) Tick(ctx context.Context) (bool, error) {
 	if sessErr != nil {
 		slog.ErrorContext(ctx, "collector db sessions failed", slog.Any("err", sessErr))
 		return c.publishStaleFrame(ctx, start)
+	}
+	piRows := c.piSessions(ctx)
+	rows = append(rows, piRows...)
+	// Harness normalization (defense in depth): the wire contract
+	// guarantees a populated harness, and both real sources set it —
+	// but a future source forgetting it must degrade to opencode, never
+	// to an empty value the UI cannot render.
+	for i := range rows {
+		if !rows[i].Harness.IsValid() {
+			rows[i].Harness = model.HarnessOpencode
+		}
 	}
 
 	enriched, enrichErr := c.enrich(ctx, rows)
@@ -264,6 +291,7 @@ func (c *Collector) Tick(ctx context.Context) (bool, error) {
 
 	c.seq = snap.Seq
 	c.havePublished = true
+	c.lastPiSig = piSignature(piRows)
 	if wmErr == nil {
 		c.wmUpdateMs = wmUpdateMs
 		c.wmEventRowID = wmEventRowID

@@ -38,6 +38,7 @@ import (
 	"opencode-dashboard/internal/collector"
 	"opencode-dashboard/internal/db"
 	"opencode-dashboard/internal/hub"
+	"opencode-dashboard/internal/pi"
 	"opencode-dashboard/internal/ports"
 	"opencode-dashboard/internal/runtime"
 )
@@ -99,12 +100,24 @@ func run(ctx context.Context) error {
 	}
 	defer func() { _ = reader.Close() }()
 
+	// Pi is best-effort presence next to the authoritative DB join: an
+	// empty PiDataDir disables the merge, and a missing/unreadable store
+	// degrades per tick (warn-once) instead of failing startup — an
+	// opencode-only host must boot exactly as before.
+	var piReader ports.PiReader
+	if cfg.PiDataDir != "" {
+		piReader = pi.NewWithWindow(cfg.PiDataDir, cfg.ActiveWindow.Milliseconds())
+		slog.Info("pi source enabled", slog.String("pi_data_dir", cfg.PiDataDir))
+	} else {
+		slog.Info("pi source disabled (PI_DATA_DIR empty)")
+	}
+
 	source := runtime.NewSource(runtime.DefaultConfig())
 	srv := hub.NewServer(cfg, hub.NewHub())
 	srv.SetScreenSource(source)
 	srv.SetDetailSource(reader)
 	srv.SetExportSource(reader)
-	col, err := collector.NewCollector(reader, source, srv.Hub(), cfg)
+	col, err := collector.NewCollector(reader, source, srv.Hub(), cfg, piReader)
 	if err != nil {
 		return fmt.Errorf("wire collector: %w", err)
 	}

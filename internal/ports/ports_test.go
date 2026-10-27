@@ -44,6 +44,30 @@ func Test_LoadConfigFromEnv_DefaultDBTimeout(t *testing.T) {
 	}
 }
 
+// Given: no PI_DATA_DIR in the environment.
+// When: config loads.
+// Then: the $HOME/.pi/agent/sessions default holds (pi enabled by
+// default; a missing store degrades per tick, never at startup).
+func Test_LoadConfigFromEnv_DefaultPiDataDir(t *testing.T) {
+	t.Setenv("PI_DATA_DIR", "")
+	t.Setenv("HOME", "/home/u")
+	cfg := LoadConfigFromEnv()
+	if cfg.PiDataDir != "/home/u/.pi/agent/sessions" {
+		t.Fatalf("default PiDataDir = %q", cfg.PiDataDir)
+	}
+}
+
+// Given: PI_DATA_DIR set explicitly (including empty to disable).
+// When: config loads.
+// Then: the value flows through unchanged; empty disables the pi merge.
+func Test_LoadConfigFromEnv_PiDataDirOverride(t *testing.T) {
+	t.Setenv("PI_DATA_DIR", "/data/pi-sessions")
+	cfg := LoadConfigFromEnv()
+	if cfg.PiDataDir != "/data/pi-sessions" {
+		t.Fatalf("PiDataDir = %q", cfg.PiDataDir)
+	}
+}
+
 // Given: DB_TIMEOUT set to a valid duration.
 // When: config loads.
 // Then: the value flows through unchanged.

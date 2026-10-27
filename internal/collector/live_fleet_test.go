@@ -30,7 +30,7 @@ func Test_Live_FleetTicks_real_reader(t *testing.T) {
 	defer func() { _ = reader.Close() }()
 
 	sink := &fakeSink{}
-	c, err := NewCollector(reader, liveRuntime{}, sink, cfg)
+	c, err := NewCollector(reader, liveRuntime{}, sink, cfg, nil)
 	if err != nil {
 		t.Fatalf("NewCollector: %v", err)
 	}
@@ -97,7 +97,7 @@ func Test_Live_StatusTruth_real_source(t *testing.T) {
 
 	src := runtime.NewSource(runtime.DefaultConfig())
 	sink := &fakeSink{}
-	c, err := NewCollector(reader, src, sink, cfg)
+	c, err := NewCollector(reader, src, sink, cfg, nil)
 	if err != nil {
 		t.Fatalf("NewCollector: %v", err)
 	}

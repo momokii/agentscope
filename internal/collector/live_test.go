@@ -241,7 +241,7 @@ func Test_Live_TwoTicks(t *testing.T) {
 	defer cancel()
 
 	sink := &fakeSink{}
-	c, err := NewCollector(&liveDBReader{dbPath: dbPath}, liveRuntime{}, sink, ports.DefaultConfig())
+	c, err := NewCollector(&liveDBReader{dbPath: dbPath}, liveRuntime{}, sink, ports.DefaultConfig(), nil)
 	if err != nil {
 		t.Fatalf("NewCollector: %v", err)
 	}
