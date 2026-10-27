@@ -89,3 +89,19 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
 - Redeployed `:8082` (non-loopback + auth preserved): fleet 1966+6,
   live_processes=4 (1 opencode + 3 pi), owner-hint 409 live, claimant 200,
   served bundle matches committed dist.
+
+## 2026-10-27 — Validity + UX round (operator review feedback)
+- TASK-311: project drill-in no longer shows the fleet-wide KPI strip (scoped
+  header + insight only). TASK-312: metrics age ticks live (snapshot age +
+  frame age); KPI min-width 136px fits full labels; delta reads "msg metrics".
+- TASK-313: per-dot tooltips + HTML tick axis on RateChart (SVG text smeared
+  under preserveAspectRatio=none — caught in screenshots, fixed, re-shot).
+- TASK-314: Projects landing gains active-since presets + 12/page pagination.
+- TASK-315: activity events carry title/project/harness (linked + right-side
+  source); ticker show-more replaced by Prev/Next paging; session links
+  de-underlined (accent on hover).
+- TASK-316: DataGuide (?) glossary in Fleet (both modes) + Projects.
+- Verified with headless-Chromium screenshots + DOM probes: KPI labels fit,
+  axis crisp, guide renders, pi screen tab live, ticker style correct,
+  deployed bundle byte-identical to committed dist.
+- Redeployed `:8082` (non-loopback + auth preserved). Web 236/236, gates green.
