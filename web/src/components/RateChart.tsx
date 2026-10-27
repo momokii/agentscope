@@ -10,6 +10,8 @@ import { formatCompact } from "../lib/format";
 
 export const RATE_WIDTH = 300;
 export const RATE_HEIGHT = 44;
+/** Axis label lane below the plot (ticks are poll ticks, not wall time). */
+export const RATE_AXIS_H = 12;
 
 /** Sample point for index i: x spreads the series, y is 0-baselined. */
 function ratePoint(values: readonly number[], peak: number, i: number): [number, number] {
@@ -46,6 +48,24 @@ export function rateAreaPath(values: readonly number[]): string {
   return `${rateLinePath(values)} L${RATE_WIDTH},${RATE_HEIGHT} L0,${RATE_HEIGHT} Z`;
 }
 
+/** Dot centers for per-sample tooltips (empty → none). */
+export function rateDots(values: readonly number[]): Array<{
+  x: number;
+  y: number;
+  label: string;
+}> {
+  if (values.length === 0) return [];
+  const peak = ratePeak(values);
+  return values.map((value, i) => {
+    const [x, y] = ratePoint(values, peak, i);
+    return {
+      x,
+      y,
+      label: `sample ${i + 1} of ${values.length} · ${formatCompact(value)}/min`,
+    };
+  });
+}
+
 export interface RateChartProps {
   values: readonly number[];
   /** Short label, e.g. "Fleet" or the project name. */
@@ -55,21 +75,42 @@ export interface RateChartProps {
 export default function RateChart({ values, label }: RateChartProps) {
   const peak = ratePeak(values);
   const title = `${label} token rate (tokens/min per tick): peak ${formatCompact(peak)}`;
+  const dots = rateDots(values);
+  const axis =
+    values.length > 1
+      ? `oldest of ${values.length} ticks → latest`
+      : "latest tick";
   return (
-    <figure className="rate-chart" role="img" aria-label={title}>
+    <figure className="rate-chart" role="img" aria-label={`${title}; ${axis}`}>
       <figcaption className="rate-caption mono">
         <span>{label} token rate</span>
         <span className="rate-peak">peak {formatCompact(peak)}/min</span>
       </figcaption>
       <svg
         className="rate-svg"
-        viewBox={`0 0 ${RATE_WIDTH} ${RATE_HEIGHT}`}
+        viewBox={`0 0 ${RATE_WIDTH} ${RATE_HEIGHT + RATE_AXIS_H}`}
         preserveAspectRatio="none"
         aria-hidden="true"
       >
         <path className="rate-area" d={rateAreaPath(values)} />
         <path className="rate-line" d={rateLinePath(values)} fill="none" />
+        {dots.map((dot, i) => (
+          <circle key={i} className="rate-dot" cx={dot.x} cy={dot.y} r={2}>
+            <title>{dot.label}</title>
+          </circle>
+        ))}
+        {values.length > 1 && (
+          <g className="rate-axis" fontSize={8}>
+            <text x={0} y={RATE_HEIGHT + 9} textAnchor="start">
+              −{values.length - 1} ticks
+            </text>
+            <text x={RATE_WIDTH} y={RATE_HEIGHT + 9} textAnchor="end">
+              latest
+            </text>
+          </g>
+        )}
       </svg>
+      <div className="rate-note mono">1 sample ≈ 1 poll tick (default 10s)</div>
     </figure>
   );
 }

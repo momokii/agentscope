@@ -33,6 +33,21 @@ describe("RateChart", () => {
     expect(figure).toBeDefined();
     expect(screen.getByText(/peak 1\.0k\/min/)).toBeDefined();
   });
+
+  it("dots every sample with a value tooltip and labels the tick axis", () => {
+    const { container } = render(<RateChart values={[10, 20, 30]} label="P" />);
+    const titles = Array.from(container.querySelectorAll("circle title")).map(
+      (el) => el.textContent,
+    );
+    expect(titles).toEqual([
+      "sample 1 of 3 · 10/min",
+      "sample 2 of 3 · 20/min",
+      "sample 3 of 3 · 30/min",
+    ]);
+    expect(screen.getByText("−2 ticks")).toBeDefined();
+    expect(screen.getByText("latest")).toBeDefined();
+    expect(screen.getByText(/1 sample ≈ 1 poll tick/)).toBeDefined();
+  });
 });
 
 describe("ProjectInsight", () => {
