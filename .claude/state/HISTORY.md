@@ -105,3 +105,20 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
   axis crisp, guide renders, pi screen tab live, ticker style correct,
   deployed bundle byte-identical to committed dist.
 - Redeployed `:8082` (non-loopback + auth preserved). Web 236/236, gates green.
+
+## 2026-10-27 — Operator feedback round 2 (validity + UX)
+- TASK-321: KPI live_panes counted every pane incl. shells (9) while cards
+  summed agent panes (6) — fixed to agent-only (KPI == Σ cards live);
+  zombie/shell semantics documented; model + runtime docs updated.
+- TASK-322: RateChart dots gained a persistent hover/focus readout + 8px
+  hit targets (native <title> was the only per-tick value).
+- TASK-323: page-size select 5/10/20/25/50 on fleet + landing pagination.
+- TASK-324: Active/Waiting/Errors now follow the date/bucket/harness/search
+  scope (fleet strip, landing header, project header + insight); lifetime
+  tokens/cost and live presence stay global and labeled. Live proof:
+  landing 22→3 projects, 6→4 procs under 24h.
+- TASK-325: Refresh button beside Live (both toolbars) → GET /api/fleet
+  through the snapshot pipeline; works paused.
+- TASK-326: DataGuide updated (agent panes, KPI scoping, readout).
+- Verified headless-Chromium (KPI scoping live, refresh button, page sizes)
+  + full web suite 243/243. Redeployed :8082, committed per task.

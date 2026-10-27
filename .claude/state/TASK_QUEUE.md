@@ -37,6 +37,39 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 
 ## NEXT
 
+### TASK-321: live_panes counts agent panes only (validity)
+- **Priority:** High | **Complexity:** S | **Status:** TODO
+- **Scope:** KPI `live_panes` counts non-exited opencode/pi panes only (today: every pane incl. shells), matching project cards; docs + tests updated.
+- **Acceptance:** KPI equals Σ project live_panes (+ session-less dirs); `go test ./internal/runtime/` green.
+- **Verify:** live curl proof
+
+### TASK-322: RateChart hover readout per tick
+- **Priority:** Medium | **Complexity:** S | **Status:** TODO
+- **Scope:** hovering/focusing a dot shows its value persistently in the caption area (native title stays as fallback); bigger hit targets.
+- **Acceptance:** readout follows hover; keyboard focus works.
+- **Verify:** web suite green
+
+### TASK-323: Page-size selector (5/10/20/25/50)
+- **Priority:** Medium | **Complexity:** S | **Status:** TODO
+- **Scope:** Pagination gains optional size select; Fleet (default 50) + Projects (default 10); page resets to 1.
+- **Verify:** web suite green
+
+### TASK-324: KPIs follow the date/bucket scope
+- **Priority:** High | **Complexity:** M | **Status:** TODO
+- **Scope:** Active/Waiting/Errors computed over date+bucket+harness+search-filtered rows (not the status chip); Projects summary + project detail (header + insight) follow their date filter; lifetime tokens/cost stay labeled.
+- **Acceptance:** changing 24h/7d changes the counts; status chips still slice.
+- **Verify:** web suite green + screenshots
+
+### TASK-325: Manual refresh button beside Live
+- **Priority:** Medium | **Complexity:** S | **Status:** TODO
+- **Scope:** App-level `onRefresh` (GET /api/fleet → apply pipeline) wired to a Refresh button in Fleet + Projects toolbars.
+- **Acceptance:** click replaces snapshot + resets ages; works paused.
+- **Verify:** web suite green
+
+### TASK-326: DataGuide accuracy pass
+- **Priority:** Low | **Complexity:** S | **Status:** TODO
+- **Scope:** guide reflects agent-only panes, KPI scoping, tick readout.
+
 ### TASK-311: Hide global KPIs in project detail (DONE 2026-10-27)
 - **Evidence:** KpiStrip renders only when `projectDirectory === null`; drill-in keeps scoped header + insight
 - **Priority:** High | **Complexity:** S | **Status:** DONE
