@@ -116,23 +116,63 @@ func NewSourceWithRunner(cfg Config, run Runner) *Source {
 
 var _ ports.RuntimeSource = (*Source)(nil)
 
+// dirHarness is the presence-claim key: directory plus harness. Both
+// harnesses can be live in one directory (an opencode proc and a pi proc
+// are different processes), so claims never cross harnesses.
+type dirHarness struct {
+	dir     string
+	harness model.Harness
+}
+
+// rowHarness normalizes a row's harness: empty/unknown reads as opencode
+// (the pre-Wave-5 contract had no harness dimension), mirroring the db
+// normalization in toRow.
+func rowHarness(r model.SessionRow) model.Harness {
+	if r.Harness.IsValid() {
+		return r.Harness
+	}
+	return model.HarnessOpencode
+}
+
+// panePreferred decides whether a newly listed pane replaces the stored
+// candidate for one (directory, harness) bucket. Known-harness panes beat
+// unknown-foreground panes (shell/make); live beats exited; ties keep the
+// first listed, so repeated ticks render stably.
+func panePreferred(new, existing Pane) bool {
+	newKnown, existingKnown := new.Harness() != "", existing.Harness() != ""
+	if newKnown != existingKnown {
+		return newKnown
+	}
+	return existing.Exited && !new.Exited
+}
+
+// claimableBy reports whether a pane may satisfy a row of the given
+// harness. Unknown-foreground panes (shells, make, plugins never reach
+// here) stay claimable by any harness — the legacy presence behavior —
+// while a pane running a known agent claims only same-harness rows, so an
+// opencode pane never masks a live pi session in the same directory.
+func claimableBy(paneHarness, rowHarness model.Harness) bool {
+	return paneHarness == "" || paneHarness == rowHarness
+}
+
 // Enrich overlays pane liveness onto rows, preserving input order. Join key
-// is CWD/directory (filepath.Clean for matching; raw values reported).
-// Directory-scoped honesty: ONE process acts on ONE session, so at most the
-// directory's most recently updated session (smallest UpdatedRelativeMs)
-// claims the live pane; every other session in the same directory passes
-// through DB-only with no pane claim and is NOT marked orphan. Orphan keeps
-// its narrow meaning: an opencode process running outside zellij, claimed
-// by the same newest-first rule.
+// is (CWD/directory, harness) — filepath.Clean for matching; raw values
+// reported. Directory-and-harness-scoped honesty: ONE process acts on ONE
+// session, so at most the pair's most recently updated session (smallest
+// UpdatedRelativeMs) claims the live pane; every other session in the same
+// pair passes through DB-only with no pane claim and is NOT marked orphan.
+// Orphan keeps its narrow meaning: an agent process running outside zellij,
+// claimed by the same newest-first rule, per harness.
 //
-// Row outcomes for the chosen session per directory:
+// Row outcomes for the chosen session per (directory, harness):
 //   - pane hit: Pane.CWD is the live pane CWD, Exited is the pane exited
-//     flag OR-ed with backing-proc death (zombie/missing opencode pid at the
-//     same CWD). SessionRow.Directory is never overwritten, so a pane-CWD vs
-//     directory mismatch stays visible as both values.
-//   - orphan hit (opencode proc at the directory, no zellij pane): Orphan
-//     true with empty Pane.CWD (dump-screen unavailable) and Exited true,
-//     per the model contract.
+//     flag OR-ed with backing-proc death (zombie/missing agent pid of the
+//     same harness at the same CWD). SessionRow.Directory is never
+//     overwritten, so a pane-CWD vs directory mismatch stays visible as
+//     both values.
+//   - orphan hit (agent proc of the same harness at the directory, no
+//     zellij pane): Orphan true with empty Pane.CWD (dump-screen
+//     unavailable) and Exited true, per the model contract.
 //   - no hit: row passes through untouched (DB-only).
 //
 // Any infrastructure fault (zellij missing/timeout, unreadable socket dir or
@@ -157,36 +197,49 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 	if paneErr != nil {
 		s.warnOnce(&s.warnedPanes, fmt.Sprintf("runtime: pane listing failed, pane presence degraded (zellij socket-dir must be writable, XDG_RUNTIME_DIR parity, pid:host): %v", paneErr))
 	}
-	procs, procErr := ScanOpencode(s.procRoot)
+	procs, procErr := ScanAgents(s.procRoot)
 	if procErr != nil {
 		s.warnOnce(&s.warnedProcs, fmt.Sprintf("runtime: process scan failed, process presence degraded (needs pid:host /proc visibility): %v", procErr))
 	}
 
 	liveCount := 0
-	panesByDir := make(map[string]Pane)
+	panesByDir := make(map[dirHarness]Pane)
 	panesProcsByDir := make(map[string]int)
 	if paneErr == nil {
 		for _, np := range livePanes {
 			if !np.pane.Exited {
 				liveCount++
-				if np.pane.CWD != "" && filepath.Base(np.pane.Command) == "opencode" {
+				// Container fallback counts agent panes of either harness
+				// (presence, not an exact count — see below).
+				if np.pane.CWD != "" && np.pane.Harness() != "" {
 					panesProcsByDir[filepath.Clean(np.pane.CWD)]++
 				}
 			}
-			key := filepath.Clean(np.pane.CWD)
-			if existing, ok := panesByDir[key]; !ok || (existing.Exited && !np.pane.Exited) {
-				panesByDir[key] = np.pane
+			// Unknown-foreground panes enter both harness buckets
+			// (legacy claimability); known agents enter only theirs,
+			// preferred over unknown on collision (see panePreferred).
+			h := np.pane.Harness()
+			buckets := []model.Harness{model.HarnessOpencode, model.HarnessPi}
+			if h != "" {
+				buckets = []model.Harness{h}
+			}
+			for _, b := range buckets {
+				key := dirHarness{dir: filepath.Clean(np.pane.CWD), harness: b}
+				if existing, ok := panesByDir[key]; !ok || panePreferred(np.pane, existing) {
+					panesByDir[key] = np.pane
+				}
 			}
 		}
 	}
 
-	// Orphan scan: opencode procs with no zellij pane at their CWD.
-	var procsByDir map[string][]ProcInfo
+	// Orphan scan: agent procs with no zellij pane at their CWD, grouped
+	// per (directory, harness) so harnesses never mask each other.
+	var procsByDir map[dirHarness][]ProcInfo
 	liveProcsByDir := make(map[string]int)
 	procCount := -1
 	if procErr == nil {
 		procCount = 0
-		procsByDir = make(map[string][]ProcInfo)
+		procsByDir = make(map[dirHarness][]ProcInfo)
 		for _, pr := range procs {
 			if pr.Alive() {
 				procCount++
@@ -194,10 +247,10 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 			if pr.CWD == "" {
 				continue
 			}
-			key := filepath.Clean(pr.CWD)
+			key := dirHarness{dir: filepath.Clean(pr.CWD), harness: harnessForCommand(pr.Command)}
 			procsByDir[key] = append(procsByDir[key], pr)
 			if pr.Alive() {
-				liveProcsByDir[key]++
+				liveProcsByDir[key.dir]++
 			}
 		}
 	}
@@ -228,15 +281,16 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 	}
 	s.countsMu.Unlock()
 
-	// Newest-first: only the directory's most recently updated session may
-	// claim presence. UpdatedRelativeMs is now-minus-time_updated, so the
-	// minimum wins; ties keep input order (strict less-than replaces).
-	claimant := make(map[string]int)
+	// Newest-first per (directory, harness): only the pair's most recently
+	// updated session may claim presence. UpdatedRelativeMs is
+	// now-minus-time_updated, so the minimum wins; ties keep input order
+	// (strict less-than replaces).
+	claimant := make(map[dirHarness]int)
 	for i := range out {
 		if out[i].Directory == "" {
 			continue
 		}
-		key := filepath.Clean(out[i].Directory)
+		key := dirHarness{dir: filepath.Clean(out[i].Directory), harness: rowHarness(out[i])}
 		if j, ok := claimant[key]; !ok || out[i].UpdatedRelativeMs < out[j].UpdatedRelativeMs {
 			claimant[key] = i
 		}
@@ -253,8 +307,8 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 		if _, ok := claimed[i]; !ok {
 			continue
 		}
-		key := filepath.Clean(out[i].Directory)
-		if pane, ok := panesByDir[key]; ok {
+		key := dirHarness{dir: filepath.Clean(out[i].Directory), harness: rowHarness(out[i])}
+		if pane, ok := panesByDir[key]; ok && claimableBy(pane.Harness(), key.harness) {
 			out[i].Pane.CWD = pane.CWD
 			out[i].Pane.Exited = pane.Exited || backingDead(procsByDir[key])
 			out[i].Orphan = false
@@ -269,26 +323,28 @@ func (s *Source) Enrich(ctx context.Context, rows []model.SessionRow) ([]model.S
 }
 
 // LiveCounts reports the last observed ground truth: live (non-exited)
-// zellij panes and alive opencode processes. Zero before the first
-// successful Enrich; last-known per source across infra faults (a failed
-// source never clobbers the other source's good observation).
+// zellij panes and alive agent processes (opencode + pi combined). Zero
+// before the first successful Enrich; last-known per source across infra
+// faults (a failed source never clobbers the other source's good
+// observation).
 func (s *Source) LiveCounts() (panes int, procs int) {
 	s.countsMu.Lock()
 	defer s.countsMu.Unlock()
 	return s.lastLivePanes, s.lastLiveProcesses
 }
 
-// ProcsByDir reports the last observed per-directory count of ALIVE opencode
-// processes. The map is copied so callers can read it without holding the
-// source lock. Empty until the first successful proc scan.
+// ProcsByDir reports the last observed per-directory count of ALIVE agent
+// processes (opencode + pi combined). The map is copied so callers can
+// read it without holding the source lock. Empty until the first
+// successful proc scan.
 //
 // /proc/<pid>/cwd is exact on the host and is always preferred when it
 // yields any attribution. In a pid:host non-root container the readlink is
 // denied (ptrace/Yama), so a scan can see live processes while attributing
-// none; in that case the map falls back to non-exited zellij panes whose
-// command is opencode. That fallback is presence, not an exact count: it may
-// include a pane whose process just exited until the next listing corrects
-// it, and it never changes the global LiveCounts.
+// none; in that case the map falls back to non-exited zellij panes running
+// a known agent (opencode or pi). That fallback is presence, not an exact
+// count: it may include a pane whose process just exited until the next
+// listing corrects it, and it never changes the global LiveCounts.
 func (s *Source) ProcsByDir() map[string]int {
 	s.countsMu.Lock()
 	defer s.countsMu.Unlock()
@@ -300,10 +356,11 @@ func (s *Source) ProcsByDir() map[string]int {
 }
 
 // PanesByDir reports the last observed count of non-exited zellij panes
-// running opencode per cleaned directory, independent of /proc attribution.
-// It is the presence signal used by the fleet's live_panes column and by
-// the ProcsByDir container fallback. Empty until the first successful pane
-// listing; a listing fault keeps the last-known map.
+// running a known agent (opencode or pi) per cleaned directory,
+// independent of /proc attribution. It is the presence signal used by the
+// fleet's live_panes column and by the ProcsByDir container fallback.
+// Empty until the first successful pane listing; a listing fault keeps the
+// last-known map.
 func (s *Source) PanesByDir() map[string]int {
 	s.countsMu.Lock()
 	defer s.countsMu.Unlock()
@@ -322,9 +379,9 @@ func (s *Source) warnOnce(flag *atomic.Bool, msg string) {
 	}
 }
 
-// backingDead reports whether every opencode proc observed at a pane CWD is
+// backingDead reports whether every agent proc observed at a pane CWD is
 // a zombie. No observed proc means no verdict (false): a plain shell pane
-// has no opencode child and must not read as dead.
+// has no agent child and must not read as dead.
 func backingDead(procs []ProcInfo) bool {
 	if len(procs) == 0 {
 		return false

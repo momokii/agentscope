@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"opencode-dashboard/internal/model"
 )
 
 // DefaultScreenTimeout bounds every dump-screen exec. It is deliberately
@@ -124,14 +126,21 @@ func (s *Source) listLivePanes(ctx context.Context) ([]namedPane, error) {
 
 // ResolvePane maps a session directory to its live zellij pane, reusing the
 // W1-2 listing path (listLivePanes above — never a second implementation).
-// Matching Cleans both sides (zellij may report a trailing slash). On a CWD
-// collision the first non-exited pane wins; when only exited panes match,
-// or nothing matches, it returns ErrNoLivePane. Listing infra faults
-// (missing binary, timeout) propagate typed so the caller can distinguish
-// "no pane" from "zellij broken".
-func (s *Source) ResolvePane(ctx context.Context, sessionDirectory string) (ResolvedPane, error) {
+// Matching Cleans both sides (zellij may report a trailing slash). The
+// harness disambiguates a directory hosting both agents: an unknown-
+// foreground pane resolves for either harness (legacy), but a pane running
+// a known agent resolves only for the same harness. On a CWD collision the
+// first non-exited pane wins; when only exited panes match, or nothing
+// matches, it returns ErrNoLivePane. Listing infra faults (missing binary,
+// timeout) propagate typed so the caller can distinguish "no pane" from
+// "zellij broken". An empty/unknown harness reads as opencode (the
+// pre-Wave-5 contract had no harness dimension).
+func (s *Source) ResolvePane(ctx context.Context, sessionDirectory string, harness model.Harness) (ResolvedPane, error) {
 	if strings.TrimSpace(sessionDirectory) == "" {
 		return ResolvedPane{}, fmt.Errorf("runtime: resolve pane for empty directory: %w", ErrNoLivePane)
+	}
+	if !harness.IsValid() {
+		harness = model.HarnessOpencode
 	}
 	panes, err := s.listLivePanes(ctx)
 	if err != nil {
@@ -141,6 +150,9 @@ func (s *Source) ResolvePane(ctx context.Context, sessionDirectory string) (Reso
 	var exitedOnly *namedPane
 	for _, np := range panes {
 		if filepath.Clean(np.pane.CWD) != want {
+			continue
+		}
+		if !claimableBy(np.pane.Harness(), harness) {
 			continue
 		}
 		if !np.pane.Exited {
@@ -185,12 +197,13 @@ func (s *Source) DumpScreen(ctx context.Context, paneID string, full bool) (stri
 
 // DumpSessionScreen resolves a session directory to its live pane and dumps
 // it session-scoped (`--session <name> action dump-screen`), which is the
-// only unambiguous form when numeric pane ids repeat across sessions. It
-// returns the resolved pane (for X-Pane-Id / X-Captured-At headers) and the
-// whole dump text. This is the on-demand viewer path: the hub calls it per
-// user view only, never per tick and never from the collector.
-func (s *Source) DumpSessionScreen(ctx context.Context, sessionDirectory string, full bool) (ResolvedPane, string, error) {
-	rp, err := s.ResolvePane(ctx, sessionDirectory)
+// only unambiguous form when numeric pane ids repeat across sessions. The
+// harness selects the pane when both agents share the directory. It returns
+// the resolved pane (for X-Pane-Id / X-Captured-At headers) and the whole
+// dump text. This is the on-demand viewer path: the hub calls it per user
+// view only, never per tick and never from the collector.
+func (s *Source) DumpSessionScreen(ctx context.Context, sessionDirectory string, harness model.Harness, full bool) (ResolvedPane, string, error) {
+	rp, err := s.ResolvePane(ctx, sessionDirectory, harness)
 	if err != nil {
 		return ResolvedPane{}, "", err
 	}

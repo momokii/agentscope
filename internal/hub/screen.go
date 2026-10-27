@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"opencode-dashboard/internal/model"
 	"opencode-dashboard/internal/runtime"
 )
 
@@ -17,7 +18,7 @@ import (
 // inject fakes. The collector never implements this: screen content is
 // fetched per user view only, never per tick.
 type ScreenDumper interface {
-	DumpSessionScreen(ctx context.Context, sessionDirectory string, full bool) (runtime.ResolvedPane, string, error)
+	DumpSessionScreen(ctx context.Context, sessionDirectory string, harness model.Harness, full bool) (runtime.ResolvedPane, string, error)
 }
 
 // orphanScreenBody is the 409 shape for sessions with no live zellij pane:
@@ -72,10 +73,11 @@ func (s *Server) handleSessionScreen(w http.ResponseWriter, r *http.Request) {
 	}
 	var directory string
 	var orphan bool
+	var harness model.Harness
 	var found bool
 	for _, row := range snap.Sessions {
 		if row.ID == id {
-			directory, orphan, found = row.Directory, row.Orphan, true
+			directory, orphan, harness, found = row.Directory, row.Orphan, row.Harness, true
 			break
 		}
 	}
@@ -87,7 +89,7 @@ func (s *Server) handleSessionScreen(w http.ResponseWriter, r *http.Request) {
 		writeOrphanScreen(w)
 		return
 	}
-	pane, text, err := s.screen.DumpSessionScreen(r.Context(), directory, parseScreenFull(r))
+	pane, text, err := s.screen.DumpSessionScreen(r.Context(), directory, harness, parseScreenFull(r))
 	if err != nil {
 		switch {
 		case errors.Is(err, runtime.ErrNoLivePane), errors.Is(err, runtime.ErrPaneGone):

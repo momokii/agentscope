@@ -8,8 +8,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"opencode-dashboard/internal/model"
 )
 
 // DefaultTimeout bounds every zellij CLI exec so a wedged server can never
@@ -91,8 +94,13 @@ type Pane struct {
 	Title string
 	// Command is terminal_command, falling back to pane_command: live
 	// servers (0.44.3 observed) report terminal_command null while
-	// pane_command holds "opencode".
+	// pane_command holds the foreground process ("opencode", "pi").
 	Command string
+	// PaneCommand is the raw pane_command (foreground process) before the
+	// Command fallback. Harness classification reads this first: a pane
+	// launched by one binary but running another (e.g. opencode spawning
+	// a shell that runs pi) reports the truth here.
+	PaneCommand string
 	// CWD is the zellij-reported working directory (pane_cwd).
 	CWD string
 	// Exited mirrors the pane `exited` flag (dead pane in a live session).
@@ -124,17 +132,47 @@ func ParsePanesJSON(data []byte) ([]Pane, error) {
 	panes := make([]Pane, 0, len(raw))
 	for _, p := range raw {
 		panes = append(panes, Pane{
-			ID:         p.ID,
-			TabID:      p.TabID,
-			TabName:    p.TabName,
-			Title:      p.Title,
-			Command:    firstNonEmpty(deref(p.TerminalCommand), deref(p.PaneCommand)),
-			CWD:        deref(p.PaneCWD),
-			Exited:     p.Exited,
-			ExitStatus: p.ExitStatus,
+			ID:          p.ID,
+			TabID:       p.TabID,
+			TabName:     p.TabName,
+			Title:       p.Title,
+			Command:     firstNonEmpty(deref(p.TerminalCommand), deref(p.PaneCommand)),
+			PaneCommand: deref(p.PaneCommand),
+			CWD:         deref(p.PaneCWD),
+			Exited:      p.Exited,
+			ExitStatus:  p.ExitStatus,
 		})
 	}
 	return panes, nil
+}
+
+// Harness classifies the pane by its foreground process: pane_command
+// first (the live truth), terminal_command as fallback. It deliberately
+// never reads the pane title — pi's "π - <dir>" title is undocumented UI
+// that may change, while pane_command is the observed process. Unknown
+// foregrounds (shells, make, plugins) report "" and stay claimable by
+// any harness row (legacy presence behavior); known harnesses claim only
+// same-harness rows so one directory can host both harnesses.
+func (p Pane) Harness() model.Harness {
+	// PaneCommand is the foreground truth; Command (terminal-fallback-pane)
+	// covers panes whose pane_command is absent.
+	if h := harnessForCommand(p.PaneCommand); h != "" {
+		return h
+	}
+	return harnessForCommand(p.Command)
+}
+
+// harnessForCommand maps an argv[0]-style command basename to its harness,
+// or "" when the foreground is not a known agent.
+func harnessForCommand(cmd string) model.Harness {
+	switch filepath.Base(cmd) {
+	case "opencode":
+		return model.HarnessOpencode
+	case "pi":
+		return model.HarnessPi
+	default:
+		return ""
+	}
 }
 
 // Runner executes one zellij invocation. It is a field (not a global) so

@@ -23,7 +23,7 @@ type fakeScreen struct {
 	fulls []bool
 }
 
-func (f *fakeScreen) DumpSessionScreen(ctx context.Context, dir string, full bool) (runtime.ResolvedPane, string, error) {
+func (f *fakeScreen) DumpSessionScreen(ctx context.Context, dir string, harness model.Harness, full bool) (runtime.ResolvedPane, string, error) {
 	f.dirs = append(f.dirs, dir)
 	f.fulls = append(f.fulls, full)
 	return f.pane, f.text, f.err

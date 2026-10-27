@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"opencode-dashboard/internal/model"
 )
 
 // fixtureCollisionPanes serves two sessions sharing one CWD: sess-a holds an
@@ -37,7 +39,7 @@ func Test_ResolvePane_matches_cwd_with_clean(t *testing.T) {
 	src := testSourceWithDump(t, f, &fakeDump{})
 
 	// When
-	got, err := src.ResolvePane(context.Background(), "/proj/alpha/")
+	got, err := src.ResolvePane(context.Background(), "/proj/alpha/", model.HarnessOpencode)
 
 	// Then
 	if err != nil {
@@ -63,7 +65,7 @@ func Test_ResolvePane_prefers_live_on_cwd_collision(t *testing.T) {
 	src := testSourceWithDump(t, f, &fakeDump{})
 
 	// When
-	got, err := src.ResolvePane(context.Background(), "/proj/x")
+	got, err := src.ResolvePane(context.Background(), "/proj/x", model.HarnessOpencode)
 
 	// Then
 	if err != nil {
@@ -83,7 +85,7 @@ func Test_ResolvePane_exited_only_maps_no_live_pane(t *testing.T) {
 	src := testSourceWithDump(t, f, &fakeDump{})
 
 	// When
-	_, err := src.ResolvePane(context.Background(), "/proj/dead")
+	_, err := src.ResolvePane(context.Background(), "/proj/dead", model.HarnessOpencode)
 
 	// Then
 	if !errors.Is(err, ErrNoLivePane) {
@@ -100,7 +102,7 @@ func Test_ResolvePane_no_match_maps_no_live_pane(t *testing.T) {
 	src := testSourceWithDump(t, f, &fakeDump{})
 
 	// When
-	_, err := src.ResolvePane(context.Background(), "/proj/nowhere")
+	_, err := src.ResolvePane(context.Background(), "/proj/nowhere", model.HarnessOpencode)
 
 	// Then
 	if !errors.Is(err, ErrNoLivePane) {
@@ -114,7 +116,7 @@ func Test_ResolvePane_propagates_listing_faults(t *testing.T) {
 	src := testSourceWithDump(t, f, &fakeDump{})
 
 	// When
-	_, err := src.ResolvePane(context.Background(), "/proj/alpha")
+	_, err := src.ResolvePane(context.Background(), "/proj/alpha", model.HarnessOpencode)
 
 	// Then: typed infra error, never misreported as no-live-pane.
 	if errors.Is(err, ErrNoLivePane) {
@@ -140,7 +142,7 @@ func Test_DumpSessionScreen_scopes_dump_to_session(t *testing.T) {
 	src.now = func() time.Time { return fixed }
 
 	// When
-	pane, text, err := src.DumpSessionScreen(context.Background(), "/proj/x", true)
+	pane, text, err := src.DumpSessionScreen(context.Background(), "/proj/x", model.HarnessOpencode, true)
 
 	// Then
 	if err != nil {
@@ -198,7 +200,7 @@ func TestLiveDumpScreen(t *testing.T) {
 	}
 
 	start := time.Now()
-	rp, text, err := src.DumpSessionScreen(ctx, target.pane.CWD, true)
+	rp, text, err := src.DumpSessionScreen(ctx, target.pane.CWD, model.HarnessOpencode, true)
 	elapsed := time.Since(start)
 	if err != nil {
 		t.Fatalf("live dump: %v", err)

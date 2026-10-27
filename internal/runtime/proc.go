@@ -46,10 +46,13 @@ func ClassifyState(state byte) Liveness {
 	}
 }
 
-// ProcInfo is one opencode process observed via /proc.
+// ProcInfo is one agent process observed via /proc.
 type ProcInfo struct {
-	// PID is the opencode process id.
+	// PID is the agent process id.
 	PID int
+	// Command is the argv[0] basename as observed ("opencode" or "pi").
+	// It identifies the harness; the scan guarantees it is never empty.
+	Command string
 	// PPID is the parent pid (the pane shell for zellij-hosted sessions).
 	PPID int
 	// CWD is readlink /proc/<pid>/cwd: the project truth. Best-effort:
@@ -117,10 +120,29 @@ func PIDLiveness(procRoot string, pid int) Liveness {
 	return LivenessAlive
 }
 
+// agentCommands is the argv[0] basename allowlist for agent processes.
+// Both harnesses are matched so one /proc walk serves the merged fleet;
+// unknown basenames never match (plain shells contribute no presence).
+var agentCommands = map[string]bool{"opencode": true, "pi": true}
+
 // ScanOpencode lists opencode processes: every numeric /proc entry whose
 // argv[0] basename is "opencode". Racy entries (vanishing mid-scan) are
 // skipped; only an unreadable proc root fails the scan.
 func ScanOpencode(procRoot string) ([]ProcInfo, error) {
+	return scanProcs(procRoot, func(base string) bool { return base == "opencode" })
+}
+
+// ScanAgents lists agent processes for every known harness (opencode and
+// pi): every numeric /proc entry whose argv[0] basename is in the agent
+// allowlist. One walk serves the merged fleet; ProcInfo.Command carries
+// the harness for per-(directory,harness) attribution in Enrich.
+func ScanAgents(procRoot string) ([]ProcInfo, error) {
+	return scanProcs(procRoot, func(base string) bool { return agentCommands[base] })
+}
+
+// scanProcs is the shared /proc walker behind ScanOpencode and ScanAgents.
+// match selects basenames; CWD stays best-effort (see ScanOpencode).
+func scanProcs(procRoot string, match func(string) bool) ([]ProcInfo, error) {
 	entries, err := os.ReadDir(procRoot)
 	if err != nil {
 		return nil, fmt.Errorf("runtime: read proc root %s: %w", procRoot, err)
@@ -135,7 +157,8 @@ func ScanOpencode(procRoot string) ([]ProcInfo, error) {
 			continue
 		}
 		argv0, err := readArgv0(procRoot, pid)
-		if err != nil || path.Base(argv0) != "opencode" {
+		base := path.Base(argv0)
+		if err != nil || !match(base) {
 			continue
 		}
 		state, err := ReadProcState(procRoot, pid)
@@ -153,7 +176,7 @@ func ScanOpencode(procRoot string) ([]ProcInfo, error) {
 		if cwdErr != nil {
 			cwd = ""
 		}
-		found = append(found, ProcInfo{PID: pid, PPID: ppid, CWD: cwd, State: state})
+		found = append(found, ProcInfo{PID: pid, PPID: ppid, CWD: cwd, State: state, Command: base})
 	}
 	return found, nil
 }
