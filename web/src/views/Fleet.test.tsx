@@ -189,10 +189,36 @@ describe("Fleet", () => {
     expect(onTogglePin).toHaveBeenCalledWith("ses_running1");
   });
 
+  it("offers a manual refresh button beside the live toggle", () => {
+    const onRefresh = vi.fn();
+    renderFleet({ onRefresh, refreshing: false });
+    const button = screen.getByRole("button", { name: "Refresh now" });
+    fireEvent.click(button);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
   it("renders the fleet token-rate strip from live snapshot sparks", () => {
     renderFleet();
     expect(
       screen.getByRole("img", { name: /fleet token rate/i }),
     ).toBeDefined();
+  });
+
+  it("scopes KPI counts to the active date filter", () => {
+    // Fixture: 1 running, 1 waiting, 1 error (25h old). A 24h window
+    // drops the error row from Active/Waiting/Errors (global costs stay).
+    const { container } = renderFleet({
+      date: { preset: "24h", from: null },
+    });
+    const kpiText = (label: string): string | undefined => {
+      const cards = Array.from(container.querySelectorAll(".kpi-card"));
+      const card = cards.find((c) => c.textContent?.includes(label));
+      return card?.querySelector(".kpi-value")?.textContent ?? undefined;
+    };
+    expect(kpiText("Active")).toBe("1");
+    expect(kpiText("Waiting input")).toBe("1");
+    expect(kpiText("Errors")).toBe("0");
+    // Throughput/cost/live presence stay global (not date-scoped).
+    expect(kpiText("Cost today")).toBe("$12.40");
   });
 });

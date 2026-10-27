@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Activity } from "lucide-react";
 
-import { createSSEClient } from "./lib/sse";
+import { createSSEClient, normalizeSnapshot } from "./lib/sse";
 import type { Snapshot, StatusEvent } from "./lib/sse";
 import { diffSnapshots, prependEvents } from "./lib/activity";
 import type { ActivityEvent } from "./lib/activity";
@@ -114,29 +114,49 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  // Shared apply path for SSE ticks and manual refreshes: atomic replace
+  // (prev holds the last applied tick for KPI deltas), ticker ring diffed
+  // over the same consecutive pair, newest-first.
+  const applySnapshot = useCallback((next: Snapshot) => {
+    const prev = snapshotRef.current;
+    setEvents((ring) =>
+      pausedRef.current ? ring : prependEvents(ring, diffSnapshots(prev, next)),
+    );
+    setPrevSnapshot(prev);
+    snapshotRef.current = next;
+    setSnapshot(next);
+    setReceivedAt(Date.now());
+  }, []);
+
   useEffect(() => {
     if (!live) return;
     const client = createSSEClient({
       url: "/api/events",
-      onSnapshot: (next) => {
-        // Atomic replace per the client contract: prev holds the last
-        // applied tick for KPI deltas, snapshot becomes the new tick.
-        // Ticker ring: diff the same consecutive pair, newest-first.
-        const prev = snapshotRef.current;
-        setEvents((ring) =>
-          pausedRef.current
-            ? ring
-            : prependEvents(ring, diffSnapshots(prev, next)),
-        );
-        setPrevSnapshot(prev);
-        snapshotRef.current = next;
-        setSnapshot(next);
-        setReceivedAt(Date.now());
-      },
+      onSnapshot: applySnapshot,
       onStatus: setStatus,
     });
     return () => client.close();
-  }, [live]);
+  }, [live, applySnapshot]);
+
+  // Manual refresh (toolbar button): re-pull /api/fleet through the same
+  // pipeline — works paused, resets staleness/ages, never touches SSE.
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshNow = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const response = await fetch("/api/fleet", {
+        credentials: "same-origin",
+      });
+      if (response.ok) {
+        applySnapshot(normalizeSnapshot(await response.json()));
+      }
+    } catch {
+      // A failed manual pull changes nothing: the next SSE tick recovers.
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing, applySnapshot]);
 
   // Pi rows deep-link to the Live pane tab: pi transcripts are a P6
   // follow-up, but the live pane works today via harness-scoped resolve.
@@ -343,6 +363,8 @@ export default function App() {
             page={fleetPage}
             onFilterChange={changeFleetFilter}
             onQueryChange={changeFleetQuery}
+            onRefresh={refreshNow}
+            refreshing={refreshing}
           />
         ) : hasProjects(snapshot) ? (
           <Projects
@@ -356,6 +378,8 @@ export default function App() {
             kpis={snapshot.kpis}
             prevKpis={prevSnapshot?.kpis ?? null}
             lastSeq={snapshot.seq}
+            onRefresh={refreshNow}
+            refreshing={refreshing}
           />
         ) : (
           <Fleet
@@ -378,6 +402,8 @@ export default function App() {
             page={fleetPage}
             onFilterChange={changeFleetFilter}
             onQueryChange={changeFleetQuery}
+            onRefresh={refreshNow}
+            refreshing={refreshing}
           />
         )}
       </main>

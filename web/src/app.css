@@ -1912,6 +1912,16 @@ a.dtab:hover {
   to { opacity: 0.4; }
 }
 
+/* Refresh icon rotation: transform-only (GPU-composited), active only
+   while a manual refresh is in flight. */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
 @keyframes ticker-in {
   from { opacity: 0; }
   to { opacity: 1; }

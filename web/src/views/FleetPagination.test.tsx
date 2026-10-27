@@ -134,4 +134,14 @@ describe("fleet pagination", () => {
       page: 1,
     });
   });
+
+  it("offers 5/10/20/25/50 rows per page and resets to page 1", () => {
+    const { onQueryChange } = renderFleet();
+    expect(renderedRows()).toBe(50);
+    fireEvent.change(screen.getByLabelText("Rows per page"), {
+      target: { value: "5" },
+    });
+    expect(renderedRows()).toBe(5);
+    expect(onQueryChange).toHaveBeenCalledWith({ page: 1 });
+  });
 });

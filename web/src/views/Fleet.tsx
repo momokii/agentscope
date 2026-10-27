@@ -16,6 +16,7 @@ import {
   DEFAULT_DATE_FILTER,
   DEFAULT_IDLE_BUCKET,
   IDLE_BUCKET_LABELS,
+  PAGE_SIZE,
   RECENCY_LABELS,
   applyFleetFilters,
   countByHarness,
@@ -23,6 +24,8 @@ import {
   countByStatus,
   groupFleetRows,
   isExited,
+  matchesDateFilter,
+  matchesIdleBucket,
   paginateRows,
   sortFleetRows,
 } from "../lib/fleetSort";
@@ -38,6 +41,7 @@ import { formatAge, formatCompact, formatUSD } from "../lib/format";
 import { resolveProjectHeader } from "../lib/projects";
 import HarnessBadge from "../components/HarnessBadge";
 import DataGuide from "../components/DataGuide";
+import RefreshButton from "../components/RefreshButton";
 import HarnessFilterBar, {
   HARNESS_FILTER_LABELS,
 } from "../components/HarnessFilterBar";
@@ -91,6 +95,10 @@ export interface FleetProps {
   page?: number;
   /** Hash-serialized query patch (bucket/date/page/project filters). */
   onQueryChange?: (patch: FleetQuery) => void;
+  /** Manual re-pull of /api/fleet through the snapshot pipeline. */
+  onRefresh?: () => void;
+  /** True while a manual refresh is in flight. */
+  refreshing?: boolean;
 }
 
 function zeroKpis(): KPIs {
@@ -165,6 +173,8 @@ export default function Fleet({
   date = DEFAULT_DATE_FILTER,
   page = 1,
   onQueryChange,
+  onRefresh,
+  refreshing = false,
 }: FleetProps) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -180,16 +190,52 @@ export default function Fleet({
     [snapshot, projectDirectory],
   );
 
-  /** Per-status counts over the scoped snapshot — one pass per tick. */
-  const statusCounts = useMemo(() => countByStatus(scopeRows), [scopeRows]);
+  /**
+   * Facet scope: directory + harness + search + date. Status chips,
+   * live-only, and recency buckets slice WITHIN this scope, so their
+   * counts stay informative instead of mirroring the selection — while the
+   * KPI strip and the project header follow the operator's time window
+   * (a 24h filter really does shrink Active/Waiting/Errors).
+   */
+  const facetScope = useMemo(
+    () =>
+      applyFleetFilters(scopeRows, query, "all", false, {
+        bucket: "all",
+        date,
+        harness: harnessFilter,
+        nowMs: now,
+      }),
+    [scopeRows, query, date, harnessFilter, now],
+  );
 
-  /** Per-harness counts over the scoped snapshot — one pass per tick. */
-  const harnessCounts = useMemo(() => countByHarness(scopeRows), [scopeRows]);
+  /** Per-status counts over the facet scope — one pass per tick. */
+  const statusCounts = useMemo(() => countByStatus(facetScope), [facetScope]);
+
+  /** Per-harness counts over the facet scope — one pass per tick. */
+  const harnessCounts = useMemo(
+    () => countByHarness(facetScope),
+    [facetScope],
+  );
 
   const bucketCounts = useMemo(
-    () => countByIdleBucket(scopeRows),
-    [scopeRows],
+    () => countByIdleBucket(facetScope),
+    [facetScope],
   );
+
+  /** KPI strip scope: Active/Waiting/Errors describe the facet scope;
+   * throughput, costs, and live presence stay global measurements. */
+  const scopedKpis = useMemo((): KPIs | null => {
+    if (!snapshot) return null;
+    let active = 0;
+    let waiting = 0;
+    let errors = 0;
+    for (const row of facetScope) {
+      if (row.status === "running") active++;
+      else if (row.status === "waiting-input") waiting++;
+      else if (row.status === "error") errors++;
+    }
+    return { ...snapshot.kpis, active, waiting_input: waiting, errors };
+  }, [snapshot, facetScope]);
 
   const rows = useMemo(() => {
     if (!snapshot) return [];
@@ -216,10 +262,16 @@ export default function Fleet({
     now,
   ]);
 
+  // Local view preference (not URL state): operator-selectable page size.
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const pageSlice = useMemo(
-    () => paginateRows(rows, page),
-    [rows, page],
+    () => paginateRows(rows, page, pageSize),
+    [rows, page, pageSize],
   );
+  const changePageSize = (size: number) => {
+    setPageSize(size);
+    onQueryChange?.({ page: 1 });
+  };
 
   const changeQuery = (value: string) => {
     setQuery(value);
@@ -303,7 +355,29 @@ export default function Fleet({
     });
   };
 
-  const kpis = snapshot?.kpis ?? zeroKpis();
+  const kpis = scopedKpis ?? zeroKpis();
+
+  /** Previous-tick KPIs under the same facet scope, so deltas compare
+   * like with like when a date/bucket filter is active. */
+  const prevKpis = useMemo((): KPIs | null => {
+    if (!prevSnapshot) return null;
+    const prevScope = applyFleetFilters(
+      prevSnapshot.sessions,
+      query,
+      "all",
+      false,
+      { bucket: "all", date, harness: harnessFilter, nowMs: now },
+    );
+    let active = 0;
+    let waiting = 0;
+    let errors = 0;
+    for (const row of prevScope) {
+      if (row.status === "running") active++;
+      else if (row.status === "waiting-input") waiting++;
+      else if (row.status === "error") errors++;
+    }
+    return { ...prevSnapshot.kpis, active, waiting_input: waiting, errors };
+  }, [prevSnapshot, query, date, harnessFilter, now]);
 
   const renderRow = (row: SessionRow) => {
     const isOpen = expanded.has(row.id);
@@ -378,14 +452,58 @@ export default function Fleet({
     ];
   };
 
-  /** Project member rows (directory-scoped, unfiltered) feed the insight. */
+  /**
+   * Project member rows: directory + date + bucket scoped (never the
+   * status/harness/search slices — the header describes the project's time
+   * window, the chips slice within it). Powers the header aggregates and
+   * the insight section alike.
+   */
   const projectRows = useMemo(
     () =>
       projectDirectory === null || !snapshot
         ? []
-        : snapshot.sessions.filter((row) => row.directory === projectDirectory),
-    [snapshot, projectDirectory],
+        : snapshot.sessions.filter(
+            (row) =>
+              row.directory === projectDirectory &&
+              matchesIdleBucket(row, bucket) &&
+              matchesDateFilter(row.updated_relative_ms, date, now),
+          ),
+    [snapshot, projectDirectory, bucket, date, now],
   );
+
+  /** Project header aggregates recomputed over the same date/bucket window
+   * (live presence stays global runtime truth; tokens/cost stay lifetime
+   * and keep their "total" labels). */
+  const projectHeader = useMemo(() => {
+    if (projectDirectory === null) return null;
+    const base = resolveProjectHeader(snapshot, projectDirectory);
+    let running = 0;
+    let waiting = 0;
+    let tokens = 0;
+    let cost = 0;
+    let lastActivity: number | undefined;
+    for (const row of projectRows) {
+      if (row.status === "running") running++;
+      else if (row.status === "waiting-input") waiting++;
+      tokens += row.tokens.total;
+      cost += row.cost;
+      if (
+        lastActivity === undefined ||
+        row.updated_relative_ms < lastActivity
+      ) {
+        lastActivity = row.updated_relative_ms;
+      }
+    }
+    return {
+      ...base,
+      sessions: projectRows.length,
+      running,
+      waiting_input: waiting,
+      tokens_total: tokens,
+      cost_total: cost,
+      last_activity_ms: lastActivity,
+    };
+  }, [snapshot, projectDirectory, projectRows]);
 
   /** Fleet-wide token rate (element-wise spark sums, live data only). */
   const fleetRate = useMemo(
@@ -395,11 +513,8 @@ export default function Fleet({
 
   return (
     <div className="fleet">
-      {projectDirectory !== null && (
-        <ProjectHeader
-          header={resolveProjectHeader(snapshot, projectDirectory)}
-          nowMs={now}
-        />
+      {projectDirectory !== null && projectHeader !== null && (
+        <ProjectHeader header={projectHeader} nowMs={now} />
       )}
       {projectDirectory !== null && projectRows.length > 0 && (
         <ProjectInsight rows={projectRows} />
@@ -437,6 +552,7 @@ export default function Fleet({
           />
         </label>
         <DataGuide />
+        <RefreshButton onRefresh={onRefresh} refreshing={refreshing} />
         <button
           type="button"
           className="live-toggle"
@@ -492,7 +608,7 @@ export default function Fleet({
       {projectDirectory === null && (
         <KpiStrip
           kpis={kpis}
-          prevKpis={prevSnapshot?.kpis ?? null}
+          prevKpis={prevKpis}
           phase={live ? phase : "closed"}
           lastSeq={snapshot?.seq ?? 0}
           frameAgeMs={snapshotAgeMs}
@@ -570,6 +686,8 @@ export default function Fleet({
           totalPages={pageSlice.totalPages}
           total={pageSlice.total}
           onPageChange={(next) => onQueryChange?.({ page: next })}
+          pageSize={pageSize}
+          onPageSizeChange={changePageSize}
         />
       )}
     </div>

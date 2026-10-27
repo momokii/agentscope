@@ -11,9 +11,11 @@ const NOON = new Date(2026, 9, 24, 12, 0, 0, 0).getTime();
 function renderProject({
   projects,
   projectDirectory = "/srv/alpha",
+  date,
 }: {
   projects?: ReturnType<typeof makeProject>[];
   projectDirectory?: string;
+  date?: { preset: "all" | "today" | "24h" | "7d" | "30d"; from: null };
 } = {}) {
   const onSelect = vi.fn();
   render(
@@ -50,6 +52,7 @@ function renderProject({
       nowMs={NOON}
       projectDirectory={projectDirectory}
       bucket="all"
+      {...(date === undefined ? {} : { date })}
     />,
   );
   return { onSelect, container: document };
@@ -71,7 +74,7 @@ describe("project drill-in", () => {
     expect(onSelect).toHaveBeenCalledWith("ses_alpha1");
   });
 
-  it("renders the project KPI header from the frozen projects array", () => {
+  it("derives the project KPI header from member rows under the date filter", () => {
     const alphaProject = {
       ...makeProject({
         directory: "/srv/alpha",
@@ -91,14 +94,17 @@ describe("project drill-in", () => {
     expect(header.querySelector(".project-header-name")?.textContent).toBe(
       "alpha",
     );
+    // Runtime truth still comes from the frozen array…
     expect(within(header).getByText("/srv/alpha")).toBeDefined();
     expect(within(header).getByText("Live procs")).toBeDefined();
     expect(within(header).getByText("2")).toBeDefined();
     expect(within(header).getByText("Live panes")).toBeDefined();
     expect(within(header).getByText("3")).toBeDefined();
+    // …but member counts/totals recompute from the date-filtered rows
+    // (one fresh session: 1.5k tokens, $0.01 — not the frozen 9.0k/$4.50).
     expect(within(header).getByText("Cost total")).toBeDefined();
-    expect(within(header).getByText("$4.50")).toBeDefined();
-    expect(within(header).getByText("9.0k")).toBeDefined();
+    expect(within(header).getByText("$0.01")).toBeDefined();
+    expect(within(header).getByText("1.5k")).toBeDefined();
   });
 
   it("renders the project insight with distribution and rate from member rows", () => {
@@ -114,6 +120,49 @@ describe("project drill-in", () => {
     expect(
       screen.getByRole("img", { name: /project token rate/i }),
     ).toBeDefined();
+  });
+
+  it("scopes the project header and insight to the date filter", () => {
+    render(
+      <Fleet
+        snapshot={buildFixtureSnapshot({
+          sessions: [
+            makeRow({
+              id: "ses_fresh",
+              title: "fresh work",
+              directory: "/srv/alpha",
+              status: "running",
+              updated_relative_ms: 5_000,
+            }),
+            makeRow({
+              id: "ses_stale",
+              title: "stale work",
+              directory: "/srv/alpha",
+              status: "idle",
+              updated_relative_ms: 10 * 24 * 3_600_000,
+            }),
+          ],
+        })}
+        prevSnapshot={null}
+        phase="connected"
+        attempt={0}
+        live={true}
+        snapshotAgeMs={4000}
+        onToggleLive={() => undefined}
+        selectedId={null}
+        pins={[]}
+        onTogglePin={() => undefined}
+        onSelect={() => undefined}
+        nowMs={NOON}
+        projectDirectory="/srv/alpha"
+        bucket="all"
+        date={{ preset: "24h", from: null }}
+      />,
+    );
+    // Header aggregates + insight + table all drop the 10-day-old row.
+    expect(screen.getByLabelText("Project detail: 1 sessions")).toBeDefined();
+    expect(screen.getByText("fresh work")).toBeDefined();
+    expect(screen.queryByText("stale work")).toBeNull();
   });
 
   it("degrades to derived counts and em dashes for live procs and panes", () => {

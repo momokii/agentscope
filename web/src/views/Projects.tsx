@@ -17,6 +17,7 @@ import {
 } from "../lib/projects";
 import { buildProjectHash } from "../lib/routing";
 import DataGuide from "../components/DataGuide";
+import RefreshButton from "../components/RefreshButton";
 import KpiStrip from "../components/KpiStrip";
 import Pagination from "../components/Pagination";
 import RelativeTime from "../components/RelativeTime";
@@ -33,6 +34,10 @@ export interface ProjectsProps {
   kpis?: KPIs;
   prevKpis?: KPIs | null;
   lastSeq?: number;
+  /** Manual re-pull of /api/fleet through the snapshot pipeline. */
+  onRefresh?: () => void;
+  /** True while a manual refresh is in flight. */
+  refreshing?: boolean;
 }
 
 function numberText(value: number | undefined): string {
@@ -51,8 +56,8 @@ function usdText(value: number | undefined): string {
     : "—";
 }
 
-/** Cards per landing page (local state; the landing has no URL query). */
-const PROJECTS_PAGE_SIZE = 12;
+/** Default cards per landing page (operator-selectable 5–50). */
+const PROJECTS_DEFAULT_SIZE = 10;
 
 const PANES_TITLE =
   "OpenCode panes in this directory (presence signal; may briefly include a pane whose process just exited)";
@@ -91,10 +96,13 @@ export default function Projects({
   kpis,
   prevKpis = null,
   lastSeq = 0,
+  onRefresh,
+  refreshing = false,
 }: ProjectsProps) {
   const [query, setQuery] = useState("");
   const [since, setSince] = useState<DatePreset>("all");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PROJECTS_DEFAULT_SIZE);
   const now = nowMs ?? Date.now();
 
   const rows = useMemo(() => {
@@ -108,30 +116,34 @@ export default function Projects({
     return sortProjects(dated);
   }, [projects, query, since, now]);
 
-  const pageCount = Math.max(1, Math.ceil(rows.length / PROJECTS_PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const safePage = Math.min(Math.max(1, page), pageCount);
   const pageRows = useMemo(
     () =>
-      rows.slice(
-        (safePage - 1) * PROJECTS_PAGE_SIZE,
-        safePage * PROJECTS_PAGE_SIZE,
-      ),
-    [rows, safePage],
+      rows.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [rows, safePage, pageSize],
   );
+  const changePageSize = (size: number) => {
+    setPageSize(size);
+    setPage(1);
+  };
 
+  // Landing totals follow the search + active-since filters (like the
+  // cards below): a 24h slice shrinks these numbers instead of showing
+  // the all-time fleet next to a filtered list.
   const totals = useMemo(() => {
     let live_procs = 0;
     let running = 0;
     let waiting_input = 0;
     let live_projects = 0;
-    for (const project of projects) {
+    for (const project of rows) {
       live_procs += project.live_procs ?? 0;
       running += project.running ?? 0;
       waiting_input += project.waiting_input ?? 0;
       if (projectIsLive(project)) live_projects += 1;
     }
     return { live_procs, running, waiting_input, live_projects };
-  }, [projects]);
+  }, [rows]);
 
   const resetQuery = () => {
     setQuery("");
@@ -151,7 +163,7 @@ export default function Projects({
     <div className="projects">
       <div className="fleet-toolbar">
         <span className="fleet-title">
-          Projects <span className="count">({projects.length})</span>
+          Projects <span className="count">({rows.length})</span>
         </span>
         <span className="projects-summary mono">
           <span className={totals.live_procs > 0 ? "projects-summary-live" : ""}>
@@ -213,6 +225,7 @@ export default function Projects({
           })}
         </div>
         <DataGuide />
+        <RefreshButton onRefresh={onRefresh} refreshing={refreshing} />
         <button
           type="button"
           className="live-toggle"
@@ -356,13 +369,14 @@ export default function Projects({
           })}
         </ul>
       )}
-      {pageCount > 1 && (
+      {rows.length > 0 && (
         <Pagination
           page={safePage}
           totalPages={pageCount}
           total={rows.length}
           onPageChange={setPage}
-          pageSize={PROJECTS_PAGE_SIZE}
+          pageSize={pageSize}
+          onPageSizeChange={changePageSize}
         />
       )}
     </div>

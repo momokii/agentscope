@@ -46,11 +46,17 @@ export default function DataGuide() {
             <div>
               <dt>KPIs</dt>
               <dd>
-                Tokens/hr = message tokens in the last 60s × 60 (both
-                harnesses). Cost today = message spend since local midnight.
-                Cost total = lifetime, subagents not double-counted. Live
-                procs/panes = observed processes/panes. Metrics age = sample
-                age + time since this frame arrived; −/— = not yet measured.
+                Active / Waiting / Errors count the current date,
+                bucket, harness, and search selection — not the status
+                chips (those slice further). Tokens/hr = message tokens in
+                the last 60s × 60 (both harnesses). Cost today = message
+                spend since local midnight. Cost total = lifetime,
+                subagents not double-counted. Live procs = observed agent
+                processes; live panes = observed panes running an agent
+                (plain shells excluded, so the KPI matches the project
+                columns). Metrics age = sample age + time since this
+                frame arrived; −/— = not yet measured. Refresh re-pulls
+                the snapshot on demand (works paused).
               </dd>
             </div>
             <div>

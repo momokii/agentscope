@@ -237,14 +237,37 @@ describe("Projects landing", () => {
     expect(cards()).toHaveLength(2);
   });
 
-  it("paginates cards at twelve per page", () => {
+  it("paginates cards at ten per page with a size selector", () => {
     const projects = Array.from({ length: 13 }, (_, i) =>
       makeProject({ directory: `/srv/p${i}`, last_activity_ms: 1_000 }),
     );
     render(<Projects nowMs={NOON} projects={projects} />);
-    expect(cards()).toHaveLength(12);
+    expect(cards()).toHaveLength(10);
     fireEvent.click(screen.getByRole("button", { name: /next page/i }));
-    expect(cards()).toHaveLength(1);
+    expect(cards()).toHaveLength(3);
+    fireEvent.change(screen.getByLabelText("Rows per page"), {
+      target: { value: "5" },
+    });
+    expect(cards()).toHaveLength(5);
+  });
+
+  it("scopes the landing totals to the active-since filter", () => {
+    render(
+      <Projects
+        nowMs={NOON}
+        projects={[
+          makeProject({ directory: "/srv/fresh", live_procs: 2, running: 1, last_activity_ms: 5_000 }),
+          makeProject({ directory: "/srv/old", live_procs: 3, running: 4, last_activity_ms: 10 * 24 * 3_600_000 }),
+        ]}
+      />,
+    );
+    // Unfiltered: both projects count (2+3 procs, 1+4 running).
+    const summary = (): string =>
+      document.querySelector(".projects-summary")?.textContent ?? "";
+    expect(summary()).toContain("5 procs");
+    fireEvent.click(screen.getByRole("button", { name: "24h" }));
+    expect(summary()).toContain("2 procs");
+    expect(summary()).not.toContain("5 procs");
   });
 
   it("renders em dashes for absent optional project fields", () => {
