@@ -76,6 +76,8 @@ export default function RateChart({ values, label }: RateChartProps) {
   const peak = ratePeak(values);
   const title = `${label} token rate (tokens/min per tick): peak ${formatCompact(peak)}`;
   const dots = rateDots(values);
+  // Axis labels live in HTML (never in the stretched SVG): each sample is
+  // one poll tick, so the axis reads in ticks, honestly — not wall time.
   const axis =
     values.length > 1
       ? `oldest of ${values.length} ticks → latest`
@@ -88,7 +90,7 @@ export default function RateChart({ values, label }: RateChartProps) {
       </figcaption>
       <svg
         className="rate-svg"
-        viewBox={`0 0 ${RATE_WIDTH} ${RATE_HEIGHT + RATE_AXIS_H}`}
+        viewBox={`0 0 ${RATE_WIDTH} ${RATE_HEIGHT}`}
         preserveAspectRatio="none"
         aria-hidden="true"
       >
@@ -99,17 +101,13 @@ export default function RateChart({ values, label }: RateChartProps) {
             <title>{dot.label}</title>
           </circle>
         ))}
-        {values.length > 1 && (
-          <g className="rate-axis" fontSize={8}>
-            <text x={0} y={RATE_HEIGHT + 9} textAnchor="start">
-              −{values.length - 1} ticks
-            </text>
-            <text x={RATE_WIDTH} y={RATE_HEIGHT + 9} textAnchor="end">
-              latest
-            </text>
-          </g>
-        )}
       </svg>
+      {values.length > 1 && (
+        <div className="rate-axis mono" aria-hidden="true">
+          <span>−{values.length - 1} ticks</span>
+          <span>latest</span>
+        </div>
+      )}
       <div className="rate-note mono">1 sample ≈ 1 poll tick (default 10s)</div>
     </figure>
   );

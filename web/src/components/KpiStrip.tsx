@@ -272,7 +272,7 @@ export default function KpiStrip({
         <DeltaLine
           delta={{
             tone: "mute",
-            text: hasMetricsAge ? "message metrics" : "—",
+            text: hasMetricsAge ? "msg metrics" : "—",
             direction: "flat",
           }}
         />
