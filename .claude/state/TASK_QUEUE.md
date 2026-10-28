@@ -37,6 +37,10 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 
 ## NEXT
 
+### TASK-335: Activity ticker scoping + mover collapse (DONE 2026-10-28)
+- **Evidence:** ticker follows the view (project directory / session id / fleet) with scope chip; per-session movers collapse instead of stacking; live probe shows scoped rows + sources; tests green
+- **Priority:** Medium | **Complexity:** M | **Status:** DONE
+
 ### TASK-331: Windowed cost/token metrics, backend+UI (DONE 2026-10-28)
 - **Evidence:** conditional-sum scans (200ms), collector combine, session_windows in /api/fleet, Σ per-session == global exact; KPI card + project header follow 24h/7d/30d with labels
 - **Priority:** High | **Complexity:** L | **Status:** DONE
