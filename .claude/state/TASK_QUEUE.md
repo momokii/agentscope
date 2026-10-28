@@ -37,25 +37,33 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 
 ## NEXT
 
-### TASK-331: Windowed cost/token metrics (backend)
+### TASK-331: Windowed cost/token metrics, backend+UI (DONE 2026-10-28)
+- **Evidence:** conditional-sum scans (200ms), collector combine, session_windows in /api/fleet, Σ per-session == global exact; KPI card + project header follow 24h/7d/30d with labels
+- **Priority:** High | **Complexity:** L | **Status:** DONE
+- **Original scope:** one-pass conditional sums (24h/7d/30d + midnight) globally and per session; pi in-memory equivalent; collector sums/merges both; snapshot + fleet carry windows + sparse per-session map; last-good on error.
+- **Verify:** `go test ./internal/...` + live curl proof
 - **Priority:** High | **Complexity:** L | **Status:** TODO
 - **Scope:** one-pass conditional sums (24h/7d/30d + midnight) globally and per session; pi in-memory equivalent; collector sums/merges both; snapshot + fleet carry windows + sparse per-session map; last-good on error.
 - **Acceptance:** global cost_24h reconciles with Σ project windowed sums live; ticks never block.
 - **Verify:** `go test ./internal/...` + live curl proof
 
-### TASK-332: Windowed costs/tokens in the UI
+### TASK-332: (folded into 331 DONE — see above)
 - **Priority:** High | **Complexity:** M | **Status:** TODO
 - **Scope:** KPI cost card + project header cost/tokens switch label+value by `since` preset (lifetime fallback for `all`/custom); BySession map feeds project sums.
 - **Acceptance:** 24h/7d/30d change cost cards; labels name the window.
 - **Verify:** web suite + screenshots
 
-### TASK-333: Tooltip pass on every badge/datum
+### TASK-333: Tooltip pass on every badge/datum (DONE 2026-10-28)
+- **Evidence:** titles on status/harness badges, all KPI labels, table cells, project metrics, pin; DataTooltips.test pins them
+- **Priority:** Medium | **Complexity:** S | **Status:** DONE
 - **Priority:** Medium | **Complexity:** S | **Status:** TODO
 - **Scope:** concise explanatory `title`s on status/harness badges, KPI cards, table cells, project metrics, pagination, filters, ticker, chart.
 - **Acceptance:** every data badge answers what/how-to-read on hover.
 - **Verify:** web suite (assert key titles)
 
-### TASK-334: Page-select visual blend
+### TASK-334: Page-select visual blend (DONE 2026-10-28)
+- **Evidence:** chip-styled select + dark dropdown; verified in screenshots
+- **Priority:** Medium | **Complexity:** S | **Status:** DONE
 - **Priority:** Medium | **Complexity:** S | **Status:** TODO
 - **Scope:** style the per-page select like the filter chips (dark scheme dropdown).
 - **Verify:** screenshot

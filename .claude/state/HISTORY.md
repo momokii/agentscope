@@ -132,3 +132,18 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
   ALL 2 / buckets 2·2·12·0·14, all coherent.
 - No errors in the gate suite (248 web + full backend green); continued
   after a transient harness hiccup the user reported.
+
+## 2026-10-28 — Final verification pass (all tasks)
+- Full gates: go build/vet/test (9 pkgs), tsc, vitest 248/248, token gate,
+  security greps rows 1–4 — all green. Tree clean, commits per step kept.
+- Live proofs on :8082 (non-loopback + Basic gate): 401/200 auth, fleet
+  1966 opencode + 6 pi, cost windows monotone (total 84.15 / 24h 4.97 /
+  7d 15.02 / 30d 15.02 / today 0.71), Σ per-session 24h == global exact,
+  live_panes 6 == Σ project panes 6, claimant screen 200, non-claimant
+  409 + owner hint, pi export 404 (P6), 5-mount allowlist, muse-spark-1.3
+  global default, deployed bundle byte-identical to committed dist.
+- UI probes (headless Chromium, authed): 24h KPI card switches to
+  "Cost 24h $4.98", tooltips on badges/KPIs/cards/refresh/guide all render,
+  metrics age ticks live, page selector + refresh + guide present.
+- Open backlog (explicitly deferred, not defects): TASK-206 pi transcript
+  drill-down (P6), TASK-101 human-run F2 VM truth matrix, TASK-103/104/105/106.
