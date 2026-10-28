@@ -165,6 +165,55 @@ describe("project drill-in", () => {
     expect(screen.queryByText("stale work")).toBeNull();
   });
 
+  it("shows windowed project tokens and cost under a 24h filter", () => {
+    render(
+      <Fleet
+        snapshot={buildFixtureSnapshot({
+          sessions: [
+            makeRow({
+              id: "ses_fresh",
+              title: "fresh work",
+              directory: "/srv/alpha",
+              status: "running",
+              updated_relative_ms: 5_000,
+              tokens: { in: 1000, out: 500, total: 1500 },
+              cost: 0.5,
+            }),
+          ],
+          session_windows: {
+            ses_fresh: {
+              tokens_24h: 900,
+              tokens_7d: 1200,
+              tokens_30d: 1500,
+              cost_24h: 0.3,
+              cost_7d: 0.4,
+              cost_30d: 0.5,
+            },
+          },
+        })}
+        prevSnapshot={null}
+        phase="connected"
+        attempt={0}
+        live={true}
+        snapshotAgeMs={4000}
+        onToggleLive={() => undefined}
+        selectedId={null}
+        pins={[]}
+        onTogglePin={() => undefined}
+        onSelect={() => undefined}
+        nowMs={NOON}
+        projectDirectory="/srv/alpha"
+        bucket="all"
+        date={{ preset: "24h", from: null }}
+      />,
+    );
+    const header = screen.getByLabelText("Project alpha");
+    expect(within(header).getByText("Tokens 24h")).toBeDefined();
+    expect(within(header).getByText("900")).toBeDefined();
+    expect(within(header).getByText("Cost 24h")).toBeDefined();
+    expect(within(header).getByText("$0.30")).toBeDefined();
+  });
+
   it("degrades to derived counts and em dashes for live procs and panes", () => {
     renderProject();
     const header = screen.getByLabelText("Project alpha");

@@ -14,11 +14,23 @@ interface HarnessSpec {
   glyph: string;
   label: string;
   className: string;
+  /** How to read this owner (hover tooltip). */
+  title: string;
 }
 
 const SPECS: Record<Harness, HarnessSpec> = {
-  opencode: { glyph: "OC", label: "OPENCODE", className: "badge-harness-oc" },
-  pi: { glyph: "π", label: "PI", className: "badge-harness-pi" },
+  opencode: {
+    glyph: "OC",
+    label: "OPENCODE",
+    className: "badge-harness-oc",
+    title: "Owned by opencode (tracked in opencode.db)",
+  },
+  pi: {
+    glyph: "π",
+    label: "PI",
+    className: "badge-harness-pi",
+    title: "Owned by pi (tracked in JSONL session files)",
+  },
 };
 
 export function harnessBadgeSpec(harness: Harness): HarnessSpec {
@@ -31,7 +43,7 @@ export default function HarnessBadge({ harness }: { harness: Harness }) {
     <span
       className={`badge ${spec.className}`}
       aria-label={`harness ${spec.label}`}
-      title={`Harness: ${spec.label}`}
+      title={spec.title}
     >
       <span className="badge-glyph" aria-hidden="true">
         {spec.glyph}

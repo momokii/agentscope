@@ -68,6 +68,23 @@ describe("KpiStrip", () => {
     expect(screen.getByText("34s")).toBeDefined();
   });
 
+  it("switches the cost card to the trailing window with lifetime fallback", () => {
+    const { kpis } = buildFixtureSnapshot();
+    const windowed = { ...kpis, cost_24h: 1.5, cost_7d: 4.25 };
+    const { rerender } = render(
+      <KpiStrip kpis={windowed} prevKpis={null} phase="connected" lastSeq={1} costMode="24h" />,
+    );
+    expect(screen.getByText("Cost 24h")).toBeDefined();
+    expect(screen.getByText("$1.50")).toBeDefined();
+    // Snapshots that predate windowed metrics fall back to the (also
+    // absent) lifetime total — honest unknown, never zero.
+    rerender(
+      <KpiStrip kpis={kpis} prevKpis={null} phase="connected" lastSeq={1} costMode="7d" />,
+    );
+    expect(screen.getByText("Cost 7d")).toBeDefined();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
   it("labels the SSE dot state per connection phase", () => {
     const { kpis } = buildFixtureSnapshot();
     const { rerender } = render(

@@ -23,7 +23,7 @@ import {
 import { buildProjectHash } from "../lib/routing";
 import DataGuide from "../components/DataGuide";
 import RefreshButton from "../components/RefreshButton";
-import KpiStrip from "../components/KpiStrip";
+import KpiStrip, { costModeFor } from "../components/KpiStrip";
 import Pagination from "../components/Pagination";
 import RelativeTime from "../components/RelativeTime";
 
@@ -287,6 +287,7 @@ export default function Projects({
           phase={live ? phase : "closed"}
           lastSeq={lastSeq}
           frameAgeMs={snapshotAgeMs}
+          costMode={costModeFor({ preset: since, from: null })}
         />
       )}
 
@@ -341,31 +342,46 @@ export default function Projects({
                     <span className="project-path mono">{project.directory}</span>
                   </span>
 
-                  <span className="project-metric">
+                  <span
+                    className="project-metric"
+                    title="Sessions generating now in this directory"
+                  >
                     <span className="project-metric-label">Running</span>
                     <span className="project-metric-value mono">
                       {numberText(project.running)}
                     </span>
                   </span>
-                  <span className="project-metric">
+                  <span
+                    className="project-metric"
+                    title="Sessions heuristically waiting on you in this directory"
+                  >
                     <span className="project-metric-label">Waiting</span>
                     <span className="project-metric-value mono">
                       {numberText(project.waiting_input)}
                     </span>
                   </span>
-                  <span className="project-metric">
+                  <span
+                    className="project-metric"
+                    title="Total sessions ever opened in this directory"
+                  >
                     <span className="project-metric-label">Sessions</span>
                     <span className="project-metric-value mono">
                       {numberText(project.sessions)}
                     </span>
                   </span>
-                  <span className="project-metric">
+                  <span
+                    className="project-metric"
+                    title="Lifetime tokens in this directory, both harnesses (incl. subagent roll-up)"
+                  >
                     <span className="project-metric-label">Tokens</span>
                     <span className="project-metric-value mono">
                       {compactText(project.tokens_total)}
                     </span>
                   </span>
-                  <span className="project-metric">
+                  <span
+                    className="project-metric"
+                    title="Lifetime spend in this directory, both harnesses"
+                  >
                     <span className="project-metric-label">Cost total</span>
                     <span className="project-metric-value mono">
                       {usdText(project.cost_total)}

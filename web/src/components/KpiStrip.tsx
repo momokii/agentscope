@@ -6,6 +6,7 @@
 
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 
+import type { DateFilter } from "../lib/fleetSort";
 import type { KPIs } from "../lib/sse";
 import type { ConnectionPhase } from "../lib/sse";
 import { formatAgeShort, formatCompact, formatUSD } from "../lib/format";
@@ -143,6 +144,85 @@ export interface KpiStripProps {
    * value as-is.
    */
   frameAgeMs?: number | null;
+  /**
+   * Which cost window the Cost card shows: lifetime totals by default,
+   * message-level windowed spend under a matching date filter. The
+   * standalone Cost-today card already covers the today preset; custom
+   * `from` falls back to the lifetime total.
+   */
+  costMode?: "total" | "24h" | "7d" | "30d";
+}
+
+/** DateFilter → cost card mode. Presets map to their message-level
+ * window; custom `from` and `all` fall back to the lifetime total
+ * (per-day attribution needs fixed windows — see DataGuide). */
+export function costModeFor(date: DateFilter): "total" | "24h" | "7d" | "30d" {
+  if (date.from !== null && date.from !== undefined) return "total";
+  if (date.preset === "24h" || date.preset === "7d" || date.preset === "30d") {
+    return date.preset;
+  }
+  return "total";
+}
+
+/** Cost card content for one window mode: label, value (with lifetime
+ * fallback for snapshots that predate windowed metrics), and title. */
+function costCard(
+  kpis: KPIs,
+  mode: NonNullable<KpiStripProps["costMode"]>,
+): { label: string; value: number | undefined; title: string } {
+  switch (mode) {
+    case "24h":
+      return {
+        label: "Cost 24h",
+        value: kpis.cost_24h ?? kpis.cost_total,
+        title: "Message spend in the trailing 24 hours (both harnesses)",
+      };
+    case "7d":
+      return {
+        label: "Cost 7d",
+        value: kpis.cost_7d ?? kpis.cost_total,
+        title: "Message spend in the trailing 7 days (both harnesses)",
+      };
+    case "30d":
+      return {
+        label: "Cost 30d",
+        value: kpis.cost_30d ?? kpis.cost_total,
+        title: "Message spend in the trailing 30 days (both harnesses)",
+      };
+    case "total":
+    default:
+      return {
+        label: "Cost total",
+        value: kpis.cost_total,
+        title: "Lifetime spend across all sessions",
+      };
+  }
+}
+
+function CostCardBody({
+  kpis,
+  costMode,
+  delta,
+}: {
+  kpis: KPIs;
+  costMode: NonNullable<KpiStripProps["costMode"]>;
+  delta: Delta;
+}) {
+  const card = costCard(kpis, costMode);
+  return (
+    <>
+      <div className="kpi-label" title={card.title}>
+        {card.label}
+      </div>
+      <div
+        className="kpi-value"
+        title={card.value === undefined ? COST_TOTAL_ABSENT_TITLE : undefined}
+      >
+        {usdValue(card.value)}
+      </div>
+      <DeltaLine delta={delta} />
+    </>
+  );
 }
 
 export default function KpiStrip({
@@ -151,6 +231,7 @@ export default function KpiStrip({
   phase,
   lastSeq,
   frameAgeMs = null,
+  costMode = "total",
 }: KpiStripProps) {
   const prev = prevKpis ?? null;
   const tokensDelta = infoDelta(kpis.tokens_per_hour, prev?.tokens_per_hour ?? null);
@@ -166,17 +247,30 @@ export default function KpiStrip({
   return (
     <section className="kpi-strip" aria-label="Fleet KPIs">
       <div className="kpi-card">
-        <div className="kpi-label">Active</div>
+        <div
+          className="kpi-label"
+          title="Sessions generating now (follows the date/bucket/harness/search filters, not the status chips)"
+        >
+          Active
+        </div>
         <div className="kpi-value">{kpis.active}</div>
         <DeltaLine delta={infoDelta(kpis.active, prev?.active ?? null)} />
       </div>
       <div className="kpi-card">
-        <div className="kpi-label">Waiting input</div>
+        <div
+          className="kpi-label"
+          title="Sessions heuristically waiting on you (user spoke last, nothing in flight); follows the date/bucket/harness/search filters"
+        >
+          Waiting input
+        </div>
         <div className="kpi-value">{kpis.waiting_input}</div>
         <DeltaLine delta={waitingDelta(kpis.waiting_input, prev?.waiting_input ?? null)} />
       </div>
       <div className="kpi-card">
-        <div className="kpi-label" title="Measured tokens in the last 60s × 60">
+        <div
+          className="kpi-label"
+          title="Message tokens in the trailing 60s × 60, both harnesses — a now-rate, independent of date filters"
+        >
           Tokens/hr
         </div>
         <div className="kpi-value">{formatCompact(kpis.tokens_per_hour)}</div>
@@ -193,7 +287,10 @@ export default function KpiStrip({
         />
       </div>
       <div className="kpi-card">
-        <div className="kpi-label" title="Spend since local midnight">
+        <div
+          className="kpi-label"
+          title="Message spend since local midnight, both harnesses (container date may differ from host — see TZ)"
+        >
           Cost today
         </div>
         <div className="kpi-value">{formatUSD(kpis.cost_today)}</div>
@@ -210,24 +307,25 @@ export default function KpiStrip({
         />
       </div>
       <div className="kpi-card">
-        <div className="kpi-label" title="Lifetime spend across all sessions">
-          Cost total
-        </div>
-        <div
-          className="kpi-value"
-          title={kpis.cost_total === undefined ? COST_TOTAL_ABSENT_TITLE : undefined}
-        >
-          {usdValue(kpis.cost_total)}
-        </div>
-        <DeltaLine delta={costTotalDelta} />
+        <CostCardBody kpis={kpis} costMode={costMode} delta={costTotalDelta} />
       </div>
       <div className="kpi-card">
-        <div className="kpi-label">Errors</div>
+        <div
+          className="kpi-label"
+          title="Sessions whose newest turn failed (follows the date/bucket/harness/search filters)"
+        >
+          Errors
+        </div>
         <div className="kpi-value">{kpis.errors}</div>
         <DeltaLine delta={errorDelta(kpis.errors, prev?.errors ?? null)} />
       </div>
       <div className="kpi-card">
-        <div className="kpi-label">Live procs</div>
+        <div
+          className="kpi-label"
+          title="Alive opencode + pi processes seen via /proc — ground truth for 'actually running'"
+        >
+          Live procs
+        </div>
         <div
           className="kpi-value"
           title={kpis.live_processes === undefined ? LIVE_ABSENT_TITLE : undefined}
@@ -239,7 +337,12 @@ export default function KpiStrip({
         />
       </div>
       <div className="kpi-card">
-        <div className="kpi-label">Live panes</div>
+        <div
+          className="kpi-label"
+          title="Non-exited panes running an agent (opencode/pi); plain shells excluded so this matches the per-project columns"
+        >
+          Live panes
+        </div>
         <div
           className="kpi-value"
           title={kpis.live_panes === undefined ? LIVE_ABSENT_TITLE : undefined}

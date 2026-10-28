@@ -100,6 +100,28 @@ export interface KPIs {
    */
   cost_total?: number;
   metrics_age_ms?: number;
+  /**
+   * Trailing-window spend/tokens (both harnesses, off-tick sample).
+   * OPTIONAL on the wire: absent on older snapshots → fall back to the
+   * lifetime totals, never zero. Drives the date-filtered cost card.
+   */
+  cost_24h?: number;
+  cost_7d?: number;
+  cost_30d?: number;
+  tokens_24h?: number;
+  tokens_7d?: number;
+  tokens_30d?: number;
+}
+
+/** Per-session trailing-window sums (sparse: only sessions with window
+ * activity). MIRROR: `internal/model.WindowSums` json tags. */
+export interface WindowSums {
+  tokens_24h: number;
+  tokens_7d: number;
+  tokens_30d: number;
+  cost_24h: number;
+  cost_7d: number;
+  cost_30d: number;
 }
 
 export interface ProjectSummary {
@@ -122,6 +144,9 @@ export interface Snapshot {
   last_poll_ms: number;
   stale: boolean;
   projects?: ProjectSummary[];
+  /** Sparse per-session windowed spend for project drill-in attribution
+   * under date filters. Absent on older snapshots → lifetime fallback. */
+  session_windows?: Record<string, WindowSums>;
 }
 
 export type ConnectionPhase =

@@ -47,7 +47,7 @@ import HarnessFilterBar, {
 } from "../components/HarnessFilterBar";
 import ProjectInsight from "../components/ProjectInsight";
 import RateChart from "../components/RateChart";
-import KpiStrip from "../components/KpiStrip";
+import KpiStrip, { costModeFor } from "../components/KpiStrip";
 import Pagination from "../components/Pagination";
 import ProjectHeader from "../components/ProjectHeader";
 import RecencyFilterBar from "../components/RecencyFilterBar";
@@ -116,8 +116,15 @@ function SessionCell({ row }: { row: SessionRow }) {
   const cwd = row.pane.cwd !== "" ? row.pane.cwd : row.directory;
   return (
     <td>
-      <div className="session-title">{row.title}</div>
-      <div className="session-cwd mono">
+      <div className="session-title" title={row.title}>
+        {row.title}
+      </div>
+      <div
+        className="session-cwd mono"
+        title={`project ${row.project} · ${row.directory}${
+          row.pane.cwd !== "" ? ` · live pane at ${row.pane.cwd}` : ""
+        }`}
+      >
         {row.project} · {cwd}
         {isExited(row) ? " · exited" : ""}
       </div>
@@ -142,6 +149,7 @@ function SubagentCell({
         className="subagent-chip"
         aria-expanded={expanded}
         aria-label={`${expanded ? "Collapse" : "Expand"} ${row.subagent_count} subagents for ${row.title}`}
+        title="Child sessions (parent_id link); row tokens/cost include this roll-up"
         onClick={onToggle}
       >
         <span aria-hidden="true">↳</span>
@@ -400,13 +408,25 @@ export default function Fleet({
         </td>
         <SessionCell row={row} />
         <td>
-          <span className="model-chip">{row.model}</span>
+          <span className="model-chip" title={`Model provider/model-id: ${row.model}`}>
+            {row.model}
+          </span>
         </td>
-        <td className="mono">{formatCompact(row.tokens.total)}</td>
-        <td>
+        <td
+          className="mono"
+          title={`Cumulative tokens incl. subagent roll-up (${formatCompact(row.tokens.total)} total)`}
+        >
+          {formatCompact(row.tokens.total)}
+        </td>
+        <td title="Tokens/min per poll tick, newest last">
           <Sparkline data={row.spark} />
         </td>
-        <td className="mono">{formatUSD(row.cost)}</td>
+        <td
+          className="mono"
+          title={`Cumulative USD cost incl. subagent roll-up (${formatUSD(row.cost)})`}
+        >
+          {formatUSD(row.cost)}
+        </td>
         <td>
           <RelativeTime
             updatedRelativeMs={row.updated_relative_ms}
@@ -426,6 +446,7 @@ export default function Fleet({
             }
             aria-pressed={pinIndex >= 0}
             aria-label={`${pinIndex >= 0 ? "Unpin" : "Pin"} session ${row.title}`}
+            title="Pin to the top section (keys 1–9 jump to pins)"
             onClick={(event) => {
               event.stopPropagation();
               onTogglePin(row.id);
@@ -472,8 +493,17 @@ export default function Fleet({
   );
 
   /** Project header aggregates recomputed over the same date/bucket window
-   * (live presence stays global runtime truth; tokens/cost stay lifetime
-   * and keep their "total" labels). */
+   * (live presence stays global runtime truth). Tokens/cost switch to
+   * trailing-window sums from the snapshot's per-session map under a 24h
+   * / 7d / 30d preset (labels name the window); today/custom/all keep
+   * lifetime totals (per-session midnight attribution doesn't exist). */
+  const projectWindow = useMemo((): "24h" | "7d" | "30d" | null => {
+    if (date.from !== null && date.from !== undefined) return null;
+    if (date.preset === "24h" || date.preset === "7d" || date.preset === "30d") {
+      return date.preset;
+    }
+    return null;
+  }, [date]);
   const projectHeader = useMemo(() => {
     if (projectDirectory === null) return null;
     const base = resolveProjectHeader(snapshot, projectDirectory);
@@ -482,11 +512,28 @@ export default function Fleet({
     let tokens = 0;
     let cost = 0;
     let lastActivity: number | undefined;
+    const windows = snapshot?.session_windows;
     for (const row of projectRows) {
       if (row.status === "running") running++;
       else if (row.status === "waiting-input") waiting++;
-      tokens += row.tokens.total;
-      cost += row.cost;
+      if (projectWindow !== null && windows !== undefined) {
+        const w = windows[row.id];
+        if (w !== undefined) {
+          if (projectWindow === "24h") {
+            tokens += w.tokens_24h;
+            cost += w.cost_24h;
+          } else if (projectWindow === "7d") {
+            tokens += w.tokens_7d;
+            cost += w.cost_7d;
+          } else {
+            tokens += w.tokens_30d;
+            cost += w.cost_30d;
+          }
+        }
+      } else {
+        tokens += row.tokens.total;
+        cost += row.cost;
+      }
       if (
         lastActivity === undefined ||
         row.updated_relative_ms < lastActivity
@@ -495,15 +542,19 @@ export default function Fleet({
       }
     }
     return {
-      ...base,
-      sessions: projectRows.length,
-      running,
-      waiting_input: waiting,
-      tokens_total: tokens,
-      cost_total: cost,
-      last_activity_ms: lastActivity,
+      header: {
+        ...base,
+        sessions: projectRows.length,
+        running,
+        waiting_input: waiting,
+        tokens_total: tokens,
+        cost_total: cost,
+        last_activity_ms: lastActivity,
+      },
+      tokensLabel: projectWindow === null ? "Tokens" : `Tokens ${projectWindow}`,
+      costLabel: projectWindow === null ? "Cost total" : `Cost ${projectWindow}`,
     };
-  }, [snapshot, projectDirectory, projectRows]);
+  }, [snapshot, projectDirectory, projectRows, projectWindow]);
 
   /** Fleet-wide token rate (element-wise spark sums, live data only). */
   const fleetRate = useMemo(
@@ -514,7 +565,12 @@ export default function Fleet({
   return (
     <div className="fleet">
       {projectDirectory !== null && projectHeader !== null && (
-        <ProjectHeader header={projectHeader} nowMs={now} />
+        <ProjectHeader
+          header={projectHeader.header}
+          tokensLabel={projectHeader.tokensLabel}
+          costLabel={projectHeader.costLabel}
+          nowMs={now}
+        />
       )}
       {projectDirectory !== null && projectRows.length > 0 && (
         <ProjectInsight rows={projectRows} />
@@ -612,6 +668,7 @@ export default function Fleet({
           phase={live ? phase : "closed"}
           lastSeq={snapshot?.seq ?? 0}
           frameAgeMs={snapshotAgeMs}
+          costMode={costModeFor(date)}
         />
       )}
 

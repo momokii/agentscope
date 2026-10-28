@@ -3124,6 +3124,28 @@ button.tools-row:hover {
   flex-wrap: wrap;
 }
 
+.pagination-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-400);
+  font-size: var(--fs-11);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+.pagination-size select {
+  background: var(--ink-800);
+  border: var(--border);
+  border-radius: var(--radius-chip);
+  color: var(--ink-200);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-variant-numeric: var(--tnum);
+  padding: 4px 6px;
+  color-scheme: dark;
+}
+
 .pagination-total {
   margin-right: auto;
 }

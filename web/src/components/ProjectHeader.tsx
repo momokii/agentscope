@@ -7,6 +7,10 @@ import RelativeTime from "./RelativeTime";
 export interface ProjectHeaderProps {
   header: ProjectHeaderData;
   nowMs?: number;
+  /** Windowed labels when the drill-in follows a date preset
+   * ("Tokens 24h" / "Cost 24h"); lifetime labels otherwise. */
+  tokensLabel?: string;
+  costLabel?: string;
 }
 
 function numberText(value: number | undefined): string {
@@ -35,7 +39,12 @@ function livePanes(
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-export default function ProjectHeader({ header, nowMs }: ProjectHeaderProps) {
+export default function ProjectHeader({
+  header,
+  nowMs,
+  tokensLabel = "Tokens",
+  costLabel = "Cost total",
+}: ProjectHeaderProps) {
   const lastActivity = header.last_activity_ms;
   return (
     <section
@@ -100,12 +109,28 @@ export default function ProjectHeader({ header, nowMs }: ProjectHeaderProps) {
             <div className="kpi-value">{numberText(header.sessions)}</div>
           </div>
           <div className="kpi-card">
-            <div className="kpi-label">Tokens</div>
+            <div
+              className="kpi-label"
+              title={
+                tokensLabel === "Tokens"
+                  ? "Lifetime tokens in this project (incl. subagent roll-up)"
+                  : `Message tokens in this project in the trailing window (both harnesses)`
+              }
+            >
+              {tokensLabel}
+            </div>
             <div className="kpi-value">{compactText(header.tokens_total)}</div>
           </div>
           <div className="kpi-card">
-            <div className="kpi-label" title="Lifetime spend in this project">
-              Cost total
+            <div
+              className="kpi-label"
+              title={
+                costLabel === "Cost total"
+                  ? "Lifetime spend in this project"
+                  : `Message spend in this project in the trailing window (both harnesses)`
+              }
+            >
+              {costLabel}
             </div>
             <div className="kpi-value">{usdText(header.cost_total)}</div>
           </div>
