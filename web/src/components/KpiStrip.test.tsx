@@ -85,6 +85,18 @@ describe("KpiStrip", () => {
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 
+  it("folds the today preset into the windowed cost card", () => {
+    const { kpis } = buildFixtureSnapshot();
+    const { container } = render(
+      <KpiStrip kpis={kpis} prevKpis={null} phase="connected" lastSeq={1} costMode="today" />,
+    );
+    const labels = Array.from(container.querySelectorAll(".kpi-label")).map(
+      (el) => el.textContent,
+    );
+    expect(labels.filter((t) => t === "Cost today")).toHaveLength(1);
+    expect(screen.getByText("$12.40")).toBeDefined();
+  });
+
   it("labels the SSE dot state per connection phase", () => {
     const { kpis } = buildFixtureSnapshot();
     const { rerender } = render(

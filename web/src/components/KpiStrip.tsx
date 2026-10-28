@@ -147,18 +147,23 @@ export interface KpiStripProps {
   /**
    * Which cost window the Cost card shows: lifetime totals by default,
    * message-level windowed spend under a matching date filter. The
-   * standalone Cost-today card already covers the today preset; custom
-   * `from` falls back to the lifetime total.
+   * `today` preset folds into this card (the standalone Cost-today duplicate
+   * is hidden then); custom `from` falls back to the lifetime total.
    */
-  costMode?: "total" | "24h" | "7d" | "30d";
+  costMode?: "total" | "today" | "24h" | "7d" | "30d";
 }
 
 /** DateFilter → cost card mode. Presets map to their message-level
  * window; custom `from` and `all` fall back to the lifetime total
  * (per-day attribution needs fixed windows — see DataGuide). */
-export function costModeFor(date: DateFilter): "total" | "24h" | "7d" | "30d" {
+export function costModeFor(date: DateFilter): "total" | "today" | "24h" | "7d" | "30d" {
   if (date.from !== null && date.from !== undefined) return "total";
-  if (date.preset === "24h" || date.preset === "7d" || date.preset === "30d") {
+  if (
+    date.preset === "today" ||
+    date.preset === "24h" ||
+    date.preset === "7d" ||
+    date.preset === "30d"
+  ) {
     return date.preset;
   }
   return "total";
@@ -171,6 +176,12 @@ function costCard(
   mode: NonNullable<KpiStripProps["costMode"]>,
 ): { label: string; value: number | undefined; title: string } {
   switch (mode) {
+    case "today":
+      return {
+        label: "Cost today",
+        value: kpis.cost_today,
+        title: "Message spend since local midnight, both harnesses",
+      };
     case "24h":
       return {
         label: "Cost 24h",
@@ -201,14 +212,16 @@ function costCard(
 
 function CostCardBody({
   kpis,
+  prevKpis,
   costMode,
-  delta,
 }: {
   kpis: KPIs;
+  prevKpis: KPIs | null;
   costMode: NonNullable<KpiStripProps["costMode"]>;
-  delta: Delta;
 }) {
   const card = costCard(kpis, costMode);
+  const prevCard = prevKpis === null ? null : costCard(prevKpis, costMode);
+  const delta = usdDelta(card.value, prevCard?.value);
   return (
     <>
       <div className="kpi-label" title={card.title}>
@@ -239,7 +252,6 @@ export default function KpiStrip({
     Math.round(kpis.cost_today * 100),
     prev ? Math.round(prev.cost_today * 100) : null,
   );
-  const costTotalDelta = usdDelta(kpis.cost_total, prev?.cost_total);
   const hasMetricsAge =
     typeof kpis.metrics_age_ms === "number" &&
     Number.isFinite(kpis.metrics_age_ms);
@@ -286,28 +298,32 @@ export default function KpiStrip({
           }}
         />
       </div>
-      <div className="kpi-card">
-        <div
-          className="kpi-label"
-          title="Message spend since local midnight, both harnesses (container date may differ from host — see TZ)"
-        >
-          Cost today
+      {/* The today preset folds into the windowed Cost card below (same
+          numbers, one place) instead of duplicating the row. */}
+      {costMode !== "today" && (
+        <div className="kpi-card">
+          <div
+            className="kpi-label"
+            title="Message spend since local midnight, both harnesses (container date may differ from host — see TZ)"
+          >
+            Cost today
+          </div>
+          <div className="kpi-value">{formatUSD(kpis.cost_today)}</div>
+          <DeltaLine
+            delta={{
+              ...costDelta,
+              text:
+                costDelta.direction === "flat"
+                  ? "±0"
+                  : `${costDelta.direction === "up" ? "+" : "−"}${formatUSD(
+                      Math.abs(kpis.cost_today - (prev?.cost_today ?? kpis.cost_today)),
+                    )}`,
+            }}
+          />
         </div>
-        <div className="kpi-value">{formatUSD(kpis.cost_today)}</div>
-        <DeltaLine
-          delta={{
-            ...costDelta,
-            text:
-              costDelta.direction === "flat"
-                ? "±0"
-                : `${costDelta.direction === "up" ? "+" : "−"}${formatUSD(
-                    Math.abs(kpis.cost_today - (prev?.cost_today ?? kpis.cost_today)),
-                  )}`,
-          }}
-        />
-      </div>
+      )}
       <div className="kpi-card">
-        <CostCardBody kpis={kpis} costMode={costMode} delta={costTotalDelta} />
+        <CostCardBody kpis={kpis} prevKpis={prev} costMode={costMode} />
       </div>
       <div className="kpi-card">
         <div

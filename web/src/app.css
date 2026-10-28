@@ -76,9 +76,8 @@ a:focus-visible {
 }
 
 .brand svg {
-  width: 16px;
-  height: 16px;
-  color: var(--accent);
+  display: block;
+  flex: none;
 }
 
 .app-header .seq {

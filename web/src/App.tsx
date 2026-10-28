@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Activity } from "lucide-react";
+import Logo from "./components/Logo";
 
 import { createSSEClient, normalizeSnapshot } from "./lib/sse";
 import type { Snapshot, StatusEvent } from "./lib/sse";
@@ -276,7 +276,7 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <span className="brand">
-          <Activity aria-hidden="true" />
+          <Logo size={18} />
           <span>opencode mission control</span>
         </span>
         <nav className="app-nav" aria-label="Views">

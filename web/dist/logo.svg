@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="opencode mission control">
+  <rect x="3" y="3" width="58" height="58" rx="13" fill="#0a0c10" stroke="#3f4756" stroke-width="3"/>
+  <path d="M21 23 L33 32 L21 41" fill="none" stroke="#22d3ee" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="37" y="37" width="9" height="5.5" rx="1.5" fill="#22d3ee"/>
+</svg>
