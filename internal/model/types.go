@@ -137,6 +137,21 @@ type SessionRow struct {
 	Harness Harness `json:"harness"`
 }
 
+// WindowSums is message-level tokens/cost in trailing windows, global or
+// per session. Source: the off-tick metrics refresher (message/usage
+// rows, never rolled-up session totals). Windows are trailing from the
+// sample clock; midnight is local-midnight in the sample location.
+type WindowSums struct {
+	// Tokens24h/7d/30d are message token totals in the trailing windows.
+	Tokens24h int64 `json:"tokens_24h"`
+	Tokens7d  int64 `json:"tokens_7d"`
+	Tokens30d int64 `json:"tokens_30d"`
+	// Cost24h/7d/30d are message USD spend in the trailing windows.
+	Cost24h float64 `json:"cost_24h"`
+	Cost7d  float64 `json:"cost_7d"`
+	Cost30d float64 `json:"cost_30d"`
+}
+
 // KPIs is the fleet KPI strip: GET /api/fleet → kpis and Snapshot.KPIs.
 // Consumer: internal/collector aggregates per tick; web/ renders KpiStrip.
 type KPIs struct {
@@ -154,6 +169,16 @@ type KPIs struct {
 	// CostTotal is lifetime USD spend: the sum of each session's own
 	// cumulative cost (message-level truth, no subagent double count).
 	CostTotal float64 `json:"cost_total"`
+	// Cost24h/7d/30d are message-level USD spend in the trailing windows
+	// (both harnesses, off-tick sample; unknown before the first refresh
+	// reads 0 alongside metrics_age_ms -1).
+	Cost24h  float64 `json:"cost_24h"`
+	Cost7d   float64 `json:"cost_7d"`
+	Cost30d  float64 `json:"cost_30d"`
+	// Tokens24h/7d/30d are message token totals in the trailing windows.
+	Tokens24h int64 `json:"tokens_24h"`
+	Tokens7d  int64 `json:"tokens_7d"`
+	Tokens30d int64 `json:"tokens_30d"`
 	// MetricsAgeMs is milliseconds since the last successful message-level
 	// metrics refresh. -1 means no refresh has completed yet (unknown).
 	MetricsAgeMs int64 `json:"metrics_age_ms"`
@@ -214,6 +239,10 @@ type Snapshot struct {
 	Projects []ProjectSummary `json:"projects"`
 	// KPIs is the aggregated fleet strip for this tick.
 	KPIs KPIs `json:"kpis"`
+	// SessionWindows is the sparse per-session windowed spend map backing
+	// project drill-in attribution under date filters (only sessions with
+	// window activity appear). Omitted when empty.
+	SessionWindows map[string]WindowSums `json:"session_windows,omitempty"`
 	// LastPollMs is the duration of the last collector poll in milliseconds.
 	LastPollMs int64 `json:"last_poll_ms"`
 	// Stale is true when the frame exceeds the freshness budget (collector

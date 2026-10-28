@@ -152,6 +152,12 @@ func (l *liveDBReader) MessageMetrics(_ context.Context, _ time.Time) (ports.Mes
 	return ports.MessageMetrics{}, nil
 }
 
+// WindowMetrics keeps liveDBReader satisfying ports.DBReader. Windowed
+// spend has its own db-level coverage; the Manual-QA path reports zero.
+func (l *liveDBReader) WindowMetrics(_ context.Context, _ time.Time) (ports.WindowMetrics, error) {
+	return ports.WindowMetrics{}, nil
+}
+
 // liveRuntime is the two-tick Manual-QA stand-in for the W1-2 RuntimeSource:
 // it scans /proc for live opencode processes (self excluded) and marks rows
 // whose directory matches a live cwd as present, everything else orphan.

@@ -158,6 +158,12 @@ func buildKPIs(rows []model.SessionRow, metrics kpiMetrics, livePanes, liveProce
 	kpis := model.KPIs{
 		TokensPerHour: float64(metrics.tokensLast60s) * 60,
 		CostToday:     metrics.costSinceMidnight,
+		Cost24h:       metrics.windows.Cost24h,
+		Cost7d:        metrics.windows.Cost7d,
+		Cost30d:       metrics.windows.Cost30d,
+		Tokens24h:     metrics.windows.Tokens24h,
+		Tokens7d:      metrics.windows.Tokens7d,
+		Tokens30d:     metrics.windows.Tokens30d,
 		MetricsAgeMs:  metrics.ageMs,
 		SSEConnected:  true,
 		LivePanes:     livePanes,

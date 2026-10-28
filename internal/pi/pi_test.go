@@ -243,6 +243,39 @@ func TestPiMessageMetrics_windows(t *testing.T) {
 	}
 }
 
+func TestPiWindowMetrics_windows_globally_and_per_session(t *testing.T) {
+	now := time.Date(2026, 10, 27, 12, 10, 0, 0, time.UTC)
+	content := `{"type":"session","version":3,"id":"w-1","timestamp":"2026-10-20T00:00:00.000Z","cwd":"/x"}
+` +
+		`{"type":"message","id":"a","parentId":null,"timestamp":"2026-10-27T11:00:00.000Z","message":{"role":"assistant","content":[],"stopReason":"stop","usage":{"input":100,"output":50,"cacheRead":0,"cacheWrite":0,"totalTokens":150,"cost":{"total":0.02}},"timestamp":1}}` + "\n" +
+		`{"type":"message","id":"b","parentId":"a","timestamp":"2026-10-20T00:00:00.000Z","message":{"role":"assistant","content":[],"stopReason":"stop","usage":{"input":1000,"output":500,"cacheRead":0,"cacheWrite":0,"totalTokens":1500,"cost":{"total":0.30}},"timestamp":2}}` + "\n"
+	content2 := `{"type":"session","version":3,"id":"w-2","timestamp":"2026-09-01T00:00:00.000Z","cwd":"/y"}
+` +
+		`{"type":"message","id":"c","parentId":null,"timestamp":"2026-08-01T00:00:00.000Z","message":{"role":"assistant","content":[],"stopReason":"stop","usage":{"input":10,"output":5,"cacheRead":0,"cacheWrite":0,"totalTokens":15,"cost":{"total":9.99}},"timestamp":3}}` + "\n"
+	dir := t.TempDir()
+	writeSession(t, dir, "s", "f1.jsonl", content)
+	writeSession(t, dir, "s", "f2.jsonl", content2)
+
+	r := New(dir)
+	m, err := r.PiWindowMetrics(t.Context(), now)
+	if err != nil {
+		t.Fatalf("PiWindowMetrics: %v", err)
+	}
+	if m.Tokens24h != 150 || m.Tokens30d != 1650 {
+		t.Errorf("tokens 24h/30d = %d/%d, want 150/1650", m.Tokens24h, m.Tokens30d)
+	}
+	if m.Cost24h != 0.02 || m.Cost30d != 0.32 {
+		t.Errorf("cost 24h/30d = %v/%v, want 0.02/0.32", m.Cost24h, m.Cost30d)
+	}
+	// August usage is outside every window: absent from globals and map.
+	if len(m.BySession) != 1 {
+		t.Fatalf("BySession sessions = %d, want 1 (sparse)", len(m.BySession))
+	}
+	if m.BySession["w-1"].Tokens7d != 150 {
+		t.Errorf("w-1 7d tokens = %d, want 150", m.BySession["w-1"].Tokens7d)
+	}
+}
+
 func TestPiMessageMetrics_store_missing_errors(t *testing.T) {
 	r := New(filepath.Join(t.TempDir(), "nope"))
 	now := time.Date(2026, 10, 27, 12, 10, 0, 0, time.UTC)

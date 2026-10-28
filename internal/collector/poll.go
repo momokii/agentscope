@@ -268,17 +268,19 @@ func (c *Collector) Tick(ctx context.Context) (bool, error) {
 	kpis := buildKPIs(enriched, kpiMetrics{
 		tokensLast60s:     metrics.tokensLast60s,
 		costSinceMidnight: metrics.costSinceMidnight,
+		windows:           metrics.windows,
 		ageMs:             metricsAgeMs,
 	}, livePanes, liveProcs)
 	projects := buildProjects(enriched, c.rt.ProcsByDir(), panesByDir(c.rt))
 
 	snap := model.Snapshot{
-		Seq:        c.seq + 1,
-		Sessions:   enriched,
-		Projects:   projects,
-		KPIs:       kpis,
-		LastPollMs: elapsed.Milliseconds(),
-		Stale:      stale,
+		Seq:            c.seq + 1,
+		Sessions:       enriched,
+		Projects:       projects,
+		KPIs:           kpis,
+		SessionWindows: metrics.windows.BySession,
+		LastPollMs:     elapsed.Milliseconds(),
+		Stale:          stale,
 	}
 	if err := c.publish(ctx, snap); err != nil {
 		slog.ErrorContext(ctx, "collector publish failed",
@@ -316,15 +318,17 @@ func (c *Collector) publishStaleFrame(ctx context.Context, start time.Time) (boo
 	kpis := buildKPIs(sessions, kpiMetrics{
 		tokensLast60s:     metrics.tokensLast60s,
 		costSinceMidnight: metrics.costSinceMidnight,
+		windows:           metrics.windows,
 		ageMs:             metricsAgeMs,
 	}, livePanes, liveProcs)
 	snap := model.Snapshot{
-		Seq:        c.seq + 1,
-		Sessions:   sessions,
-		Projects:   projects,
-		KPIs:       kpis,
-		LastPollMs: elapsed.Milliseconds(),
-		Stale:      true,
+		Seq:            c.seq + 1,
+		Sessions:       sessions,
+		Projects:       projects,
+		KPIs:           kpis,
+		SessionWindows: metrics.windows.BySession,
+		LastPollMs:     elapsed.Milliseconds(),
+		Stale:          true,
 	}
 	if snap.Sessions == nil {
 		snap.Sessions = []model.SessionRow{}

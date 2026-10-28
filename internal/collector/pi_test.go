@@ -14,12 +14,14 @@ import (
 // fakePi serves canned pi rows or a store error, counting calls so merge
 // tests can assert the pi scan runs per tick without failing it.
 type fakePi struct {
-	mu       sync.Mutex
-	rows     []model.SessionRow
-	err      error
-	calls    int
-	pmetrics ports.MessageMetrics
-	perr     error
+	mu        sync.Mutex
+	rows      []model.SessionRow
+	err       error
+	calls     int
+	pmetrics  ports.MessageMetrics
+	perr      error
+	pwmetrics ports.WindowMetrics
+	pwerr     error
 }
 
 func (f *fakePi) PiSessions(ctx context.Context) ([]model.SessionRow, error) {
@@ -41,6 +43,15 @@ func (f *fakePi) PiMessageMetrics(ctx context.Context, _ time.Time) (ports.Messa
 		return ports.MessageMetrics{}, f.perr
 	}
 	return f.pmetrics, nil
+}
+
+func (f *fakePi) PiWindowMetrics(ctx context.Context, _ time.Time) (ports.WindowMetrics, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.pwerr != nil {
+		return ports.WindowMetrics{}, f.pwerr
+	}
+	return f.pwmetrics, nil
 }
 
 func (f *fakePi) setRows(rows []model.SessionRow) {
@@ -237,6 +248,42 @@ func abs(f float64) float64 {
 		return -f
 	}
 	return f
+}
+
+func Test_Collector_refreshWindows_sums_both_harnesses(t *testing.T) {
+	// Given: DB and pi window samples over the same instant.
+	t0 := time.UnixMilli(1800000000000)
+	db := &fakeDB{
+		rows:     []model.SessionRow{rowFixture("ses-oc", model.SessionRunning, 50, 1)},
+		updMs:    1,
+		evID:     1,
+		wmetrics: ports.WindowMetrics{Tokens24h: 1000, Cost24h: 0.5, BySession: map[string]model.WindowSums{"ses-oc": {Tokens24h: 1000, Cost24h: 0.5}}},
+	}
+	pi := &fakePi{pwmetrics: ports.WindowMetrics{Tokens24h: 234, Cost24h: 0.25, BySession: map[string]model.WindowSums{"pi-1": {Tokens24h: 234, Cost24h: 0.25}}}}
+	sink := &fakeSink{}
+	c, err := NewCollector(db, &fakeRuntime{}, sink, testConfig(), pi)
+	if err != nil {
+		t.Fatalf("NewCollector: %v", err)
+	}
+	c.clock = &stubClock{times: []time.Time{t0, t0, t0}}
+
+	// When
+	c.refreshMetrics(context.Background())
+	if _, err := c.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	// Then: KPIs carry the summed windows and the merged session map.
+	got := sink.published()
+	if len(got) != 1 {
+		t.Fatalf("published = %d, want 1", len(got))
+	}
+	if got[0].KPIs.Tokens24h != 1234 || got[0].KPIs.Cost24h != 0.75 {
+		t.Errorf("KPIs windows = %+v, want tokens 1234 cost 0.75", got[0].KPIs)
+	}
+	if len(got[0].SessionWindows) != 2 {
+		t.Errorf("SessionWindows = %+v, want both sessions", got[0].SessionWindows)
+	}
 }
 
 func Test_piSignature_order_independent_and_status_sensitive(t *testing.T) {

@@ -44,6 +44,11 @@ type DBReader interface {
 	// entire history as one tick's work; per-message timestamps are the
 	// only honest throughput source.
 	MessageMetrics(ctx context.Context, now time.Time) (MessageMetrics, error)
+	// WindowMetrics computes trailing-window token/cost sums (24h/7d/30d
+	// plus local-midnight cost) globally and per session, as of now.
+	// Off-tick only (same budget rules as MessageMetrics); never a tick
+	// query. A missing store reports an error like PiSessions.
+	WindowMetrics(ctx context.Context, now time.Time) (WindowMetrics, error)
 }
 
 // PiReader is the pi JSONL session-store source (Wave 5 owns the
@@ -69,6 +74,32 @@ type PiReader interface {
 	// harnesses into one honest sample). Same error contract as
 	// PiSessions.
 	PiMessageMetrics(ctx context.Context, now time.Time) (MessageMetrics, error)
+	// PiWindowMetrics returns trailing-window usage sums (24h/7d/30d plus
+	// local-midnight cost) globally and per session file, as of now — the
+	// same shape as DBReader.WindowMetrics. Same error contract as
+	// PiSessions.
+	PiWindowMetrics(ctx context.Context, now time.Time) (WindowMetrics, error)
+}
+
+// WindowMetrics is one off-tick windowed sample over both harnesses:
+// global trailing-24h/7d/30d token/cost sums plus the sparse per-session
+// map (session id → window sums, only sessions with window activity) that
+// lets the UI attribute windowed spend to projects under date filters.
+// Same error contract as the sibling sample methods: any source failure
+// keeps the collector's last-good sample.
+type WindowMetrics struct {
+	// Global trailing-window token sums.
+	Tokens24h int64
+	Tokens7d  int64
+	Tokens30d int64
+	// Global trailing-window cost sums (plus midnight for today).
+	Cost24h      float64
+	Cost7d       float64
+	Cost30d      float64
+	CostMidnight float64
+	// BySession maps session id → window sums (sparse: only sessions
+	// with window activity). The collector sums harnesses into it.
+	BySession map[string]model.WindowSums
 }
 
 // MessageMetrics is one message-level sample: tokens created in the last

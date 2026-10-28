@@ -96,6 +96,57 @@ func (r *Reader) PiSessions(ctx context.Context) ([]model.SessionRow, error) {
 	return rows, nil
 }
 
+// PiWindowMetrics implements the windowed half of ports.PiReader:
+// trailing 24h/7d/30d usage sums globally and per session file, plus
+// local-midnight cost — the same shape as DBReader.WindowMetrics, computed
+// from the mtime-cached parses (milliseconds, never a tick-path scan). A
+// missing store errors like PiSessions (collector treats it as disabled).
+func (r *Reader) PiWindowMetrics(ctx context.Context, now time.Time) (ports.WindowMetrics, error) {
+	nowMs := now.UnixMilli()
+	d24 := nowMs - int64((24 * time.Hour).Milliseconds())
+	d7 := nowMs - int64((7 * 24 * time.Hour).Milliseconds())
+	d30 := nowMs - int64((30 * 24 * time.Hour).Milliseconds())
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).UnixMilli()
+	datas, err := r.parseFiles(ctx)
+	if err != nil {
+		return ports.WindowMetrics{}, err
+	}
+	var m ports.WindowMetrics
+	m.BySession = make(map[string]model.WindowSums)
+	for _, d := range datas {
+		var s model.WindowSums
+		for _, ev := range d.events {
+			if ev.tsMs < d30 {
+				continue
+			}
+			if ev.tsMs >= d24 {
+				s.Tokens24h += ev.tokens
+				s.Cost24h += ev.cost
+			}
+			if ev.tsMs >= d7 {
+				s.Tokens7d += ev.tokens
+				s.Cost7d += ev.cost
+			}
+			s.Tokens30d += ev.tokens
+			s.Cost30d += ev.cost
+			if ev.tsMs >= midnight {
+				m.CostMidnight += ev.cost
+			}
+		}
+		if s.Tokens24h|s.Tokens7d|s.Tokens30d != 0 ||
+			s.Cost24h+s.Cost7d+s.Cost30d != 0 {
+			m.BySession[d.id] = s
+		}
+		m.Tokens24h += s.Tokens24h
+		m.Tokens7d += s.Tokens7d
+		m.Tokens30d += s.Tokens30d
+		m.Cost24h += s.Cost24h
+		m.Cost7d += s.Cost7d
+		m.Cost30d += s.Cost30d
+	}
+	return m, nil
+}
+
 // PiMessageMetrics implements the message-level half of ports.PiReader:
 // usage tokens created in the trailing 60 seconds and usage cost since
 // local midnight — the same window semantics as db.MessageMetrics, so the

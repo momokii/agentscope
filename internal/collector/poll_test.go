@@ -43,6 +43,8 @@ type fakeDB struct {
 
 	metrics        ports.MessageMetrics
 	metricsErr     error
+	wmetrics       ports.WindowMetrics
+	wmetricsErr    error
 	metricsBlock   chan struct{}
 	metricsStarted chan struct{}
 
@@ -107,6 +109,14 @@ func (f *fakeDB) MessageMetrics(ctx context.Context, _ time.Time) (ports.Message
 // the stub reports unavailability so a mistaken call fails loudly.
 func (f *fakeDB) SessionDetail(_ context.Context, id string) (model.SessionDetail, error) {
 	return model.SessionDetail{}, fmt.Errorf("fakeDB: no detail for %s", id)
+}
+
+// WindowMetrics keeps fakeDB satisfying ports.DBReader after the windowed
+// spend seam landed. Tests set wmetrics/wmetricsErr per case.
+func (f *fakeDB) WindowMetrics(ctx context.Context, _ time.Time) (ports.WindowMetrics, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.wmetrics, f.wmetricsErr
 }
 
 func (f *fakeDB) setWatermark(updMs, evID int64) {
@@ -879,6 +889,10 @@ func (d *deadlineProbeDB) SessionDetail(_ context.Context, id string) (model.Ses
 
 func (d *deadlineProbeDB) MessageMetrics(context.Context, time.Time) (ports.MessageMetrics, error) {
 	return ports.MessageMetrics{}, nil
+}
+
+func (d *deadlineProbeDB) WindowMetrics(context.Context, time.Time) (ports.WindowMetrics, error) {
+	return ports.WindowMetrics{}, nil
 }
 
 // Given: DBTimeout set to 60ms with a DB that never answers.
