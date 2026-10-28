@@ -12,6 +12,7 @@ const tick = (i: number): ActivityEvent => ({
   sessionId: `ses_${i}`,
   sessionTitle: `work ${i}`,
   project: "alpha",
+  directory: "/srv/alpha",
   harness: i % 2 === 0 ? "pi" : "opencode",
   text: `ses_${i} idle → running`,
   glyph: "●",

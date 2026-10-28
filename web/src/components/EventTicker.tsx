@@ -23,13 +23,19 @@ export interface EventTickerProps {
   events: readonly ActivityEvent[];
   /** True when LIVE is off: freeze appends, show PAUSED chip. */
   paused: boolean;
+  /** View scope label ("Fleet" default): project name or session title. */
+  scopeLabel?: string;
 }
 
 function harnessGlyph(harness: ActivityEvent["harness"]): string {
   return harness === "pi" ? "π" : "OC";
 }
 
-export default function EventTicker({ events, paused }: EventTickerProps) {
+export default function EventTicker({
+  events,
+  paused,
+  scopeLabel = "Fleet",
+}: EventTickerProps) {
   const [page, setPage] = useState(0);
   const pageCount = Math.max(1, Math.ceil(events.length / ACTIVITY_VISIBLE_CAP));
   const safePage = Math.min(page, pageCount - 1);
@@ -42,12 +48,17 @@ export default function EventTicker({ events, paused }: EventTickerProps) {
   return (
     <section
       className="ticker"
-      aria-label="Fleet activity ticker"
+      aria-label={`${scopeLabel} activity ticker`}
       data-paused={paused ? "true" : "false"}
     >
       <div className="ticker-head">
         <Activity aria-hidden="true" size={12} />
         <span className="ticker-title">Activity</span>
+        {scopeLabel !== "Fleet" && (
+          <span className="ticker-scope mono" title={`Scoped to ${scopeLabel}`}>
+            {scopeLabel}
+          </span>
+        )}
         {paused && (
           <span className="state-chip state-chip-paused">
             <span aria-hidden="true">‖</span>

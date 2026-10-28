@@ -4,7 +4,9 @@ import {
   ACTIVITY_RING_CAP,
   diffSnapshots,
   prependEvents,
+  scopeEvents,
 } from "./activity";
+import type { ActivityEvent } from "./activity";
 import { buildFixtureSnapshot, makeRow } from "../testutils/fixture";
 
 describe("diffSnapshots", () => {
@@ -131,6 +133,7 @@ describe("diffSnapshots", () => {
       sessionId: `ses_fill${i}`,
       sessionTitle: `fill ${i}`,
       project: "fill-proj",
+      directory: "/srv/fill",
       harness: "opencode" as const,
       text: `ses_fill${i} idle → running`,
       glyph: "●",
@@ -139,9 +142,74 @@ describe("diffSnapshots", () => {
     ring = prependEvents(ring, filler);
     expect(ring.length).toBe(ACTIVITY_RING_CAP);
     // Newest tick prepended whole: head is the tick's first event, tail cut.
+    // (Mover collapse tested separately below — filler kinds are all status.)
     expect(ring[0]?.sessionId).toBe("ses_fill0");
     expect(ring[ACTIVITY_RING_CAP - 1]?.sessionId).toBe(
       `ses_fill${ACTIVITY_RING_CAP - 1}`,
     );
+  });
+});
+
+describe("prependEvents mover collapse", () => {
+  const mover = (id: string, seq: number): ActivityEvent => ({
+    kind: "tokens-mover",
+    sessionId: id,
+    sessionTitle: id,
+    project: "p",
+    directory: "/srv/p",
+    harness: "opencode",
+    text: `${id} +1k tokens`,
+    glyph: "+",
+    seq,
+  });
+  const status = (id: string, seq: number): ActivityEvent => ({
+    kind: "status",
+    sessionId: id,
+    sessionTitle: id,
+    project: "p",
+    directory: "/srv/p",
+    harness: "opencode",
+    text: `${id} idle → running`,
+    glyph: "●",
+    seq,
+  });
+
+  it("replaces a session's older mover instead of stacking it", () => {
+    const ring = prependEvents([], [mover("a", 1), status("b", 1)]);
+    const next = prependEvents(ring, [mover("a", 2)]);
+    const movers = next.filter(
+      (e) => e.kind === "tokens-mover" && e.sessionId === "a",
+    );
+    expect(movers).toHaveLength(1);
+    expect(movers[0]?.seq).toBe(2);
+    // Unrelated history survives the collapse.
+    expect(next.some((e) => e.sessionId === "b")).toBe(true);
+  });
+});
+
+describe("scopeEvents", () => {
+  const ev = (id: string, dir: string): ActivityEvent => ({
+    kind: "status",
+    sessionId: id,
+    sessionTitle: id,
+    project: "p",
+    directory: dir,
+    harness: "opencode",
+    text: id,
+    glyph: "●",
+    seq: 1,
+  });
+  const ring = [ev("a", "/x"), ev("b", "/y")];
+
+  it("passes the whole ring without a scope", () => {
+    expect(scopeEvents(ring, {})).toHaveLength(2);
+  });
+
+  it("filters project views by exact directory", () => {
+    expect(scopeEvents(ring, { directory: "/x" }).map((e) => e.sessionId)).toEqual(["a"]);
+  });
+
+  it("filters session views by session id", () => {
+    expect(scopeEvents(ring, { sessionId: "b" }).map((e) => e.sessionId)).toEqual(["b"]);
   });
 });

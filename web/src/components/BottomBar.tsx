@@ -14,6 +14,8 @@ export interface BottomBarProps {
   events: readonly ActivityEvent[];
   paused: boolean;
   live: boolean;
+  /** View scope label for the ticker ("Fleet" default). */
+  scopeLabel?: string;
 }
 
 function Key({ children }: { children: string }) {
@@ -25,6 +27,7 @@ export default function BottomBar({
   events,
   paused,
   live,
+  scopeLabel,
 }: BottomBarProps) {
   return (
     <footer
@@ -32,7 +35,7 @@ export default function BottomBar({
       data-slot="bottom-bar"
       data-palette-open={paletteOpen ? "true" : "false"}
     >
-      <EventTicker events={events} paused={paused} />
+      <EventTicker events={events} paused={paused} scopeLabel={scopeLabel} />
       <div
         className="keymap"
         aria-label="Keyboard shortcuts"

@@ -16,12 +16,12 @@
  * - CmdBar overlay + BottomBar ticker/keymap wiring.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Logo from "./components/Logo";
 
 import { createSSEClient, normalizeSnapshot } from "./lib/sse";
 import type { Snapshot, StatusEvent } from "./lib/sse";
-import { diffSnapshots, prependEvents } from "./lib/activity";
+import { diffSnapshots, prependEvents, scopeEvents } from "./lib/activity";
 import type { ActivityEvent } from "./lib/activity";
 import { usePins } from "./lib/pins";
 import {
@@ -193,6 +193,30 @@ export default function App() {
   );
 
   const selectedId = route.view === "session" ? route.id : null;
+
+  // Ticker follows the current view: project drill-ins see their own
+  // directory, session views see their own session, everything else sees
+  // the fleet. Scoped to the latest snapshot rows so labels stay fresh.
+  const tickerScopeLabel = useMemo(() => {
+    if (route.view === "project") {
+      const base = route.directory.replace(/\/+$/, "").split("/").pop();
+      return base !== undefined && base !== "" ? base : route.directory;
+    }
+    if (route.view === "session") {
+      const row = snapshotRef.current?.sessions.find((r) => r.id === route.id);
+      return row?.title ?? route.id;
+    }
+    return "Fleet";
+  }, [route, snapshot]);
+  const scopedEvents = useMemo(() => {
+    if (route.view === "project") {
+      return scopeEvents(events, { directory: route.directory });
+    }
+    if (route.view === "session") {
+      return scopeEvents(events, { sessionId: route.id });
+    }
+    return events;
+  }, [events, route]);
 
   const fleetRoute = route.view === "fleet" || route.view === "project";
   const fleetStatus: StatusFilter = fleetRoute
@@ -416,9 +440,10 @@ export default function App() {
       />
       <BottomBar
         paletteOpen={palette.open}
-        events={events}
+        events={scopedEvents}
         paused={!live}
         live={live}
+        scopeLabel={tickerScopeLabel}
       />
     </div>
   );

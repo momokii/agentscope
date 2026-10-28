@@ -47,6 +47,8 @@ export interface ActivityEvent {
   sessionTitle: string;
   /** Owning project (directory basename) for fleet-wide context. */
   project: string;
+  /** Owning directory (exact match key for view-scoped tickers). */
+  directory: string;
   /** Owning harness (opencode/pi) for mixed-fleet context. */
   harness: Harness;
   /** Session-level one-liner, e.g. "ses_abc running → idle · +12.4k tokens". */
@@ -58,10 +60,11 @@ export interface ActivityEvent {
 }
 
 /** Source context shared by every event push (one row, one owner). */
-function sourceOf(row: SessionRow): Pick<ActivityEvent, "sessionTitle" | "project" | "harness"> {
+function sourceOf(row: SessionRow): Pick<ActivityEvent, "sessionTitle" | "project" | "directory" | "harness"> {
   return {
     sessionTitle: row.title,
     project: row.project,
+    directory: row.directory,
     harness: row.harness ?? "opencode",
   };
 }
@@ -242,13 +245,54 @@ export function diffSnapshots(
   return events;
 }
 
+/** Mover kinds refresh per tick (token/cost deltas); everything else is
+ * history worth keeping. */
+const REFRESH_KINDS: readonly ActivityKind[] = ["tokens-mover", "cost-mover"];
+
 /**
  * Prepend one tick's events onto the ring, newest-first, bounded at
- * ACTIVITY_RING_CAP. Pure — returns a new array.
+ * ACTIVITY_RING_CAP. Mover events collapse per session: a fresh token/cost
+ * delta replaces that session's older one instead of stacking the same row
+ * every tick (the spam the ticker was criticized for). Status/appeared/
+ * disappeared events always accumulate as history. Pure — returns a new array.
  */
 export function prependEvents(
   ring: readonly ActivityEvent[],
   events: readonly ActivityEvent[],
 ): ActivityEvent[] {
-  return [...events, ...ring].slice(0, ACTIVITY_RING_CAP);
+  const refreshed = new Set(
+    events
+      .filter((e) => (REFRESH_KINDS as readonly string[]).includes(e.kind))
+      .map((e) => `${e.kind}\0${e.sessionId}`),
+  );
+  const kept =
+    refreshed.size === 0
+      ? ring
+      : ring.filter(
+          (e) =>
+            !(REFRESH_KINDS as readonly string[]).includes(e.kind) ||
+            !refreshed.has(`${e.kind}\0${e.sessionId}`),
+        );
+  return [...events, ...kept].slice(0, ACTIVITY_RING_CAP);
+}
+
+/** View scope for the ticker: project drill-ins see their own directory,
+ * session views see their own session, everything else sees the fleet. */
+export interface TickerScope {
+  directory?: string | null;
+  sessionId?: string | null;
+}
+
+/** Filter the ring to one view's scope (empty scope = whole fleet). Pure. */
+export function scopeEvents(
+  events: readonly ActivityEvent[],
+  scope: TickerScope,
+): ActivityEvent[] {
+  if (scope.sessionId !== undefined && scope.sessionId !== null) {
+    return events.filter((e) => e.sessionId === scope.sessionId);
+  }
+  if (scope.directory !== undefined && scope.directory !== null) {
+    return events.filter((e) => e.directory === scope.directory);
+  }
+  return [...events];
 }

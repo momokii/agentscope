@@ -757,6 +757,15 @@ a:focus-visible {
   color: var(--ink-400);
 }
 
+.ticker-scope {
+  color: var(--accent);
+  font-size: var(--fs-11);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
 .ticker-count {
   margin-left: auto;
   color: var(--ink-400);
