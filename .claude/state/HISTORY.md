@@ -122,3 +122,13 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
 - TASK-326: DataGuide updated (agent panes, KPI scoping, readout).
 - Verified headless-Chromium (KPI scoping live, refresh button, page sizes)
   + full web suite 243/243. Redeployed :8082, committed per task.
+
+## 2026-10-28 — Faceted counts follow every filter except their own
+- Follow-up to the round-2 review: project detail showed insight "IDLE 1"
+  vs distribution "IDLE 13" (statusScope ignored the bucket). Reworked to
+  true faceting — status/harness/bucket chips each count rows left by all
+  OTHER filters; KPIs follow the status scope; project header+insight
+  follow directory+date+bucket+search. Live probe: status ALL 2 / harness
+  ALL 2 / buckets 2·2·12·0·14, all coherent.
+- No errors in the gate suite (248 web + full backend green); continued
+  after a transient harness hiccup the user reported.
