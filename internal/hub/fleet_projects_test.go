@@ -24,6 +24,10 @@ func Test_Fleet_includes_projects_and_additive_kpis(t *testing.T) {
 	}}
 	snap.KPIs.CostTotal = 78.4
 	snap.KPIs.MetricsAgeMs = 123
+	snap.KPIs.Cost24h = 4.5
+	snap.SessionWindows = map[string]model.WindowSums{
+		"ses_1": {Tokens24h: 900, Cost24h: 4.5},
+	}
 	if err := h.Publish(context.Background(), snap); err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
@@ -61,5 +65,11 @@ func Test_Fleet_includes_projects_and_additive_kpis(t *testing.T) {
 	}
 	if decoded.KPIs.CostTotal != 78.4 || decoded.KPIs.MetricsAgeMs != 123 {
 		t.Errorf("kpis = %+v, want cost_total=78.4 metrics_age_ms=123", decoded.KPIs)
+	}
+	if decoded.KPIs.Cost24h != 4.5 {
+		t.Errorf("kpis.cost_24h = %v, want 4.5", decoded.KPIs.Cost24h)
+	}
+	if got, ok := decoded.SessionWindows["ses_1"]; !ok || got.Tokens24h != 900 || got.Cost24h != 4.5 {
+		t.Errorf("session_windows = %+v, want ses_1 {900 4.5}", decoded.SessionWindows)
 	}
 }

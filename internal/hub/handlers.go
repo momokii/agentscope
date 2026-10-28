@@ -30,13 +30,15 @@ type HealthResponse struct {
 }
 
 // FleetResponse is GET /api/fleet. Field list frozen per the work plan:
-// {seq, sessions, projects, kpis}. Sessions reuse model.SessionRow tags so
-// Wave 2 consumes identical shapes from REST and SSE frames.
+// {seq, sessions, projects, kpis} plus the additive Wave-5+ window map.
+// Sessions reuse model.SessionRow tags so Wave 2 consumes identical shapes
+// from REST and SSE frames.
 type FleetResponse struct {
-	Seq      uint64                 `json:"seq"`
-	Sessions []model.SessionRow     `json:"sessions"`
-	Projects []model.ProjectSummary `json:"projects"`
-	KPIs     model.KPIs             `json:"kpis"`
+	Seq            uint64                        `json:"seq"`
+	Sessions       []model.SessionRow            `json:"sessions"`
+	Projects       []model.ProjectSummary        `json:"projects"`
+	KPIs           model.KPIs                    `json:"kpis"`
+	SessionWindows map[string]model.WindowSums `json:"session_windows,omitempty"`
 }
 
 // DebugResponse is GET /api/debug/hub. It is deliberately NOT part of the
@@ -213,6 +215,7 @@ func (s *Server) handleFleet(w http.ResponseWriter, r *http.Request) {
 		resp.Sessions = snap.Sessions
 		resp.Projects = snap.Projects
 		resp.KPIs = snap.KPIs
+		resp.SessionWindows = snap.SessionWindows
 		if resp.Sessions == nil {
 			resp.Sessions = []model.SessionRow{}
 		}
