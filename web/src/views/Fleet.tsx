@@ -199,51 +199,80 @@ export default function Fleet({
   );
 
   /**
-   * Facet scope: directory + harness + search + date. Status chips,
-   * live-only, and recency buckets slice WITHIN this scope, so their
-   * counts stay informative instead of mirroring the selection — while the
-   * KPI strip and the project header follow the operator's time window
+   * Faceted scopes: every chip bar counts the rows left by ALL OTHER
+   * filters, so counts stay informative instead of mirroring the
+   * selection — while the KPI strip follows the operator's time window
    * (a 24h filter really does shrink Active/Waiting/Errors).
+   *
+   * - statusScope: everything except the status chip + live-only toggle.
+   *   Feeds StatusDistribution, the status chips, and the KPI counts.
+   * - harnessScope: everything except the harness slice.
+   * - bucketScope: everything except the recency bucket + date window.
+   * - projectScope: directory + date + bucket + search (never status /
+   *   harness / live-only — the header describes the project's window
+   *   and the insight legend shows its harness split).
    */
-  const facetScope = useMemo(
+  const statusScope = useMemo(
     () =>
       applyFleetFilters(scopeRows, query, "all", false, {
+        bucket,
+        date,
+        harness: harnessFilter,
+        nowMs: now,
+      }),
+    [scopeRows, query, bucket, date, harnessFilter, now],
+  );
+  const harnessScope = useMemo(
+    () =>
+      applyFleetFilters(scopeRows, query, statusFilter, liveOnly, {
+        bucket,
+        date,
+        nowMs: now,
+      }),
+    [scopeRows, query, statusFilter, liveOnly, bucket, date, now],
+  );
+  const bucketScope = useMemo(
+    () =>
+      applyFleetFilters(scopeRows, query, statusFilter, liveOnly, {
         bucket: "all",
         date,
         harness: harnessFilter,
         nowMs: now,
       }),
-    [scopeRows, query, date, harnessFilter, now],
+    [scopeRows, query, statusFilter, liveOnly, date, harnessFilter, now],
   );
 
-  /** Per-status counts over the facet scope — one pass per tick. */
-  const statusCounts = useMemo(() => countByStatus(facetScope), [facetScope]);
+  /** Per-status counts over the status scope — one pass per tick. */
+  const statusCounts = useMemo(
+    () => countByStatus(statusScope),
+    [statusScope],
+  );
 
-  /** Per-harness counts over the facet scope — one pass per tick. */
+  /** Per-harness counts over the harness scope — one pass per tick. */
   const harnessCounts = useMemo(
-    () => countByHarness(facetScope),
-    [facetScope],
+    () => countByHarness(harnessScope),
+    [harnessScope],
   );
 
   const bucketCounts = useMemo(
-    () => countByIdleBucket(facetScope),
-    [facetScope],
+    () => countByIdleBucket(bucketScope),
+    [bucketScope],
   );
 
-  /** KPI strip scope: Active/Waiting/Errors describe the facet scope;
+  /** KPI strip scope: Active/Waiting/Errors describe the status scope;
    * throughput, costs, and live presence stay global measurements. */
   const scopedKpis = useMemo((): KPIs | null => {
     if (!snapshot) return null;
     let active = 0;
     let waiting = 0;
     let errors = 0;
-    for (const row of facetScope) {
+    for (const row of statusScope) {
       if (row.status === "running") active++;
       else if (row.status === "waiting-input") waiting++;
       else if (row.status === "error") errors++;
     }
     return { ...snapshot.kpis, active, waiting_input: waiting, errors };
-  }, [snapshot, facetScope]);
+  }, [snapshot, statusScope]);
 
   const rows = useMemo(() => {
     if (!snapshot) return [];
@@ -365,16 +394,19 @@ export default function Fleet({
 
   const kpis = scopedKpis ?? zeroKpis();
 
-  /** Previous-tick KPIs under the same facet scope, so deltas compare
+  /** Previous-tick KPIs under the same status scope, so deltas compare
    * like with like when a date/bucket filter is active. */
   const prevKpis = useMemo((): KPIs | null => {
     if (!prevSnapshot) return null;
     const prevScope = applyFleetFilters(
-      prevSnapshot.sessions,
+      prevSnapshot.sessions.filter(
+        (row) =>
+          projectDirectory === null || row.directory === projectDirectory,
+      ),
       query,
       "all",
       false,
-      { bucket: "all", date, harness: harnessFilter, nowMs: now },
+      { bucket, date, harness: harnessFilter, nowMs: now },
     );
     let active = 0;
     let waiting = 0;
@@ -474,23 +506,25 @@ export default function Fleet({
   };
 
   /**
-   * Project member rows: directory + date + bucket scoped (never the
-   * status/harness/search slices — the header describes the project's time
-   * window, the chips slice within it). Powers the header aggregates and
-   * the insight section alike.
+   * Project member rows: directory + date + bucket + search scoped (never
+   * the status/harness/live-only slices — the header describes the
+   * project's window and the insight legend shows its harness split).
+   * Powers the header aggregates and the insight section alike.
    */
-  const projectRows = useMemo(
-    () =>
-      projectDirectory === null || !snapshot
-        ? []
-        : snapshot.sessions.filter(
-            (row) =>
-              row.directory === projectDirectory &&
-              matchesIdleBucket(row, bucket) &&
-              matchesDateFilter(row.updated_relative_ms, date, now),
-          ),
-    [snapshot, projectDirectory, bucket, date, now],
-  );
+  const projectRows = useMemo(() => {
+    if (projectDirectory === null || !snapshot) return [];
+    const needle = query.trim().toLowerCase();
+    return snapshot.sessions.filter(
+      (row) =>
+        row.directory === projectDirectory &&
+        matchesIdleBucket(row, bucket) &&
+        matchesDateFilter(row.updated_relative_ms, date, now) &&
+        (needle === "" ||
+          [row.id, row.title, row.project, row.directory, row.model].some(
+            (field) => field.toLowerCase().includes(needle),
+          )),
+    );
+  }, [snapshot, projectDirectory, bucket, date, query, now]);
 
   /** Project header aggregates recomputed over the same date/bucket window
    * (live presence stays global runtime truth). Tokens/cost switch to
