@@ -157,3 +157,10 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
 - Verified live: page selector chip-styled (ink-800/ink-600/mono, dark
   dropdown, 5/10/20/25/50), tooltips on badges/KPIs/cells/cards, header logo,
   windowed project costs (reconcile exact vs global).
+
+## 2026-10-28 — Activity ticker rework (scoped + deduped)
+- The fleet-wide ticker showed in every view, spamming repeat token-movers.
+  Now: project drill-ins see their directory, session views their session,
+  with a scope chip; per-session movers collapse to the newest (status
+  history still accumulates). Live probe: "opencode-dashboard activity
+  ticker" with project-only rows + source context.
