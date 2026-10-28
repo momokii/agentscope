@@ -147,3 +147,13 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
   metrics age ticks live, page selector + refresh + guide present.
 - Open backlog (explicitly deferred, not defects): TASK-206 pi transcript
   drill-down (P6), TASK-101 human-run F2 VM truth matrix, TASK-103/104/105/106.
+
+## 2026-10-28 — TODAY cost + logo + tooltips verification round
+- TODAY preset folded the standalone Cost-today card into the windowed Cost
+  card (single "Cost today" card, no duplication); delta compares same-window
+  values. Live probe: ALL shows Cost total $84.36, TODAY shows Cost today $0.91.
+- Logo: terminal-prompt mark (accent chevron + cursor on ink-950) as inline
+  header brand + /logo.svg tab favicon (200, gated like everything else).
+- Verified live: page selector chip-styled (ink-800/ink-600/mono, dark
+  dropdown, 5/10/20/25/50), tooltips on badges/KPIs/cells/cards, header logo,
+  windowed project costs (reconcile exact vs global).
