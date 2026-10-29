@@ -182,3 +182,13 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
   contributing, license) + CONTRIBUTING.md + 4 docs/screenshots.
 - Deployed :8082 (non-loopback + auth); live-verified activity tab +
   guide blurbs via screenshots.
+
+## 2026-10-26 — Honest guides + ticker removal (operator review)
+- Operator rightly called out copy-pasted guides: every tab now explains
+  ITSELF (Compare cards/lines/picker/click; Timeline lanes/bars/dots/area;
+  SessionDetail per-tab purposes; Activity kinds/collapse/scope/browse),
+  each verified against the rendering source — including correcting a wrong
+  Timeline blurb before it shipped.
+- Footer ticker deleted (Activity tab is the log now); BottomBar keeps the
+  keymap only; dead SessionStub removed. Live probes: no .ticker in footer,
+  tailored guides render per tab. Web 257/257, redeployed :8082.
