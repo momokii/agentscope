@@ -31,12 +31,33 @@ function harnessGlyph(harness: ActivityEvent["harness"]): string {
   return harness === "pi" ? "π" : "OC";
 }
 
+/** localStorage key for the collapsed preference (view-independent). */
+const COLLAPSE_KEY = "ocd.tickerCollapsed";
+
 export default function EventTicker({
   events,
   paused,
   scopeLabel = "Fleet",
 }: EventTickerProps) {
   const [page, setPage] = useState(0);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(COLLAPSE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleCollapsed = () => {
+    setCollapsed((v) => {
+      const next = !v;
+      try {
+        window.localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+      } catch {
+        // Private mode etc: collapse still works for this view.
+      }
+      return next;
+    });
+  };
   const pageCount = Math.max(1, Math.ceil(events.length / ACTIVITY_VISIBLE_CAP));
   const safePage = Math.min(page, pageCount - 1);
   useEffect(() => {
@@ -52,8 +73,18 @@ export default function EventTicker({
       data-paused={paused ? "true" : "false"}
     >
       <div className="ticker-head">
-        <Activity aria-hidden="true" size={12} />
-        <span className="ticker-title">Activity</span>
+        <button
+          type="button"
+          className="ticker-toggle"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "Show activity" : "Hide activity"}
+          title={collapsed ? "Show the activity feed" : "Hide the activity feed"}
+          onClick={toggleCollapsed}
+        >
+          <Activity aria-hidden="true" size={12} />
+          <span className="ticker-title">Activity</span>
+          <span aria-hidden="true">{collapsed ? "▸" : "▾"}</span>
+        </button>
         {scopeLabel !== "Fleet" && (
           <span className="ticker-scope mono" title={`Scoped to ${scopeLabel}`}>
             {scopeLabel}
@@ -92,7 +123,7 @@ export default function EventTicker({
           </span>
         )}
       </div>
-      {visible.length === 0 ? (
+      {collapsed ? null : visible.length === 0 ? (
         <div className="ticker-empty">
           No activity yet — transitions appear as snapshots tick.
         </div>

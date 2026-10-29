@@ -61,4 +61,24 @@ describe("EventTicker", () => {
     render(<EventTicker events={[]} paused={false} />);
     expect(screen.getByText(/No activity yet/)).toBeDefined();
   });
+
+  it("collapses the list behind a persisted toggle", () => {
+    window.localStorage.removeItem("ocd.tickerCollapsed");
+    render(<EventTicker events={[tick(1)]} paused={false} />);
+    expect(screen.getByText("ses_1 idle → running")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Hide activity" }));
+    expect(screen.queryByText("ses_1 idle → running")).toBeNull();
+    expect(window.localStorage.getItem("ocd.tickerCollapsed")).toBe("1");
+    fireEvent.click(screen.getByRole("button", { name: "Show activity" }));
+    expect(screen.getByText("ses_1 idle → running")).toBeDefined();
+    expect(window.localStorage.getItem("ocd.tickerCollapsed")).toBe("0");
+  });
+
+  it("starts collapsed when the preference is stored", () => {
+    window.localStorage.setItem("ocd.tickerCollapsed", "1");
+    render(<EventTicker events={[tick(1)]} paused={false} />);
+    expect(screen.queryByText("ses_1 idle → running")).toBeNull();
+    expect(screen.getByRole("button", { name: "Show activity" })).toBeDefined();
+    window.localStorage.removeItem("ocd.tickerCollapsed");
+  });
 });
