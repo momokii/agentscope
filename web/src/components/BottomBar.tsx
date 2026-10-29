@@ -1,21 +1,16 @@
 /**
- * BottomBar (W2-2): event ticker + persistent footer keymap (k9s canon).
+ * BottomBar (W2-2): persistent footer keymap (k9s canon). The activity
+ * feed lives on its own tab now (`#/activity`); the footer keeps only
+ * the always-visible keymap.
  *
  * The CmdBar overlay is rendered by the App shell (it needs session data +
- * hash routing); this footer owns the ticker and the always-visible keymap.
- * `paletteOpen` is threaded through for overlay positioning state.
+ * hash routing). `paletteOpen` is threaded through for overlay
+ * positioning state.
  */
-
-import EventTicker from "./EventTicker";
-import type { ActivityEvent } from "../lib/activity";
 
 export interface BottomBarProps {
   paletteOpen: boolean;
-  events: readonly ActivityEvent[];
-  paused: boolean;
   live: boolean;
-  /** View scope label for the ticker ("Fleet" default). */
-  scopeLabel?: string;
 }
 
 function Key({ children }: { children: string }) {
@@ -24,10 +19,7 @@ function Key({ children }: { children: string }) {
 
 export default function BottomBar({
   paletteOpen,
-  events,
-  paused,
   live,
-  scopeLabel,
 }: BottomBarProps) {
   return (
     <footer
@@ -35,7 +27,6 @@ export default function BottomBar({
       data-slot="bottom-bar"
       data-palette-open={paletteOpen ? "true" : "false"}
     >
-      <EventTicker events={events} paused={paused} scopeLabel={scopeLabel} />
       <div
         className="keymap"
         aria-label="Keyboard shortcuts"

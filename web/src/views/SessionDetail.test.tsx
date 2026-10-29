@@ -188,6 +188,18 @@ describe("SessionDetail production data seam", () => {
   });
 });
 
+describe("SessionDetail guide", () => {
+  it("explains the tabs with view-specific entries", async () => {
+    renderDetail({ id: FIXTURE_MAIN_ID, tab: "transcript" });
+    await screen.findByText("Add dashboard drill-down");
+    fireEvent.click(screen.getByRole("button", { name: "How to read this dashboard" }));
+    const panel = screen.getByLabelText("Data guide");
+    expect(panel.textContent).toMatch(/six ways to read it/);
+    expect(panel.textContent).toMatch(/per assistant turn/);
+    expect(panel.textContent).toMatch(/DB-only 409/);
+  });
+});
+
 describe("SessionDetail transcript tab", () => {
   it("renders interleaved messages with agent-lane chips", async () => {
     renderDetail({ id: FIXTURE_MAIN_ID, tab: "transcript" });

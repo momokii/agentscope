@@ -84,3 +84,13 @@ describe("Compare", () => {
     expect(onPointSelect.mock.calls[0]![0]).toBe("ses_running1");
   });
 });
+
+describe("Compare guide", () => {
+  it("explains the view with tailored entries", () => {
+    renderCompare();
+    fireEvent.click(screen.getByRole("button", { name: "How to read this dashboard" }));
+    expect(screen.getByText(/spot which run burns faster/i)).toBeDefined();
+    expect(screen.getByText("Cards")).toBeDefined();
+    expect(screen.getByText("Picker")).toBeDefined();
+  });
+});

@@ -610,7 +610,21 @@ export default function SessionDetail({
             <StatusBadge status={row.status} />
             <HarnessBadge harness={row.harness} />
             <span className="detail-title">{row.title}</span>
-            <DataGuide blurb="Pi live pane: the session's terminal text, updated on view. Transcript tabs land with pi drill-down (P6); until then this pane is the live window into pi sessions." />
+            <DataGuide
+          blurb="Pi live pane: this session's terminal text, fetched on view — the live window into pi sessions until transcript drill-down lands (P6)."
+          entries={[
+            {
+              term: "Live pane",
+              definition:
+                "On-demand dump of the zellij pane running this session (harness-scoped, so a shared directory resolves to the right pane). Viewport or full scrollback via ?full=0.",
+            },
+            {
+              term: "DB-only 409",
+              definition:
+                "No live pane exists (or its pane belongs to the named session) — transcript and DB data remain available. Orphans always read this.",
+            },
+          ]}
+        />
           </div>
           <DetailTabBar id={id} active={tab} />
           <ScreenTab sessionId={id} />
@@ -655,7 +669,18 @@ export default function SessionDetail({
         {row !== null && <StatusBadge status={row.status} />}
         {row !== null && <HarnessBadge harness={row.harness} />}
         <span className="detail-title">{data.detail.info.title}</span>
-        <DataGuide blurb="One session, six ways to read it: Transcript (full messages), Turns (per-assistant-turn cards), Timeline (tool bars and token rate), Tools (calls + latency), Cost (cumulative spend), Raw (the underlying JSON), plus the Live pane (the session's terminal, when it holds one)." />
+        <DataGuide
+          blurb="One session, six ways to read it. Tabs share the same live export; pick the lens that answers your question."
+          entries={[
+            { term: "Transcript", definition: "Full message history in order (tail-follows new arrivals; scroll up pins with a new-message pill)." },
+            { term: "Turns", definition: "One card per assistant turn: input summary, tool count, tokens, duration — the session as a work log." },
+            { term: "Timeline", definition: "Tool-call bars scaled by duration over the token-rate underlay; click a bar for the inspector rail." },
+            { term: "Tools", definition: "Every tool call with status, latency, and token cost, plus top error/latency tables and a per-call I/O inspector." },
+            { term: "Cost", definition: "Cumulative spend line, input/output bars, cost-by-model donut, and the per-subagent roll-up." },
+            { term: "Raw", definition: "The underlying export JSON, collapsible and deep-linkable per message — the ground truth behind every other tab." },
+            { term: "Live pane", definition: "The session’s live terminal text, fetched on view (never polled). DB-only 409 means no live pane — the DB tabs above still work." },
+          ]}
+        />
       </div>
       <dl className="detail-facts mono">
         <div>

@@ -110,7 +110,31 @@ export default function Compare({
         <span className="compare-title">
           Compare <span className="count">({selected.length}/{MAX_COMPARE})</span>
         </span>
-        <DataGuide blurb="Side-by-side KPI cards and overlaid token/cost lines for 2–4 sessions — pick rows below to spot which run burns faster or costs more. Click a card to drill into that session." />
+        <DataGuide
+          blurb="Side-by-side KPI cards and overlaid cumulative lines for 2–4 sessions: spot which run burns faster or costs more, then click through to it."
+          entries={[
+            {
+              term: "Cards",
+              definition:
+                "One card per selected session: lifetime tokens, lifetime cost, last activity, subagent count. The swatch color matches that session's chart lines.",
+            },
+            {
+              term: "Lines",
+              definition:
+                "Two panels — cumulative cost and cumulative tokens — each overlaying one line per session on a shared time base (shorter histories are right-aligned). Hue follows selection order: first pick is accent, then ink-100, ok green, warn amber.",
+            },
+            {
+              term: "Picker",
+              definition:
+                "Search filters id/title/cwd/model; toggling adds or removes a session (2 minimum, 4 maximum). The URL holds the ids, so a comparison is shareable.",
+            },
+            {
+              term: "Click",
+              definition:
+                "Click a card or any chart point to open that session's drill-down route.",
+            },
+          ]}
+        />
       </div>
 
       {sessions.length === 0 ? (

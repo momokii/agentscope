@@ -16,7 +16,7 @@ import { formatCompact, formatUSD } from "./format";
 
 /** Ring capacity: newest-first, oldest evicted past this length. */
 export const ACTIVITY_RING_CAP = 100;
-/** Visible cap in the ticker before "show more" (see EventTicker). */
+/** Visible cap per activity page before paging controls appear. */
 export const ACTIVITY_VISIBLE_CAP = 30;
 /**
  * Mover thresholds: a session is a "top mover" only when its per-tick delta

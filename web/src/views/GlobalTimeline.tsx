@@ -120,7 +120,31 @@ export default function GlobalTimeline({
           Global timeline <span className="count">({lanes.length})</span>
         </span>
         <span className="timeline-note mono">fixed full-range · zoom follows in W3-2</span>
-        <DataGuide blurb="One lane per session on a shared time axis: bars are tool-call bursts, dots are completions, the area is token rate. Lanes nest under parents for subagents. Click a lane to open that session." />
+        <DataGuide
+          blurb="Every session as a swimlane on one shared time axis — spot who burned tokens when, then click a lane to drill in."
+          entries={[
+            {
+              term: "Lanes",
+              definition:
+                "One lane per session in fleet order (running first, exited last, most-recent first). Subagent lanes nest under parents as count-derived placeholders labeled subagent 1..N.",
+            },
+            {
+              term: "Bars & dots",
+              definition:
+                "Drawn from each row's token-rate spark (tokens/min per tick): dots mark nonzero ticks, bar width is that tick's share of the session max — a duration proxy, since snapshots carry no per-tool durations.",
+            },
+            {
+              term: "Area",
+              definition:
+                "The gray underlay is the raw token-rate spark itself.",
+            },
+            {
+              term: "Click",
+              definition:
+                "Lane or dot click navigates to that session's hash route. Range is fixed full-history; zoom follows in a later wave.",
+            },
+          ]}
+        />
       </div>
       <ol className="timeline-lanes">
         {lanes.map((lane) => {

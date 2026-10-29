@@ -71,3 +71,12 @@ describe("GlobalTimeline", () => {
     expect(screen.getByText("No sessions in this fleet yet.")).toBeDefined();
   });
 });
+
+describe("GlobalTimeline guide", () => {
+  it("explains lanes, bars, and dots accurately", () => {
+    renderTimeline();
+    fireEvent.click(screen.getByRole("button", { name: "How to read this dashboard" }));
+    expect(screen.getByText(/swimlane/i)).toBeDefined();
+    expect(screen.getByText("Bars & dots")).toBeDefined();
+  });
+});

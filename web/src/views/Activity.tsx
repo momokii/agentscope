@@ -106,7 +106,31 @@ export default function ActivityView({
             );
           })}
         </div>
-        <DataGuide blurb="The full event log behind the bottom ticker: newest first, capped at the last 100 transitions. Search narrows to a session, project, or kind; pages slice history; every row deep-links to its session." />
+        <DataGuide
+          blurb="The full event log: every fleet transition, newest first — what just changed and where."
+          entries={[
+            {
+              term: "Rows",
+              definition:
+                "One row per transition: + appeared, status arrows (idle → running), ▲ needs-input raised, ◌ input cleared, ✕ error, ▪ disappeared, plus the largest token/cost movers per tick.",
+            },
+            {
+              term: "Collapse",
+              definition:
+                "Repeat token/cost movers for one session collapse to the newest — the log shows the latest delta, not a stack of them. Status history always accumulates.",
+            },
+            {
+              term: "Scope",
+              definition:
+                "This tab always shows the whole fleet (last 100 transitions, then the ring evicts oldest-first). The footer mini-ticker instead follows your current view: project drill-ins see their directory, session views their session.",
+            },
+            {
+              term: "Browse",
+              definition:
+                "Search matches title, project, id, and kind; the harness chips slice OC/pi; pages of 25 (selectable) walk history. Every title links to that session's drill-down.",
+            },
+          ]}
+        />
         <span className="state-chip" aria-label={paused ? "Stream paused" : "Stream live"}>
           <span className="dot" aria-hidden="true" />
           <span>{paused ? "Paused" : "Live"}</span>
