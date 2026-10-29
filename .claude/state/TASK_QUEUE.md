@@ -37,6 +37,18 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 
 ## NEXT
 
+### TASK-336: Activity log as a full tab (DONE 2026-10-28)
+- **Evidence:** `#/activity` route + nav item, full-page searchable/harness-sliced/paged log reusing the ticker row component; setting-page screenshots; web suite green
+- **Priority:** Medium | **Complexity:** M | **Status:** DONE
+
+### TASK-337: Per-tab guides (DONE 2026-10-28)
+- **Evidence:** DataGuide `blurb` on Compare / Timeline / SessionDetail (+ pi screen fallback); verified rendered
+- **Priority:** Medium | **Complexity:** S | **Status:** DONE
+
+### TASK-338: Open-source README + CONTRIBUTING + screenshots (DONE 2026-10-26)
+- **Evidence:** end-to-end README (features/screenshots/quickstart/config/architecture/API/data/UI tour/dev/structure/security/runbooks/troubleshooting/roadmap/contributing/license); CONTRIBUTING.md; 4 screenshots
+- **Priority:** High | **Complexity:** M | **Status:** DONE
+
 ### TASK-335: Activity ticker scoping + mover collapse (DONE 2026-10-28)
 - **Evidence:** ticker follows the view (project directory / session id / fleet) with scope chip; per-session movers collapse instead of stacking; live probe shows scoped rows + sources; tests green
 - **Priority:** Medium | **Complexity:** M | **Status:** DONE

@@ -170,3 +170,15 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
   now scoped + deduped — plus a header toggle that hides the list entirely,
   persisted in localStorage across reloads. Verified live (hide → 0 rows →
   reload still 0 rows, Show button present).
+
+## 2026-10-28 — Activity tab, per-tab guides, open-source docs
+- TASK-336: `#/activity` full-page log (search, harness slice, paging,
+  deep-links, guide blurb) reusing the ticker row component; nav item added.
+- TASK-337: DataGuide `blurb` intros on Compare / Timeline / SessionDetail
+  (+ pi screen fallback) explaining each view's purpose.
+- TASK-338: README rewritten end-to-end for open source (features,
+  screenshots, quickstart, config, architecture, API, data semantics, UI
+  tour, dev, structure, security, runbooks, troubleshooting, roadmap,
+  contributing, license) + CONTRIBUTING.md + 4 docs/screenshots.
+- Deployed :8082 (non-loopback + auth); live-verified activity tab +
+  guide blurbs via screenshots.
