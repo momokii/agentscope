@@ -8,7 +8,13 @@
 import { useState } from "react";
 import { CircleHelp } from "lucide-react";
 
-export default function DataGuide() {
+export interface DataGuideProps {
+  /** Optional one-liner stating the current view's purpose, shown above
+   * the glossary (used by Compare/Timeline/Activity/Session views). */
+  blurb?: string;
+}
+
+export default function DataGuide({ blurb }: DataGuideProps) {
   const [open, setOpen] = useState(false);
   return (
     <div className="data-guide">
@@ -25,6 +31,9 @@ export default function DataGuide() {
       </button>
       {open && (
         <section className="guide-panel" aria-label="Data guide">
+          {blurb !== undefined && blurb !== "" && (
+            <p className="guide-blurb-text">{blurb}</p>
+          )}
           <dl className="guide-facts mono">
             <div>
               <dt>Status</dt>

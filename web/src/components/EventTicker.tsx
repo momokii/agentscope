@@ -17,7 +17,7 @@ import { Activity } from "lucide-react";
 
 import type { ActivityEvent } from "../lib/activity";
 import { ACTIVITY_VISIBLE_CAP } from "../lib/activity";
-import { buildSessionHash } from "../lib/routing";
+import ActivityRow from "./ActivityRow";
 
 export interface EventTickerProps {
   events: readonly ActivityEvent[];
@@ -25,10 +25,6 @@ export interface EventTickerProps {
   paused: boolean;
   /** View scope label ("Fleet" default): project name or session title. */
   scopeLabel?: string;
-}
-
-function harnessGlyph(harness: ActivityEvent["harness"]): string {
-  return harness === "pi" ? "π" : "OC";
 }
 
 /** localStorage key for the collapsed preference (view-independent). */
@@ -134,24 +130,7 @@ export default function EventTicker({
               key={`${event.seq}-${event.sessionId}-${event.kind}-${index}`}
               className="ticker-row mono"
             >
-              <span className="ticker-seq">seq {event.seq}</span>
-              <span className="ticker-glyph" aria-hidden="true">
-                {event.glyph}
-              </span>
-              <a
-                className="ticker-session"
-                href={buildSessionHash(event.sessionId)}
-                title={`${event.sessionTitle} · ${event.project}`}
-              >
-                {event.sessionTitle}
-              </a>
-              <span className="ticker-text">{event.text}</span>
-              <span
-                className="ticker-source"
-                title={`project ${event.project} · harness ${event.harness}`}
-              >
-                {event.project} · {harnessGlyph(event.harness)}
-              </span>
+              <ActivityRow event={event} />
             </li>
           ))}
         </ul>

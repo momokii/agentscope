@@ -21,6 +21,7 @@ import type { SessionRow } from "../lib/sse";
 import { swimlanes } from "../lib/compare";
 import type { SwimLane } from "../lib/compare";
 import RelativeTime from "../components/RelativeTime";
+import DataGuide from "../components/DataGuide";
 import StatusBadge from "../components/StatusBadge";
 import { statusBadgeSpec } from "../components/StatusBadge";
 
@@ -119,6 +120,7 @@ export default function GlobalTimeline({
           Global timeline <span className="count">({lanes.length})</span>
         </span>
         <span className="timeline-note mono">fixed full-range · zoom follows in W3-2</span>
+        <DataGuide blurb="One lane per session on a shared time axis: bars are tool-call bursts, dots are completions, the area is token rate. Lanes nest under parents for subagents. Click a lane to open that session." />
       </div>
       <ol className="timeline-lanes">
         {lanes.map((lane) => {

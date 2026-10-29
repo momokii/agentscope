@@ -680,6 +680,18 @@ a:focus-visible {
   font-family: var(--font-sans);
 }
 
+.guide-blurb-text {
+  margin: 0 0 8px;
+  color: var(--ink-100);
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+}
+
+.guide-blurb {
+  color: var(--ink-400);
+  font-size: var(--fs-12);
+}
+
 /* ---------- SSE dot ---------- */
 
 .sse-dot {

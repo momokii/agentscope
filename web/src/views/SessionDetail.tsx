@@ -30,6 +30,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowLeft, ChevronDown } from "lucide-react";
 
 import StatusBadge from "../components/StatusBadge";
+import DataGuide from "../components/DataGuide";
 import HarnessBadge from "../components/HarnessBadge";
 import RelativeTime from "../components/RelativeTime";
 import SubagentPanel from "../components/SubagentPanel";
@@ -609,6 +610,7 @@ export default function SessionDetail({
             <StatusBadge status={row.status} />
             <HarnessBadge harness={row.harness} />
             <span className="detail-title">{row.title}</span>
+            <DataGuide blurb="Pi live pane: the session's terminal text, updated on view. Transcript tabs land with pi drill-down (P6); until then this pane is the live window into pi sessions." />
           </div>
           <DetailTabBar id={id} active={tab} />
           <ScreenTab sessionId={id} />
@@ -653,6 +655,7 @@ export default function SessionDetail({
         {row !== null && <StatusBadge status={row.status} />}
         {row !== null && <HarnessBadge harness={row.harness} />}
         <span className="detail-title">{data.detail.info.title}</span>
+        <DataGuide blurb="One session, six ways to read it: Transcript (full messages), Turns (per-assistant-turn cards), Timeline (tool bars and token rate), Tools (calls + latency), Cost (cumulative spend), Raw (the underlying JSON), plus the Live pane (the session's terminal, when it holds one)." />
       </div>
       <dl className="detail-facts mono">
         <div>

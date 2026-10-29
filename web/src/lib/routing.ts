@@ -1,7 +1,8 @@
 /**
- * Hash routing (W2-2 fleet/session + W3-3 compare/timeline):
+ * Hash routing (W2-2 fleet/session + W3-3 compare/timeline + activity log):
  * `#/` fleet, `#/sessions/:id` session stub, `#/compare?ids=a,b,c`
- * compare 2–4 sessions, `#/timeline` global swimlanes.
+ * compare 2–4 sessions, `#/timeline` global swimlanes, `#/activity` the
+ * full activity log (the bottom ticker, paged and filterable).
  *
  * Hand-rolled (no router library) per the no-new-deps rule — plain string
  * prefix parsing. Wave 3 reuses `parseHash`/`buildSessionHash` for
@@ -37,13 +38,26 @@ export type Route =
   | ({ view: "project"; directory: string } & FleetQuery)
   | { view: "session"; id: string; tab: SessionTab; messageId?: string }
   | { view: "compare"; ids: string[] }
-  | { view: "timeline" };
+  | { view: "timeline" }
+  | ({ view: "activity" } & ActivityQuery);
 
 const SESSION_PREFIX = "/sessions/";
 const PROJECTS_PREFIX = "/projects/";
 const COMPARE_PATH = "/compare";
 const TIMELINE_PATH = "/timeline";
+const ACTIVITY_PATH = "/activity";
 const MAX_COMPARE_IDS = 4;
+
+/** Activity log query: text search + page (both URL-serialized). */
+export interface ActivityQuery {
+  /** Case-insensitive substring over title/project/id/kind. */
+  query?: string;
+  /** 1-based page; omitted from the URL when 1. */
+  page?: number;
+}
+
+/** Page size for the activity log (local view state, not serialized). */
+export const ACTIVITY_PAGE_SIZE = 25;
 
 /**
  * SessionDetail tab segments (W3-1 owns transcript+turns; W3-2 owns
@@ -112,8 +126,37 @@ export function parseHash(hash: string): Route {
   const [path, query] = splitQuery(clean);
   if (path === COMPARE_PATH) return { view: "compare", ids: parseIds(query) };
   if (path === TIMELINE_PATH) return { view: "timeline" };
+  if (path === ACTIVITY_PATH) return { view: "activity", ...activityQuery(query) };
   if (path === "/" || path === "") return fleetRoute(query);
   return { view: "fleet" };
+}
+
+/**
+ * Activity log query params: `q=<text>` pins a search, `page=<n>` pins a
+ * page. Defaults are omitted so bare `#/activity` stays bare.
+ */
+function activityQuery(query: string): ActivityQuery {
+  if (query === "") return {};
+  const params = new URLSearchParams(query);
+  const q = params.get("q")?.trim() ?? "";
+  const page = parsePageParam(query);
+  return {
+    ...(q === "" ? {} : { query: q }),
+    ...(page === undefined ? {} : { page }),
+  };
+}
+
+export function buildActivityHash(query: ActivityQuery = {}): string {
+  const params = new URLSearchParams();
+  if (query.query !== undefined && query.query !== "") {
+    params.set("q", query.query);
+  }
+  if (query.page !== undefined && query.page > 1) {
+    params.set("page", `${Math.trunc(query.page)}`);
+  }
+  const qs = params.toString();
+  // Hash routes carry the leading # (paths above are #-stripped for parsing).
+  return qs === "" ? `#${ACTIVITY_PATH}` : `#${ACTIVITY_PATH}?${qs}`;
 }
 
 /**

@@ -25,6 +25,7 @@ import { diffSnapshots, prependEvents, scopeEvents } from "./lib/activity";
 import type { ActivityEvent } from "./lib/activity";
 import { usePins } from "./lib/pins";
 import {
+  buildActivityHash,
   buildCompareHash,
   buildFleetQueryHash,
   buildProjectHash,
@@ -41,6 +42,7 @@ import BottomBar from "./components/BottomBar";
 import CmdBar from "./components/CmdBar";
 import Compare from "./views/Compare";
 import Fleet from "./views/Fleet";
+import ActivityView from "./views/Activity";
 import GlobalTimeline from "./views/GlobalTimeline";
 import Projects from "./views/Projects";
 import SessionDetail from "./views/SessionDetail";
@@ -257,6 +259,27 @@ export default function App() {
         : buildFleetQueryHash(next);
   }, []);
 
+  const changeActivityQuery = useCallback(
+    (patch: { query?: string; page?: number }) => {
+      const current = readRoute();
+      if (current.view !== "activity") return;
+      const next = { ...current };
+      if (patch.query !== undefined) {
+        if (patch.query === "") delete next.query;
+        else next.query = patch.query;
+      }
+      if (patch.page !== undefined) {
+        if (patch.page <= 1) delete next.page;
+        else next.page = patch.page;
+      }
+      window.location.hash = buildActivityHash({
+        query: next.query,
+        page: next.page,
+      });
+    },
+    [],
+  );
+
   // Global quick-switch + live/pin keys. Ignored while typing; Esc closes
   // the palette first (hook), then drops back from stub/compare/timeline
   // to fleet.
@@ -336,6 +359,16 @@ export default function App() {
           >
             Timeline
           </a>
+          <a
+            className={
+              route.view === "activity"
+                ? "app-nav-link app-nav-link-active"
+                : "app-nav-link"
+            }
+            href={buildActivityHash()}
+          >
+            Activity
+          </a>
         </nav>
         <span className="seq mono">
           {snapshot ? `seq ${snapshot.seq}` : "no snapshot yet"}
@@ -364,6 +397,15 @@ export default function App() {
             sessions={snapshot?.sessions ?? []}
             selectedId={selectedId}
             onSelect={selectSession}
+          />
+        ) : route.view === "activity" ? (
+          <ActivityView
+            events={events}
+            query={route.query ?? ""}
+            onQueryChange={(query) => changeActivityQuery({ query, page: 1 })}
+            page={route.page ?? 1}
+            onPageChange={(page) => changeActivityQuery({ page })}
+            paused={!live}
           />
         ) : route.view === "project" ? (
           <Fleet

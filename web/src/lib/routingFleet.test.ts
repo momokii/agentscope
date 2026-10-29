@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildActivityHash,
   buildFleetHash,
   buildFleetQueryHash,
   buildProjectHash,
@@ -151,6 +152,19 @@ describe("recency + paging params", () => {
     ).toBe("#/?bucket=recent&from=2026-10-01");
     expect(buildFleetQueryHash({ bucket: "active-recent" })).toBe("#/");
     expect(buildFleetQueryHash({ page: 2 })).toBe("#/?page=2");
+  });
+
+  it("parses and builds the activity log route", () => {
+    expect(parseHash("#/activity")).toEqual({ view: "activity" });
+    expect(parseHash("#/activity?q=ses_x&page=3")).toEqual({
+      view: "activity",
+      query: "ses_x",
+      page: 3,
+    });
+    expect(buildActivityHash({})).toBe("#/activity");
+    expect(buildActivityHash({ query: "wa", page: 2 })).toBe(
+      "#/activity?q=wa&page=2",
+    );
   });
 
   it("keeps the legacy fleet builder signature working", () => {

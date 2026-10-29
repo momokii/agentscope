@@ -23,6 +23,7 @@ import { filterCmdSessions } from "../components/CmdBar";
 import { formatCompact, formatUSD } from "../lib/format";
 import { overlaySeries } from "../lib/compare";
 import RelativeTime from "../components/RelativeTime";
+import DataGuide from "../components/DataGuide";
 import HarnessBadge from "../components/HarnessBadge";
 import StatusBadge from "../components/StatusBadge";
 
@@ -109,6 +110,7 @@ export default function Compare({
         <span className="compare-title">
           Compare <span className="count">({selected.length}/{MAX_COMPARE})</span>
         </span>
+        <DataGuide blurb="Side-by-side KPI cards and overlaid token/cost lines for 2–4 sessions — pick rows below to spot which run burns faster or costs more. Click a card to drill into that session." />
       </div>
 
       {sessions.length === 0 ? (

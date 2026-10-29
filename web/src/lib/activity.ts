@@ -69,6 +69,11 @@ function sourceOf(row: SessionRow): Pick<ActivityEvent, "sessionTitle" | "projec
   };
 }
 
+/** Harness glyph for activity rows: π for pi, OC for opencode. */
+export function harnessGlyph(harness: Harness): string {
+  return harness === "pi" ? "π" : "OC";
+}
+
 function glyphFor(kind: ActivityKind, status?: string): string {
   switch (kind) {
     case "appeared":
