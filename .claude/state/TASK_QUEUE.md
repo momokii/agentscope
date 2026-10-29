@@ -45,7 +45,7 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 - **Evidence:** DataGuide `blurb` on Compare / Timeline / SessionDetail (+ pi screen fallback); verified rendered
 - **Priority:** Medium | **Complexity:** S | **Status:** DONE
 
-### TASK-338: Open-source README + CONTRIBUTING + screenshots (DONE 2026-10-26)
+### TASK-338: Open-source README + CONTRIBUTING + screenshots (DONE 2026-10-28)
 - **Evidence:** end-to-end README (features/screenshots/quickstart/config/architecture/API/data/UI tour/dev/structure/security/runbooks/troubleshooting/roadmap/contributing/license); CONTRIBUTING.md; 4 screenshots
 - **Priority:** High | **Complexity:** M | **Status:** DONE
 
