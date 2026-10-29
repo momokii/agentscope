@@ -46,7 +46,7 @@ Full protocol: `.claude/HOW_TO_RESUME.md`. Short version:
 |---|---|
 | Deploy / run (container) | `./deploy.sh` — add `--port N` to pin, `--down` to tear down |
 | Run local binary | `go run ./cmd/dashboard` (needs `XDG_RUNTIME_DIR`, `DATA_DIR`, `zellij`, `opencode.db`; binds `127.0.0.1:$PORT`) |
-| Backend tests | `go test -count=1 ./...` — 174 top-level tests (237 incl. subtests) / 8 of 10 packages at HEAD |
+| Backend tests | `go test -count=1 ./...` — 9 packages, all green at HEAD |
 | Backend vet / build | `go vet ./...` · `go build ./cmd/dashboard` (embeds `web/dist`) |
 | Web tests | `npm test --prefix web -- --run` — 208 tests / 28 files at HEAD |
 | Web type check | `npm run lint --prefix web` (`tsc --noEmit`) |

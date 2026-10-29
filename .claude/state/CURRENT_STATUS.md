@@ -31,9 +31,10 @@ and the P6 pi transcript drill-down (backlog).
 - [x] Deploy/security: one-click `./deploy.sh`, host networking, read-only data mounts,
   rw zellij socket dir, optional Basic auth + `ocd_session` cookie for SSE, guarded
   `BIND_ADDR`, TZ forwarding.
-- [x] Baselines at HEAD: Go 174 top-level tests (237 incl. subtests) / 8 of 10 packages;
-  web 208 tests / 28 files; `npm run build` green; token gate hits only
-  `web/src/tokens.css`.
+- [x] Baselines at HEAD: Go 9 test packages green; web 261 tests / 33 files;
+  `npm run build` green; token gate hits only `web/src/tokens.css`.
+  Open-source pass: README rewritten end-to-end + CONTRIBUTING.md +
+  docs/screenshots (landing, project, activity, live pane).
 
 ## In Progress
 - [ ] **F2 VM truth matrix** (human, on the VM): 3 live panes, orphan, EXITED, zombie,
