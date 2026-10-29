@@ -37,6 +37,10 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 
 ## NEXT
 
+### TASK-339: Tailored per-tab guides + footer ticker removal (DONE 2026-10-26)
+- **Evidence:** DataGuide entries prop; Compare/Timeline/SessionDetail(+pi)/Activity each explain their own UI (verified against source); EventTicker deleted, BottomBar keymap-only; dead SessionStub removed; web 257/257, live probes pass
+- **Priority:** High | **Complexity:** M | **Status:** DONE
+
 ### TASK-336: Activity log as a full tab (DONE 2026-10-28)
 - **Evidence:** `#/activity` route + nav item, full-page searchable/harness-sliced/paged log reusing the ticker row component; setting-page screenshots; web suite green
 - **Priority:** Medium | **Complexity:** M | **Status:** DONE
