@@ -164,3 +164,9 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
   with a scope chip; per-session movers collapse to the newest (status
   history still accumulates). Live probe: "opencode-dashboard activity
   ticker" with project-only rows + source context.
+
+## 2026-10-26 — Activity ticker collapse toggle
+- Operator questioned the ticker's value. Answer: "what just changed" feed,
+  now scoped + deduped — plus a header toggle that hides the list entirely,
+  persisted in localStorage across reloads. Verified live (hide → 0 rows →
+  reload still 0 rows, Show button present).
