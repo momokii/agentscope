@@ -139,8 +139,8 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 - **Acceptance:** presets filter by `last_activity_ms`; pages slice cards; empty states.
 - **Verify:** web suite green
 
-### TASK-315: Activity context + ticker pagination (DONE 2026-10-27)
-- **Evidence:** events carry title/project/harness, linked + right-side source; Prev/Next paging; link underline fixed after screenshot review
+### TASK-315: Activity context + ticker pagination + collapse (DONE 2026-10-28)
+- **Evidence:** events carry title/project/harness, linked + right-side source; Prev/Next paging; link underline fixed after screenshot review; view-scoped ticker with mover collapse; header toggle hides the list, persisted in localStorage (live-probed)
 - **Priority:** Medium | **Complexity:** M | **Status:** DONE
 - **Scope:** events carry session title/project/harness (rendered + linked); ticker show-more becomes Prev/Next paging.
 - **Acceptance:** every row names its source; pages slice the ring.
