@@ -220,3 +220,18 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
 - Tagged v1.0.0 locally. Not yet pushed anywhere — no git remote is
   configured (publishing to GitHub needs `gh auth login` + repo creation
   on the operator's account).
+
+## 2026-10-26 — v1.0.0 final sign-off (release verification)
+- Re-ran everything from scratch: backend 9 pkgs green, tsc, vitest 252/32,
+  token gate, security greps, dead-ref + ticker-legacy grep — all clean.
+- Live deployment proofs: healthz 1.0.0 + 401-gated; fleet 1975 opencode +
+  8 pi; cost windows monotone; Σ per-session 24h == global exact; KPI panes
+  == Σ project panes; claimant screen 200, non-claimant 409+owner, pi
+  export 404; SSE frames carry harness; 5-mount allowlist exact; served
+  bundle byte-identical to committed dist and to a fresh local build.
+- UI probes on the live build: no footer ticker, Activity nav + view,
+  per-tab guides, page-size select, refresh button, scoped KPIs, windowed
+  cost cards. Committed screenshots re-shot footer-free and verified current.
+- v1.0.0 tagged. Open backlog (explicit, not defects): P6 pi transcripts,
+  notifications/budget (340), transcript search (341), F2 matrix, phone
+  layout, stress tests, CI, actions, multi-host.
