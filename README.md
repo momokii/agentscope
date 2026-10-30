@@ -46,6 +46,10 @@ You run coding agents in terminal panes and lose track: which one is burning tok
 
 ![Activity log](docs/screenshots/doc-activity.png)
 
+![Compare view](docs/screenshots/doc-compare.png)
+
+![Global timeline](docs/screenshots/doc-timeline.png)
+
 ## 60-second quickstart
 
 Prerequisites: Docker Engine 20.10+ with the Compose plugin, `curl`,
@@ -193,8 +197,10 @@ is active (then windowed, with windowed labels).
 | `#/timeline` | All sessions as swimlanes on one time axis: tool-call bars, completions, token-rate area, subagent nesting. Click a lane to drill in. |
 | `#/activity` | The full event log: newest first, capped at the last 100 transitions, with search, harness slice, and paging. Movers collapse per session; status history accumulates. Every row deep-links to its session. |
 
-Every view carries a (?) **DataGuide** explaining statuses, harnesses, KPIs,
-recency, sparks/rate, and Live-pane states. Filter/page state lives in the
+Every view carries a (?) **DataGuide**: the Projects landing and fleet table
+get the shared fleet glossary (statuses, harnesses, KPIs, recency,
+sparks/rate, Live pane), while Compare, Timeline, Activity, and session
+detail each get a tailored guide explaining exactly what that screen shows. Filter/page state lives in the
 hash, so links survive reload and share. A collapsible **Refresh** button
 re-pulls the snapshot on demand (works paused).
 

@@ -192,3 +192,14 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
 - Footer ticker deleted (Activity tab is the log now); BottomBar keeps the
   keymap only; dead SessionStub removed. Live probes: no .ticker in footer,
   tailored guides render per tab. Web 257/257, redeployed :8082.
+
+## 2026-10-26 — Open-source docs pass + final consistency proof
+- README rewritten end to end (features, screenshots, quickstart, config,
+  architecture, API, data semantics, UI tour, dev, structure, security,
+  runbooks, troubleshooting, limitations, roadmap, contributing, license);
+  CONTRIBUTING.md added; 6 docs screenshots captured from the live deployment
+  (landing, project, activity, screen, compare, timeline).
+- Removed dead SessionStub + EventTicker leftovers; verified nothing references
+  them. Full gates green (Go 9 pkgs, tsc, 261 web tests, token gate).
+- Proved deployed == fresh local build of current tree (byte-identical JS),
+  so docs screenshots and behavior claims match what's online.
