@@ -34,8 +34,8 @@ You run coding agents in terminal panes and lose track: which one is burning tok
   token-rate area chart with per-sample tooltips — all derived from live rows.
 - **Fleet-wide analysis:** Compare 2–4 sessions, a Global timeline of all
   sessions, and an **Activity log** (`#/activity`) — the full event feed with
-  search, harness slice, and paging (the bottom ticker is its live mini-view,
-  collapsible and view-scoped).
+  search, harness slice, and paging. The activity ring still accumulates in
+  the App shell to feed this view; event rows deep-link to their sessions.
 - **KPI strip:** Active / Waiting / Errors follow the date/bucket/harness/
   search filters; throughput, costs, and live presence stay global
   measurements. Cost cards switch windows with the date filter
@@ -191,13 +191,12 @@ is active (then windowed, with windowed labels).
 | `#/sessions/:id[/:tab]` | One session: Transcript / Turns / Timeline / Tools / Cost / Raw tabs (live export data) plus the Subagents panel, or the Live pane tab (opencode detail + live pane; pi rows deep-link to Live pane until transcript drill-down lands). |
 | `#/compare?ids=a,b` | 2–4 sessions side by side: KPI cards + overlaid cost/token lines. Pick sessions to spot which run burns faster. |
 | `#/timeline` | All sessions as swimlanes on one time axis: tool-call bars, completions, token-rate area, subagent nesting. Click a lane to drill in. |
-| `#/activity` | The full event log behind the bottom ticker: newest first, capped at the last 100 transitions, with search, harness slice, and paging. Every row deep-links to its session. |
+| `#/activity` | The full event log: newest first, capped at the last 100 transitions, with search, harness slice, and paging. Movers collapse per session; status history accumulates. Every row deep-links to its session. |
 
 Every view carries a (?) **DataGuide** explaining statuses, harnesses, KPIs,
 recency, sparks/rate, and Live-pane states. Filter/page state lives in the
-hash, so links survive reload and share. The footer's **Activity ticker** is
-the log's live mini-view: view-scoped (project/session), mover-deduplicated,
-paged, and collapsible (preference persists).
+hash, so links survive reload and share. A collapsible **Refresh** button
+re-pulls the snapshot on demand (works paused).
 
 ## Development
 
@@ -239,7 +238,7 @@ controls to make things pass. See `CONTRIBUTING.md`.
 | `internal/model/` | `SessionRow` (+`Harness`), `Snapshot` (+`SessionWindows`), `WindowSums`, status derivation |
 | `internal/auth/` | `DASHBOARD_AUTH` gate: Basic-or-cookie-or-open, fail-closed, zero logging (test-pinned) |
 | `web/src/views/` | `Projects`, `Fleet`, `SessionDetail` (+ screen tab), `Compare`, `GlobalTimeline`, `Activity` |
-| `web/src/components/` | KpiStrip, EventTicker, ActivityRow, CmdBar, StatusBadge, HarnessBadge, DataGuide, RateChart, ProjectInsight, RefreshButton, Sparkline, filters, Pagination, SubagentPanel |
+| `web/src/components/` | KpiStrip, ActivityRow, CmdBar, StatusBadge, HarnessBadge, DataGuide, RateChart, ProjectInsight, RefreshButton, Sparkline, filters, Pagination, SubagentPanel |
 | `web/src/lib/` | `sse.ts` transport, `activity.ts` ring (collapse + scoping), sorting/filtering, rate sums, projects, pins, routing, formatting |
 | `web/src/testutils/` | Snapshot + `sessionDetail.fixture.ts` (test-only `SessionDataProvider`) |
 | `web/dist/` | Committed SPA build (fallback so containers build without Node) |
