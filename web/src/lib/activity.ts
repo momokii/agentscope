@@ -45,7 +45,7 @@ export interface ActivityEvent {
   sessionTitle: string;
   /** Owning project (directory basename) for fleet-wide context. */
   project: string;
-  /** Owning directory (exact match key for view-scoped tickers). */
+  /** Owning directory (exact match key for project-scoped queries). */
   directory: string;
   /** Owning harness (opencode/pi) for mixed-fleet context. */
   harness: Harness;
@@ -104,7 +104,7 @@ function glyphFor(kind: ActivityKind, status?: string): string {
  * Derive this tick's activity from consecutive snapshots.
  *
  * - `prev === null` (first tick) returns []: there is no baseline to diff
- *   against, so the ticker starts silent instead of flooding with "appeared".
+ *   against, so the log starts silent instead of flooding with "appeared".
  * - Order within a tick is derivation order: session transitions in
  *   `next.sessions` order, then top token movers, then top cost movers.
  *   Callers prepend the whole tick newest-first via `prependEvents`.
@@ -279,23 +279,3 @@ export function prependEvents(
   return [...events, ...kept].slice(0, ACTIVITY_RING_CAP);
 }
 
-/** View scope for the ticker: project drill-ins see their own directory,
- * session views see their own session, everything else sees the fleet. */
-export interface TickerScope {
-  directory?: string | null;
-  sessionId?: string | null;
-}
-
-/** Filter the ring to one view's scope (empty scope = whole fleet). Pure. */
-export function scopeEvents(
-  events: readonly ActivityEvent[],
-  scope: TickerScope,
-): ActivityEvent[] {
-  if (scope.sessionId !== undefined && scope.sessionId !== null) {
-    return events.filter((e) => e.sessionId === scope.sessionId);
-  }
-  if (scope.directory !== undefined && scope.directory !== null) {
-    return events.filter((e) => e.directory === scope.directory);
-  }
-  return [...events];
-}

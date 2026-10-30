@@ -1,5 +1,5 @@
 /**
- * App shell: header + Fleet/SessionStub views + CmdBar overlay + BottomBar.
+ * App shell: header + views + CmdBar overlay + BottomBar.
  *
  * Owns the SSE client lifecycle (the only stateful data owner — Fleet and
  * KpiStrip are pure Snapshot consumers, max 2 levels of prop drilling).
@@ -13,7 +13,8 @@
  *   (diffSnapshots over the prev/snapshot pair already kept for KPI deltas);
  * - global keys: digits 1–9 jump to pinned slots, `l` toggles live,
  *   `p` pins/unpins the selected session — all ignored while typing;
- * - CmdBar overlay + BottomBar ticker/keymap wiring.
+ * - CmdBar overlay + BottomBar keymap wiring (the activity ring still
+ *   accumulates here to feed the #/activity log view).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";

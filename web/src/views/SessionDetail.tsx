@@ -676,7 +676,7 @@ export default function SessionDetail({
             { term: "Turns", definition: "One card per assistant turn: input summary, tool count, tokens, duration — the session as a work log." },
             { term: "Timeline", definition: "Tool-call bars scaled by duration over the token-rate underlay; click a bar for the inspector rail." },
             { term: "Tools", definition: "Every tool call with status, latency, and token cost, plus top error/latency tables and a per-call I/O inspector." },
-            { term: "Cost", definition: "Cumulative spend line, input/output bars, cost-by-model donut, and the per-subagent roll-up." },
+            { term: "Cost", definition: "Cumulative spend line, input/output bars, cost-by-model donut. Child sessions roll into the totals — see the Subagent panel below the header." },
             { term: "Raw", definition: "The underlying export JSON, collapsible and deep-linkable per message — the ground truth behind every other tab." },
             { term: "Live pane", definition: "The session’s live terminal text, fetched on view (never polled). DB-only 409 means no live pane — the DB tabs above still work." },
           ]}

@@ -4,7 +4,6 @@ import {
   ACTIVITY_RING_CAP,
   diffSnapshots,
   prependEvents,
-  scopeEvents,
 } from "./activity";
 import type { ActivityEvent } from "./activity";
 import { buildFixtureSnapshot, makeRow } from "../testutils/fixture";
@@ -187,29 +186,3 @@ describe("prependEvents mover collapse", () => {
   });
 });
 
-describe("scopeEvents", () => {
-  const ev = (id: string, dir: string): ActivityEvent => ({
-    kind: "status",
-    sessionId: id,
-    sessionTitle: id,
-    project: "p",
-    directory: dir,
-    harness: "opencode",
-    text: id,
-    glyph: "●",
-    seq: 1,
-  });
-  const ring = [ev("a", "/x"), ev("b", "/y")];
-
-  it("passes the whole ring without a scope", () => {
-    expect(scopeEvents(ring, {})).toHaveLength(2);
-  });
-
-  it("filters project views by exact directory", () => {
-    expect(scopeEvents(ring, { directory: "/x" }).map((e) => e.sessionId)).toEqual(["a"]);
-  });
-
-  it("filters session views by session id", () => {
-    expect(scopeEvents(ring, { sessionId: "b" }).map((e) => e.sessionId)).toEqual(["b"]);
-  });
-});

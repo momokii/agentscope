@@ -2,7 +2,7 @@
  * Hash routing (W2-2 fleet/session + W3-3 compare/timeline + activity log):
  * `#/` fleet, `#/sessions/:id` session stub, `#/compare?ids=a,b,c`
  * compare 2–4 sessions, `#/timeline` global swimlanes, `#/activity` the
- * full activity log (the bottom ticker, paged and filterable).
+ * full activity log (searchable, harness-sliced, paged).
  *
  * Hand-rolled (no router library) per the no-new-deps rule — plain string
  * prefix parsing. Wave 3 reuses `parseHash`/`buildSessionHash` for

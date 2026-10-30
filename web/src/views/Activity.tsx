@@ -1,7 +1,7 @@
 /**
  * Activity view (`#/activity`): the fleet event log as a full page.
- * Same ring as the bottom ticker (newest first, capped), but browsable:
- * text search, harness slice, and paging. Rows link to their sessions.
+ * Backed by the App-owned activity ring (newest first, capped at 100)
+ * with text search, harness slice, and paging. Rows link to sessions.
  * The GUIDE blurb states the purpose: a "what just changed" feed for
  * operators watching long runs — transitions, errors, and token bursts.
  */
@@ -122,7 +122,7 @@ export default function ActivityView({
             {
               term: "Scope",
               definition:
-                "This tab always shows the whole fleet (last 100 transitions, then the ring evicts oldest-first). The footer mini-ticker instead follows your current view: project drill-ins see their directory, session views their session.",
+                "This tab always shows the whole fleet (last 100 transitions, then the ring evicts oldest-first). Use search to narrow to a project, session, or kind.",
             },
             {
               term: "Browse",
