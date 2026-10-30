@@ -48,7 +48,7 @@ Full protocol: `.claude/HOW_TO_RESUME.md`. Short version:
 | Run local binary | `go run ./cmd/dashboard` (needs `XDG_RUNTIME_DIR`, `DATA_DIR`, `zellij`, `opencode.db`; binds `127.0.0.1:$PORT`) |
 | Backend tests | `go test -count=1 ./...` — 9 packages, all green at HEAD |
 | Backend vet / build | `go vet ./...` · `go build ./cmd/dashboard` (embeds `web/dist`) |
-| Web tests | `npm test --prefix web -- --run` — 208 tests / 28 files at HEAD |
+| Web tests | `npm test --prefix web -- --run` — 252 tests / 31 files at HEAD |
 | Web type check | `npm run lint --prefix web` (`tsc --noEmit`) |
 | Web build | `npm run build --prefix web` → `web/dist` (committed fallback) |
 | Health check | `curl -s 127.0.0.1:${PORT:-8080}/api/healthz` (add `-u "$DASHBOARD_AUTH"` when gated) |

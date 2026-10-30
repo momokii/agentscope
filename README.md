@@ -214,7 +214,7 @@ go test -count=1 ./...    # full backend suite (9 packages, all green)
 
 ```bash
 npm run lint --prefix web  # tsc --noEmit (type gate)
-npm test --prefix web -- --run   # vitest (261 tests / 33 files)
+npm test --prefix web -- --run   # vitest (252 tests / 31 files)
 npm run build --prefix web       # tsc + vite build → web/dist (committed fallback)
 grep -rE '#[0-9a-fA-F]{6}' web/src  # must hit only src/tokens.css
 ```

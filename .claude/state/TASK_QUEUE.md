@@ -274,8 +274,20 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
   cleared; budget cross fires once per day; all behind explicit opt-in;
   works while tab is backgrounded; no permission prompt before opt-in.
 - **Verify:** web suite + manual two-tab probe (waiting-input flip, long turn,
-  budget cross).
+  budget cross) on BOTH origins (see constraint).
+- **Constraint (verified 2026-10-26 via headless probe): `Notification`
+  requires a secure context — granted on `localhost`, DENIED on tailnet-IP
+  plain HTTP. Remote use requires the documented `tailscale serve --https`
+  front. Implement an in-app toast/banner fallback so non-secure contexts
+  still surface alerts inside the dashboard (never fail silently).
 - **Security:** Notification API only; no new network calls, no secrets.
+
+### TASK-342: Export snapshot / session JSON download
+- **Priority:** Low | **Complexity:** S | **Status:** TODO
+- **Scope:** download buttons (fleet snapshot JSON, session export JSON) —
+  client-side blob download of already-loaded data, no new endpoint.
+- **Acceptance:** one click downloads valid JSON matching the API shape.
+- **Verify:** web suite green.
 
 ### TASK-341: In-tab transcript search/filter
 - **Priority:** Medium | **Complexity:** S | **Status:** TODO

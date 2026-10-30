@@ -235,3 +235,15 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
 - v1.0.0 tagged. Open backlog (explicit, not defects): P6 pi transcripts,
   notifications/budget (340), transcript search (341), F2 matrix, phone
   layout, stress tests, CI, actions, multi-host.
+
+## 2026-10-26 — End-to-end audit: post draft + recommendations verified
+- Verified every factual claim slated for the LinkedIn draft against source:
+  Go 1.27.3/modernc/CGO-off/distroless, React 19/Vite 6/TS 5.6, no chart lib,
+  14 GET-only routes, 9 backend pkgs + 252 web tests green, reconciliation
+  proofs live. Found + fixed stale test counts in README/CONTRIBUTING/
+  CLAUDE/state (261/28-era → 252/31).
+- Headless probe proved a deployment constraint for TASK-340: Notification
+  API needs a secure context (localhost yes, tailnet-IP http no) — recorded
+  in the task with the tailscale-serve-https path + in-app fallback.
+- Added TASK-342 (export JSON download). Rank stands: notifications/budget
+  first (with caveat), then CI, then P6.
