@@ -36,7 +36,7 @@ Also record once (TO-RUN-on-VM): `go version` (want `go1.27.x` — matches
 ~/.local/share/opencode/opencode.db` (must exist; the actual data dir).
 
 **VERIFIED-here** (quoted from the host-network revision, do not re-tune):
-image `opencode-dashboard:0.1.0`; `network_mode: "host"` (NO `ports:`
+image `opencode-dashboard:1.0.0`; `network_mode: "host"` (NO `ports:`
 stanza — the bridge-publish model is SUPERSEDED, see
 `docs/DOCKER_VERIFY.md` header); `pid: "host"`; `restart: unless-stopped`;
 `PORT: "${PORT:-8080}"` (host mode: the ACTUAL listen port on host

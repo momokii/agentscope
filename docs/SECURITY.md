@@ -174,7 +174,7 @@ go test -count=1 ./internal/auth/ -v
 
 Image/host checks — runnable now that the image + compose exist (run them on the
 deploy host/VM after `./deploy.sh`; `<container>`/`<image>` are the running
-dashboard container and `opencode-dashboard:0.1.0`):
+dashboard container and `opencode-dashboard:1.0.0`):
 
 ```bash
 # 6. Mount allowlist: exact output must equal §2 (no auth.json; data/cache/pi-sessions/localtime :ro, socket dir :rw)

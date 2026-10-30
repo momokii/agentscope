@@ -86,7 +86,7 @@ http://127.0.0.1:$PORT` (serve, **never funnel** — see Security).
 | `XDG_RUNTIME_DIR` | host env | `/run/user/<uid>` | Must equal host value — the zellij CLI resolves sockets from it; mismatch = blind dashboard |
 | `HOME` | host env | — | Only used to expand the `:ro` volume sources to your home (home itself is never mounted) |
 
-Pinned at build: Go `1.27.3`, zellij `0.44.3` (major must match host), `gcr.io/distroless/static-debian12:nonroot`, image `opencode-dashboard:0.1.0`.
+Pinned at build: Go `1.27.3`, zellij `0.44.3` (major must match host), `gcr.io/distroless/static-debian12:nonroot`, image `opencode-dashboard:1.0.0`.
 
 ## Architecture
 
