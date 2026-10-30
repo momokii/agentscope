@@ -210,3 +210,13 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
   notifications + daily budget, client-only on the SSE stream) and TASK-341
   (in-tab transcript search, client-side), synced the README roadmap.
   Priority order stands: notifications/budget first, then CI, then P6.
+
+## 2026-10-26 — v1.0.0 released (tagged, deployed)
+- Bumped version to 1.0.0 across binary (`internal/hub` Version const),
+  image (`compose` + `deploy.sh`), web (`package.json`), and docs.
+- Full gates green on the release tree; redeployed :8082 (non-loopback +
+  auth); live proofs: healthz reports 1.0.0, fleet 1975 opencode + 8 pi,
+  deployed bundle byte-identical to committed dist.
+- Tagged v1.0.0 locally. Not yet pushed anywhere — no git remote is
+  configured (publishing to GitHub needs `gh auth login` + repo creation
+  on the operator's account).
