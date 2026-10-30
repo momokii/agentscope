@@ -263,6 +263,28 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 - **Acceptance:** revert-to-full-scan equality remains proven at larger dummy sizes.
 - **Verify:** `go test -count=1 ./internal/db/ ./internal/collector/`.
 
+### TASK-340: Browser notifications + daily cost budget
+- **Priority:** High | **Complexity:** M | **Status:** TODO
+- **Scope:** purely client-side on the existing SSE stream (read-only posture
+  unchanged, no backend change): Notification API opt-in toggle for
+  (a) any session flipping to waiting-input, (b) a turn running >15 min,
+  (c) today's spend crossing a user-set daily budget; budget progress bar
+  next to Cost today (persist threshold + toggle in localStorage).
+- **Acceptance:** waiting-input flip fires one notification per session until
+  cleared; budget cross fires once per day; all behind explicit opt-in;
+  works while tab is backgrounded; no permission prompt before opt-in.
+- **Verify:** web suite + manual two-tab probe (waiting-input flip, long turn,
+  budget cross).
+- **Security:** Notification API only; no new network calls, no secrets.
+
+### TASK-341: In-tab transcript search/filter
+- **Priority:** Medium | **Complexity:** S | **Status:** TODO
+- **Scope:** client-only text filter box on the Transcript tab (filters the
+  already-loaded export messages by substring; shows match count; Esc clears).
+- **Acceptance:** typing narrows messages instantly; works on 1000+ message
+  transcripts without jank; no new fetch.
+- **Verify:** web suite green.
+
 ### TASK-107: CI + automated security scans
 - **Priority:** Medium | **Complexity:** M | **Status:** TODO
 - **Scope:** CI running Go tests/vet/build, web tests/typecheck/build, token gate, secret

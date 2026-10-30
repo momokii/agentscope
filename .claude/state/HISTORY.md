@@ -203,3 +203,10 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
   them. Full gates green (Go 9 pkgs, tsc, 261 web tests, token gate).
 - Proved deployed == fresh local build of current tree (byte-identical JS),
   so docs screenshots and behavior claims match what's online.
+
+## 2026-10-26 — Ideas backlog recorded (no code)
+- Operator asked for the update-ideas list to live in docs so "what's your
+  update ideas" is answerable anytime. Recorded TASK-340 (browser
+  notifications + daily budget, client-only on the SSE stream) and TASK-341
+  (in-tab transcript search, client-side), synced the README roadmap.
+  Priority order stands: notifications/budget first, then CI, then P6.

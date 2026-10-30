@@ -317,6 +317,8 @@ verbatim).
 
 - Pi transcript drill-down (export-shaped pi route feeding all detail tabs).
 - Deferred actions wave (abort/resurrect — blocked on design + threat-model reopen).
+- Notifications + daily cost budget (browser Notification API on waiting-input flips, long turns, budget crossing; client-only, read-only posture unchanged).
+- In-tab transcript search (client-side filter over the loaded export).
 - Multi-host seam (`host_id` across collector/snapshot/UI).
 - Narrow/phone layout; event-tail/dedupe stress tests; CI + automated scans.
 
