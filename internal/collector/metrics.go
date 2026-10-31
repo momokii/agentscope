@@ -78,7 +78,7 @@ func (c *Collector) refreshMetrics(ctx context.Context) {
 			return
 		}
 		m.TokensLast60s += pm.TokensLast60s
-	m.CostSinceMidnight += pm.CostSinceMidnight
+		m.CostSinceMidnight += pm.CostSinceMidnight
 	}
 
 	// Windowed spend (24h/7d/30d + midnight): one indexed pass per source,
@@ -124,7 +124,7 @@ func (c *Collector) refreshWindows(ctx context.Context, now time.Time) (ports.Wi
 			if ctx.Err() != nil {
 				return ports.WindowMetrics{}, false
 			}
-		if c.piWarned.CompareAndSwap(false, true) {
+			if c.piWarned.CompareAndSwap(false, true) {
 				slog.WarnContext(ctx, "collector pi window metrics refresh failed; keeping last good values", slog.Any("err", err))
 			}
 			return ports.WindowMetrics{}, false

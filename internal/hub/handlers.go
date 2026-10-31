@@ -34,10 +34,10 @@ type HealthResponse struct {
 // Sessions reuse model.SessionRow tags so Wave 2 consumes identical shapes
 // from REST and SSE frames.
 type FleetResponse struct {
-	Seq            uint64                        `json:"seq"`
-	Sessions       []model.SessionRow            `json:"sessions"`
-	Projects       []model.ProjectSummary        `json:"projects"`
-	KPIs           model.KPIs                    `json:"kpis"`
+	Seq            uint64                      `json:"seq"`
+	Sessions       []model.SessionRow          `json:"sessions"`
+	Projects       []model.ProjectSummary      `json:"projects"`
+	KPIs           model.KPIs                  `json:"kpis"`
 	SessionWindows map[string]model.WindowSums `json:"session_windows,omitempty"`
 }
 

@@ -172,9 +172,9 @@ type KPIs struct {
 	// Cost24h/7d/30d are message-level USD spend in the trailing windows
 	// (both harnesses, off-tick sample; unknown before the first refresh
 	// reads 0 alongside metrics_age_ms -1).
-	Cost24h  float64 `json:"cost_24h"`
-	Cost7d   float64 `json:"cost_7d"`
-	Cost30d  float64 `json:"cost_30d"`
+	Cost24h float64 `json:"cost_24h"`
+	Cost7d  float64 `json:"cost_7d"`
+	Cost30d float64 `json:"cost_30d"`
 	// Tokens24h/7d/30d are message token totals in the trailing windows.
 	Tokens24h int64 `json:"tokens_24h"`
 	Tokens7d  int64 `json:"tokens_7d"`

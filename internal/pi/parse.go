@@ -30,13 +30,13 @@ const (
 // piUsage mirrors the pi Usage interface (message-types.md): token counts
 // plus cost. reasoning is already included in output — never added again.
 type piUsage struct {
-	Input       int64   `json:"input"`
-	Output      int64   `json:"output"`
-	CacheRead   int64   `json:"cacheRead"`
-	CacheWrite  int64   `json:"cacheWrite"`
-	Reasoning   int64   `json:"reasoning"`
-	TotalTokens int64   `json:"totalTokens"`
-	Cost        piCost  `json:"cost"`
+	Input       int64  `json:"input"`
+	Output      int64  `json:"output"`
+	CacheRead   int64  `json:"cacheRead"`
+	CacheWrite  int64  `json:"cacheWrite"`
+	Reasoning   int64  `json:"reasoning"`
+	TotalTokens int64  `json:"totalTokens"`
+	Cost        piCost `json:"cost"`
 }
 
 // piCost mirrors the cost member of pi Usage.
@@ -67,16 +67,16 @@ type piEntry struct {
 	ParentID  string `json:"parentId"`
 	Timestamp string `json:"timestamp"`
 
-	Message      *piMessage `json:"message"`
-	Provider     string     `json:"provider"`
-	ModelID      string     `json:"modelId"`
-	Model        string     `json:"model"`
-	Name         string     `json:"name"`
-	Kind         string     `json:"kind"`
-	Usage        *piUsage   `json:"usage"`
-	ParentSess   string     `json:"parentSession"`
-	CWD          string     `json:"cwd"`
-	Version      int        `json:"version"`
+	Message    *piMessage `json:"message"`
+	Provider   string     `json:"provider"`
+	ModelID    string     `json:"modelId"`
+	Model      string     `json:"model"`
+	Name       string     `json:"name"`
+	Kind       string     `json:"kind"`
+	Usage      *piUsage   `json:"usage"`
+	ParentSess string     `json:"parentSession"`
+	CWD        string     `json:"cwd"`
+	Version    int        `json:"version"`
 }
 
 // usageEvent is one message-level token/cost observation with its entry
