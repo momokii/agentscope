@@ -292,3 +292,88 @@ parse with per-file error isolation — one corrupt file never fails a tick).
 prompt before toggle; test-button proves the path); R-a2 secure-context
 (mitigated: in-app fallback + title badge, verified live); R-a3 CI cannot
 run without a remote (mitigated: file mirrors local green gates 1:1).
+
+## Wave 7 / v2.0 candidates — analyzed 2026-10-26, NOT YET APPROVED
+
+> Verdict: v1 (incl. Waves 1–6) is complete and shippable. Three directions
+> are genuinely v2-scale (flagship capability, not polish). Each carries a
+> research-gated decision — do NOT implement until its spike resolves go/no-go.
+> Evidence below is verified (live recon + prior notepads + competitor docs);
+> open questions are marked ASSUMPTION.
+
+### V2-A. Safe actions: abort (+ resurrect), per-session, confirmed
+**Why major:** turns a read-only monitor into an operator console — the single
+most-asked operator capability (competitor open-remotecontrol/pilot ships
+exactly this: abort, steer, approve).
+**Feasibility (verified this round):**
+- opencode TUIs take `--port` (each gets a RANDOM port by default —
+  research-opencode-internals §9). The per-instance API may already be
+  reachable if ports are enumerable per-PID via /proc/PID/fd → socket inode
+  → /proc/net/tcp (owner mapping VERIFIED before for the U1 anomaly).
+- Counter-evidence (why still gated): U1 — every TUI holds TWO localhost
+  listeners serving an UNKNOWN protocol ("Endpoint not supported" absent
+  from the binary); prior probes of /session/status etc. failed on them.
+  Discovery is UNSOLVED until a probe campaign maps those listeners.
+- pi RPC (`pi --mode rpc --session …`) is a CHILD-process protocol, not an
+  attach-to-TUI path — concurrent writers on one session file would corrupt
+  the tree. Pi actions need the same discovery work as opencode.
+- Alternative path (competitor pattern): an opencode PLUGIN runs in-process
+  (open-remotecontrol does exactly this), sidestepping discovery entirely —
+  but it changes deployment (users install plugin code into opencode) and
+  the trust model. Record as option V2-A2.
+**Risks:** R-v2a1 wrong-process abort = data loss (the reason v1 has no
+button — worse than no button, see ACTIONS_DEFERRED §1). R-v2a2 SIGINT-to-TUI
+looks tempting but its semantics are UNVERIFIED (cancel? exit?); never ship
+on assumption.
+**Spike (time-boxed, scratch env ONLY — never live sessions):** (1) enumerate
+TUI listener ports per PID; (2) probe the full serve route table per port;
+(3) test SIGINT semantics on a disposable TUI; (4) evaluate plugin-bridge
+shape + auth. Go/no-go recorded with evidence.
+**If go:** abort-only first (explicit confirm + audit log + 404/409/502
+semantics per ACTIONS_DEFERRED §5), resurrect second with the data-loss
+warning. NEVER prompt-sending or shell exec (recorded non-goals).
+
+### V2-B. Fleet history + analytics (dashboard-owned store)
+**Why major:** today everything is live-only — refresh loses history. The #1
+unanswered operator question is cost-over-time ("what did we spend this
+week? which project burns most?"), which competitors answer with ranges +
+forecasts. No security-model change (same read-only sources + one new
+dashboard-owned writable DB file).
+**Feasibility (verified this round):** the 60s metrics refresher already
+computes everything needed; persisting per-session-per-day rollups is
+hundreds of rows/day (tiny). Container writes to a NEW host-mounted dir
+(small compose addition + retention policy, e.g. 400 days). New "History"
+view: 7d/30d cost/token lines, per-project tables, week-over-week.
+**Risks:** R-v2b1 mount hygiene (new volume must join the §2 allowlist
+review); R-v2b2 unbounded growth (mitigated: daily grain + retention).
+**Spike:** none needed — design is direct. Straight implementation wave.
+
+### V2-C. Pi transcripts (P6, already queued as TASK-206)
+**Why major-adjacent, not standalone:** completes the multi-harness promise
+(every pi row today shows an honest empty state). Well-understood
+(JSONL→export-shape mapping exists as a pattern in internal/db/export.go).
+Bundle with V2-A or V2-B as the "completeness" half of a v2 story.
+
+### Explicitly NOT recommended for v2
+- **Mobile app / PWA:** real need, but phone-UI + touch targets deserve
+  their own wave after desktop v2 lands; stuffing it in dilutes the release.
+- **Prompt sending / shell exec from UI:** recorded non-go (ACTIONS_DEFERRED
+  §4) — prompt-injection and RCE boundary, requires a full security-model
+  reopen, not a feature ticket.
+- **Multi-host (TASK-104):** no demand signal yet; single-host is the
+  product's stated scope and deploy story.
+- **Cache-economics dashboard / forecast-to-midnight:** cute, but needs a
+  per-model price table (drifts, often wrong) — cost numbers must stay
+  measured, never modeled.
+
+### Recommended v2 scope (pending operator pick — ONE of these, not all)
+- **Option 1 (recommended): V2-B + V2-C** — "memory + completeness":
+  fleet history/analytics plus pi transcripts. No security-model change,
+  no unresolved research, shippable incrementally behind the existing gates.
+- **Option 2 (flagship): V2-A abort-only** — only after the spike returns
+  GO with evidence; resurrect follows. Biggest operator value, biggest risk.
+- **Option 3 (bundle): V2-B + V2-C + notifications polish.**
+  (Notifications/budget = Wave 6, already done.)
+
+**Next step on approval:** convert the picked option into a Wave plan with
+acceptance + verification (same template as Waves 1–5), then implement.
