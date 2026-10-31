@@ -222,6 +222,8 @@ grep -rE '#[0-9a-fA-F]{6}' web/src  # must hit only src/tokens.css
 `deploy.sh` rebuilds `web/dist` automatically when `web/src/**` is newer than
 `web/dist/index.html` (and fails loud with install instructions if `npm` is
 missing); otherwise the committed `dist` is reused so no-Node hosts still work.
+Every run rebuilds the image (`up --build`, layer-cached) so a redeploy after
+`git pull` can never serve stale code.
 
 Quality gates (run before claiming done): tests + lint + type checks +
 Security Gate (`docs/SECURITY.md` §5, runnable verbatim). No weakening

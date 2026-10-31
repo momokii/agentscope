@@ -247,3 +247,13 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
   in the task with the tailscale-serve-https path + in-app fallback.
 - Added TASK-342 (export JSON download). Rank stands: notifications/budget
   first (with caveat), then CI, then P6.
+
+## 2026-10-26 — Deploy-path hardening (audit fixes)
+- Found by end-to-end audit: `DB_TIMEOUT`/`ACTIVE_WINDOW` were documented
+  as "host env → compose" but never forwarded (silently ignored); fixed +
+  proven live via collector config log. `XDG_RUNTIME_DIR` now passed through
+  with the socket mount following it (was hardcoded, breaking non-default
+  hosts). Removed healthy-stack rebuild skip (served stale code after pulls).
+  `--down` no longer fails on unrelated port squatters; loopback proof
+  honors the non-loopback opt-in; proof curls carry explicit `http://`.
+  Full gates + redeploy green; README always-build note added.

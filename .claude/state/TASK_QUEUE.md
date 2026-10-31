@@ -37,6 +37,10 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 
 ## NEXT
 
+### TASK-343: Deploy hardening (DONE 2026-10-26)
+- **Evidence:** `DB_TIMEOUT`/`ACTIVE_WINDOW` actually forwarded (were documented but silently ignored — proven live via `db_timeout=15s` log line); `XDG_RUNTIME_DIR` passed through with socket path following; every run rebuilds (stale-image reuse removed); `--down` checks dashboard-owned listeners (squatter false-fail fixed); loopback proof respects non-loopback opt-in; `http://` proof URLs; full gates + redeploy green.
+- **Priority:** High | **Complexity:** S | **Status:** DONE
+
 ### TASK-339: Tailored per-tab guides + footer ticker removal (DONE 2026-10-26)
 - **Evidence:** DataGuide entries prop; Compare/Timeline/SessionDetail(+pi)/Activity each explain their own UI (verified against source); EventTicker deleted, BottomBar keymap-only; dead SessionStub removed; web 257/257, live probes pass
 - **Priority:** High | **Complexity:** M | **Status:** DONE
