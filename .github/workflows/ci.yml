@@ -1,0 +1,89 @@
+# CI — runs the exact gate suite from README/CONTRIBUTING on every push + PR.
+#
+# What runs and why (mirrors the documented Definition of Done):
+#   backend — go build + go vet + full test suite (pinned Go from go.mod)
+#   web     — tsc type gate + vitest + production build (pinned Node 22 LTS)
+#   tokens  — the DESIGN.md token gate: hex colors only in web/src/tokens.css
+#   dist    — committed web/dist must match a fresh build (no-Node hosts rely on it)
+#   secrets — the SECURITY.md §5 grep gate: no auth.json refs, no credential/account
+#             table access outside internal/auth (expects *no* output = pass)
+#
+# Deliberately no third-party scan actions: the repo's own gate is grep-based
+# and self-contained (see docs/SECURITY.md §5). Revisit when the supply-chain
+# scanning story (TASK-107 follow-up) is designed.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Go (build, vet, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+
+  web:
+    name: Web (lint, test, build, token gate, dist check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm run lint --prefix web
+      - run: npm test --prefix web -- --run
+      - run: npm run build --prefix web
+      - name: design token gate (hex only in tokens.css)
+        run: |
+          hits=$(grep -rE '#[0-9a-fA-F]{6}' web/src | cut -d: -f1 | sort -u || true)
+          if [ "$hits" != "web/src/tokens.css" ]; then
+            echo "token gate failed — hex outside tokens.css:"
+            echo "$hits"
+            exit 1
+          fi
+      - name: committed dist matches a fresh build
+        run: git diff --exit-code -- web/dist
+
+  secrets:
+    name: Secrets gate (SECURITY.md §5 greps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: no auth.json references in code/image descriptors
+        run: |
+          if grep -rni 'auth\.json' --include='*.go' --include='*.ts' --include='*.tsx' --include='Dockerfile*' --include='*.yml' --include='*.yaml' internal/ web/src/ .env.example; then
+            echo "auth.json reference found where none is allowed"
+            exit 1
+          fi
+      - name: no credential/account table access outside internal/auth
+        # Allowlist (mirrors docs/SECURITY.md §5 row 2): the fetch API's
+        # credentials:"same-origin" option, explanatory comments, and the
+        # one commented-out auth-wiring snippet in handlers.go.
+        run: |
+          if grep -rni 'credential' internal/ web/src | grep -v internal/auth | grep -v 'same-origin' | grep -v 'agent-root auth' | grep -v 'auth file' | grep -v 'credential file' | grep -v 'CredentialsFromEnv'; then
+            echo "credential reference outside the pinned allowlist"
+            exit 1
+          fi
+          if grep -rni 'account' --include='*.go' internal/db/ internal/collector/ internal/hub/; then
+            echo "account table reference in the DB path"
+            exit 1
+          fi
