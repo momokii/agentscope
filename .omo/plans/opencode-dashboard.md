@@ -246,3 +246,49 @@ the honest empty state until P6.
 **Risks:** R-pi1 title-format drift (mitigated: join never reads titles);
 R-pi2 JSONL schema drift (mitigated: unknown entry types ignored, defensive
 parse with per-file error isolation — one corrupt file never fails a tick).
+
+## Wave 6 — Alerts, transcript search, export, CI (v1.1.0)
+
+> Approved 2026-10-28 from the update-ideas review (+ competitive scan:
+> burn/pilot do notifications + budgets; nobody in this repo's scope does).
+> All client-side except CI. Read-only posture unchanged (no new routes).
+
+**Design (frozen before code):**
+- Alerts (`web/src/lib/alerts.ts` + bell/panel + toaster + title badge):
+  Notification API opt-in; waiting-input flip (once per session until
+  cleared), running >15m (fixed threshold, first-seen tracked per session),
+  daily budget cross (once per date, localStorage). Non-secure contexts
+  (tailnet plain HTTP) fall back to in-app toasts + `(N)` title badge —
+  verified live that `isSecureContext` is false there, so the fallback is
+  load-bearing, not decorative. Poll-driven (runs on each applied snapshot),
+  works paused? No — frozen snapshots produce no transitions; refresh button
+  forces a check.
+- Transcript search: filter box on TranscriptTab over loaded `flat` rows
+  (text-extracted per part type), match count, Esc/jump preserved.
+- Export JSON: fleet snapshot + session detail download buttons (blob
+  download of already-loaded data, no new endpoint).
+- CI (`.github/workflows/ci.yml`): Go build/vet/test, web lint/test/build,
+  token gate, gitleaks (pinned), dist-freshness check. Requires a GitHub
+  remote to run green — file lands verified-by-construction (same commands
+  run green locally), pipeline run itself is the owner's first push.
+- Version bump 0.1.0 → 1.1.0 (additive features; hub/ports/web contracts
+  extended, nothing frozen broken): hub `Version`, compose image,
+  `deploy.sh` pin, `web/package.json`, README pinned line.
+
+- [ ] A1. **alerts core** — `lib/alerts.ts` (detection, dedupe, budget) + tests.
+  **Verify:** `npm test --prefix web -- --run src/lib/alerts*`
+- [ ] A2. **alerts UI** — bell + panel + toasts + title badge + localStorage.
+  **Verify:** web suite; live probe (opt-in persists, toast renders)
+- [ ] A3. **transcript search** — filter box + match count in TranscriptTab.
+  **Verify:** web suite incl. 1000-row perf sanity
+- [ ] A4. **export JSON buttons** — fleet + session download.
+  **Verify:** web suite (blob content = loaded data)
+- [ ] A5. **CI workflow** — exact gate suite + gitleaks + dist check.
+  **Verify:** `go vet` on YAML? No — validate by running each step's command locally; pipeline run on first push
+- [ ] A6. **v1.1.0** — version bump, README/CHANGELOG touch, full gates,
+  `./deploy.sh` redeploy + live evidence.
+
+**Risks:** R-a1 Notification permission UX (mitigated: explicit opt-in, no
+prompt before toggle; test-button proves the path); R-a2 secure-context
+(mitigated: in-app fallback + title badge, verified live); R-a3 CI cannot
+run without a remote (mitigated: file mirrors local green gates 1:1).
