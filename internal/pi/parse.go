@@ -44,11 +44,11 @@ type piCost struct {
 	Total float64 `json:"total"`
 }
 
-// piMessage mirrors the AgentMessage subset the fleet row needs: role,
-// provider/model attribution, stop reason, and usage. Content blocks are
-// deliberately NOT decoded here — the fleet path needs only the first user
-// text (for untitled sessions) and never the full transcript (P6 owns the
-// export-shaped drill-down).
+// piMessage mirrors the AgentMessage subset readers need: role,
+// provider/model attribution, stop reason, usage, and (for the export path)
+// tool-call wiring. Content blocks stay raw here: the fleet path needs only
+// the first user text (for untitled sessions), while the export path
+// decodes them via decodeBlocks (see export_parts.go).
 type piMessage struct {
 	Role       string          `json:"role"`
 	Provider   string          `json:"provider"`
@@ -56,6 +56,14 @@ type piMessage struct {
 	StopReason string          `json:"stopReason"`
 	Usage      *piUsage        `json:"usage"`
 	Content    json.RawMessage `json:"content"`
+	// ToolCallID/ToolName/DurationMs/IsError identify toolResult entries.
+	// Types drift across writer versions (bool vs "False", number vs "16"),
+	// so the lenient fields stay raw; consumers coerce with
+	// boolish/numOrString (see export_parts.go).
+	ToolCallID json.RawMessage `json:"toolCallId"`
+	ToolName   string          `json:"toolName"`
+	DurationMs json.RawMessage `json:"durationMs"`
+	IsError    json.RawMessage `json:"isError"`
 }
 
 // piEntry is one JSONL line: the tree link plus the type-specific payload.
@@ -116,6 +124,13 @@ type fileData struct {
 	cost        float64
 	parentID    string
 	events      []usageEvent
+	// Split accumulators feed the export info block (fleet totals above
+	// are derived from the same raw numbers, so both views agree).
+	input      int64
+	output     int64
+	reasoning  int64
+	cacheRead  int64
+	cacheWrite int64
 }
 
 // parseSessionFile streams one JSONL session file into fileData. A malformed
@@ -252,6 +267,11 @@ func (d *fileData) addUsage(u *piUsage, tsMs int64) {
 	d.tokensOut += u.Output
 	d.tokensTotal += u.TotalTokens
 	d.cost += u.Cost.Total
+	d.input += u.Input
+	d.output += u.Output
+	d.reasoning += u.Reasoning
+	d.cacheRead += u.CacheRead
+	d.cacheWrite += u.CacheWrite
 }
 
 // parentIDFromPath extracts the parent session id from a parentSession file

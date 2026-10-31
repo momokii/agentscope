@@ -21,8 +21,10 @@ You run coding agents in terminal panes and lose track: which one is burning tok
   time, 5–50 rows/page, and URL-serialized state (filters + page survive
   reload and share links).
 - **Multi-harness:** opencode rows (SQLite WAL) and pi rows (JSONL session
-  files) merge into one fleet. Pi rows deep-link to the Live pane tab
-  (pi transcript drill-down is the tracked P6 follow-up).
+  files) merge into one fleet. Both harnesses open the full session view:
+  pi JSONL is translated to the export shape server-side (thinking +
+  text + toolCall/toolResult merged), so every row gets Transcript / Turns /
+  Timeline / Tools / Cost / Raw tabs.
 - **Session view:** Transcript / Turns / Timeline / Tools / Cost / Raw tabs
   plus a Subagents panel (live export data), and a **Live pane** tab showing
   the session's real terminal text on demand.
@@ -149,7 +151,7 @@ Same-origin SPA + JSON; no CORS headers by design.
 | `GET /api/fleet` | `{seq, sessions, projects, kpis, session_windows?}` — `seq` rises per published tick; empty `sessions` is fine with nothing running. `projects[]` groups by cleaned `session.directory` (live_procs desc → live_panes desc → running desc → last_activity asc → directory). `session_windows` is the sparse per-session trailing-window map backing project drill-in under date filters |
 | `GET /api/sessions/:id` | Full detail: `{session, messages, todos, children}` from the live read-only DB. `404` unknown id, `503` backend unwired |
 | `GET /api/sessions/:id/tools` | `{session_id, tools:[{name,status,duration_ms,tokens}]}`. `404` / `503` as above |
-| `GET /api/sessions/:id/export` | Real session plus children, export-shaped (opencode harness; pi ids `404` until the transcript drill-down lands) |
+| `GET /api/sessions/:id/export` | Real session plus children, export-shaped — opencode from the WAL db, pi translated from JSONL (thinking/text/toolCall+toolResult merged); unknown ids `404` for both |
 | `GET /api/sessions/:id/screen` | Live pane text (`text/plain`, `X-Pane-Id` / `X-Captured-At` headers, `?full=0` = viewport-only; full scrollback is the default). `200` only for the session holding the pane claim; `409` + `{error, db_only:true, hint}` otherwise (no pane, or the pane belongs to the named session — transcript/DB still available); `404` unknown; `503` backend unwired / no snapshot yet; `504` dump timed out (10s) |
 | `GET /api/events` (SSE) | `text/event-stream`: snapshot ticks emitted at a 500ms fan-out cadence + 20s keepalive; resume via `Last-Event-ID` / `?lastEventId=` with full-snapshot re-sync on reconnect; `503` hub closed. Under `DASHBOARD_AUTH`, authenticate with Basic once — the `ocd_session` cookie then authorizes `EventSource` (which cannot send an `Authorization` header) |
 | `GET /api/debug/hub` | Drop counters + cadence (diagnostic only, not part of the frozen contract) |
@@ -196,7 +198,7 @@ is active (then windowed, with windowed labels).
 |---|---|
 | `#/` Projects | Ranked folders by live presence + recent activity. Filter by name, active-since presets, page through cards. Header totals and KPIs follow the filters. Start here. |
 | `#/projects/:dir` Fleet | That directory's sessions: status/harness chips, search, pins, 5–50 rows/page, recency buckets + date presets. Header KPIs + insight chart describe the directory's time window. |
-| `#/sessions/:id[/:tab]` | One session: Transcript / Turns / Timeline / Tools / Cost / Raw tabs (live export data) plus the Subagents panel, or the Live pane tab (opencode detail + live pane; pi rows deep-link to Live pane until transcript drill-down lands). |
+| `#/sessions/:id[/:tab]` | One session: Transcript / Turns / Timeline / Tools / Cost / Raw tabs (live export data for both harnesses) plus the Subagents panel and the Live pane tab. |
 | `#/compare?ids=a,b` | 2–4 sessions side by side: KPI cards + overlaid cost/token lines. Pick sessions to spot which run burns faster. |
 | `#/timeline` | All sessions as swimlanes on one time axis: tool-call bars, completions, token-rate area, subagent nesting. Click a lane to drill in. |
 | `#/activity` | The full event log: newest first, capped at the last 100 transitions, with search, harness slice, and paging. Movers collapse per session; status history accumulates. Every row deep-links to its session. |
@@ -301,9 +303,11 @@ verbatim).
   sketch + open questions: `docs/ACTIONS_DEFERRED.md`.
 - **Single host.** The collector joins one host's zellij + `/proc`; there is no `host_id`
   plumbing or multi-host fan-in yet.
-- **Pi transcript drill-down is pending.** Pi rows deep-link to the Live pane tab;
-  Transcript/Turns/Timeline/Tools/Cost/Raw tabs show the honest empty state until
-  the export-shaped pi route lands (tracked follow-up).
+- **Pi transcripts are translated, not native.** The export shape is rebuilt from
+  JSONL (per-part ids and cache-split attribution are synthesized; orphan
+  toolResults with no matching call are dropped; open turns report
+  `completed: null` and running tool status). Free-model turns can legitimately
+  report zero tokens.
 - **`waiting-input` is a heuristic.** Neither harness has a pending/permission table;
   the state means “user spoke last, nothing in flight, recent” (plus compacting).
 - **Recency window can read idle during a long silent tool call.** `ACTIVE_WINDOW` (2m)
@@ -321,7 +325,7 @@ verbatim).
 
 ## Roadmap
 
-- Pi transcript drill-down (export-shaped pi route feeding all detail tabs).
+- Compare/Timeline coverage for pi children (export feeds detail tabs today; cross-session views still assume opencode ids in places).
 - Deferred actions wave (abort/resurrect — blocked on design + threat-model reopen).
 - Multi-host seam (`host_id` across collector/snapshot/UI).
 - Narrow/phone layout; event-tail/dedupe stress tests.

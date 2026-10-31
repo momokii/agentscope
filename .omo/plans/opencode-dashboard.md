@@ -225,10 +225,11 @@ Hard rules: bake `zellij` CLI (same major as host) into image; auto-detect UID a
 - Deploy: compose `:ro` mount `~/.pi/agent/sessions:/data/pi-sessions`,
   `PI_DATA_DIR` env; SECURITY.md §2/§3 rows; README config/API notes.
 
-**Out of scope (P6 follow-up TASK):** pi transcript drill-down (JSONL→export
-shape for Transcript/Turns/Timeline/Tools/Cost/Raw tabs), Compare/Timeline
-enablement. This wave: pi rows link to the Live pane tab; detail tabs show
-the honest empty state until P6.
+**Out of scope:** Compare/Timeline enablement for pi ids (still
+opencode-assumed in places). NOTE 2026-10-26: P6 is DONE — export translator
++ exportMux fallthrough ship pi transcripts on all six detail tabs; the
+Wave 5 fallback notes above (pi→screen deep-link, honest empty state) are
+superseded.
 
 - [x] P1. **model + pi source** — `Harness` type/field + `internal/pi` reader
   with mtime cache, status mapping, fork children. **Verify:** `go test ./internal/pi/ ./internal/model/`
@@ -236,12 +237,12 @@ the honest empty state until P6.
   (dir,harness) claims, harness-scoped resolve/dump. **Verify:** `go test ./internal/runtime/`
 - [x] P3. **collector + config** — merge rows, `PiDataDir`, nil-safe disable.
   **Verify:** `go test ./internal/collector/ ./internal/ports/`
-- [x] P4. **frontend** (+ pi screen-tab fallback in SessionDetail) — TS mirror, harness chip, filter + URL state, detail
+- [x] P4. **frontend** (pi screen-tab fallback — REMOVED by P6) — TS mirror, harness chip, filter + URL state, detail
   header, pi rows → screen tab. **Verify:** `npm test --prefix web -- --run`,
   `npm run lint --prefix web`, token gate
 - [x] P5. **deploy + docs** — compose mount/env, SECURITY.md, README,
   `.env.example`, full gates, `./deploy.sh` redeploy + live evidence.
-- [ ] P6. **(BACKLOG)** pi transcript drill-down via export-shaped route.
+- [x] P6. **pi transcripts (DONE 2026-10-26)** — export translator + exportMux fallthrough; fallbacks removed.
 
 **Risks:** R-pi1 title-format drift (mitigated: join never reads titles);
 R-pi2 JSONL schema drift (mitigated: unknown entry types ignored, defensive
@@ -348,11 +349,12 @@ view: 7d/30d cost/token lines, per-project tables, week-over-week.
 review); R-v2b2 unbounded growth (mitigated: daily grain + retention).
 **Spike:** none needed — design is direct. Straight implementation wave.
 
-### V2-C. Pi transcripts (P6, already queued as TASK-206)
+### V2-C. Pi transcripts (P6 / TASK-206 — IMPLEMENTED 2026-10-26)
 **Why major-adjacent, not standalone:** completes the multi-harness promise
-(every pi row today shows an honest empty state). Well-understood
-(JSONL→export-shape mapping exists as a pattern in internal/db/export.go).
-Bundle with V2-A or V2-B as the "completeness" half of a v2 story.
+(every pi row rendered an honest empty state). Shipped this session:
+`internal/pi/export{,_build,_parts}.go` + `exportMux` db→pi fallthrough +
+frontend fallback removal. Remaining: Compare/Timeline coverage for pi ids
+(still opencode-assumed in places).
 
 ### Explicitly NOT recommended for v2
 - **Mobile app / PWA:** real need, but phone-UI + touch targets deserve

@@ -216,12 +216,22 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 - **Acceptance:** container fleet shows both harnesses; Security Gate re-passes.
 - **Verify:** full gate suite + `curl` proofs
 
-### TASK-206: (BACKLOG) Wave 5 P6 — pi transcript drill-down
-- **Priority:** Medium | **Complexity:** L | **Status:** TODO
+### TASK-206: (DONE 2026-10-26) Wave 5 P6 / V2-C — pi transcript drill-down
+- **Priority:** Medium | **Complexity:** L | **Status:** DONE (this session)
 - **Depends On:** TASK-205
-- **Scope:** JSONL→export-shaped route feeding Transcript/Turns/Timeline/Tools/Cost/Raw tabs for pi sessions; enable Compare/Timeline.
+- **Scope:** JSONL→export-shaped route feeding Transcript/Turns/Timeline/Tools/Cost/Raw tabs for pi sessions.
+- **Shipped:** `internal/pi/export.go` (resolveSessionPath + buildSession +
+  exportChildren), `export_build.go` (message folding, toolCall+toolResult
+  merge, terminal-stop completed gating), `export_parts.go` (block decode,
+  boolish/numOrString coercion, wire-shape part builders); `exportMux`
+  fallthrough in `cmd/dashboard/main.go` (db→pi on `ErrNotFound`, short-
+  circuit on real errors, passthrough when pi unwired); removed the pi
+  screen-tab fallback + pi deep-link in `SessionDetail.tsx`/`App.tsx`.
 - **Acceptance:** clicking a pi row renders its real transcript; unknown ids still empty-state.
-- **Verify:** web suite + live export parity spot-check
+- **Verify:** `go test ./cmd/dashboard/ ./internal/pi/` (incl. live-store
+  spot-check: 8 sessions, 1670 msgs/1714 tools on the largest), `npm test
+  --prefix web -- --run` (276), `tsc --noEmit`; redeploy + `curl`
+  `/api/sessions/<pi-id>/export`.
 
 ### TASK-101: Run the F2 VM truth matrix (human-gated)
 - **Priority:** High | **Complexity:** M | **Status:** TODO

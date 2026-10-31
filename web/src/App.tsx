@@ -284,16 +284,12 @@ export default function App() {
     }
   }, [refreshing, applySnapshot]);
 
-  // Pi rows deep-link to the Live pane tab: pi transcripts are a P6
-  // follow-up, but the live pane works today via harness-scoped resolve.
-  // Opencode rows keep the transcript default.
+  // P6 serves pi transcripts through the same export endpoint, so every
+  // row deep-links to the transcript default (the Live pane tab stays one
+  // click away for rows with a running pane).
   const selectSession = useCallback(
     (id: string) => {
-      const row = snapshotRef.current?.sessions.find((r) => r.id === id);
-      window.location.hash =
-        row?.harness === "pi"
-          ? buildSessionHash(id, "screen")
-          : buildSessionHash(id);
+      window.location.hash = buildSessionHash(id);
       palette.setOpen(false);
       requestAnimationFrame(() => {
         document

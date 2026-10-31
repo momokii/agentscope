@@ -249,3 +249,12 @@ or basename collisions).
 **Alternatives Rejected:** Server-side push/SSE-triggered notify (new backend surface for a v1 that forbids it); silent fallback (would look broken with no explanation).
 **Security Implications:** No new network calls, no secrets, no permission prompt before opt-in.
 **Impact:** `web/src/lib/alerts.ts`, `AlertsBell`, `Toasts`, App wiring.
+
+---
+**Decision:** Pi transcripts reuse the exact opencode export shape via a server-side JSONL→export translator + db→pi fallthrough mux
+**Date:** 2026-10-26
+**Context:** P6/V2-C: every pi row showed an honest empty state on Transcript/Turns/Timeline/Tools/Cost/Raw. The SPA already renders the full detail suite from the export shape, so the cheapest complete fix is a backend translator — no frontend branch, no new endpoint.
+**Rationale:** `exportMux{db, pi}` tries the WAL db first and falls through on `db.ErrNotFound` only (real db errors short-circuit; nil pi = passthrough). Completed = next *message* ts (toolResults fold, not messages); non-terminal final turns stay open (`completed: null`, running tool status). Writer drift tolerated (string/number timestamps, bool-or-"False" flags). Children linked by parentSession filename suffix, newest-first, same cap as db. Verified against the live store: 8 sessions incl. 1670 msgs/1714 tools.
+**Alternatives Rejected:** New `/api/pi/...` route + SPA branch (duplicates six tabs of rendering for zero benefit); surfacing raw JSONL in the Raw tab (inconsistent with every other tab's contract).
+**Security Implications:** No new mounts or env (same `:ro` JSONL dir); no prompt/abort surface; read-only posture intact.
+**Impact:** `internal/pi/export{,_build,_parts,_test}.go`, `parse.go` (lenient toolResult fields), `cmd/dashboard/main.go` + `exportmux_test.go`, `SessionDetail.tsx`/`App.tsx` fallback removal.

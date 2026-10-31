@@ -39,6 +39,7 @@ import (
 	"opencode-dashboard/internal/db"
 	"opencode-dashboard/internal/history"
 	"opencode-dashboard/internal/hub"
+	"opencode-dashboard/internal/model"
 	"opencode-dashboard/internal/pi"
 	"opencode-dashboard/internal/ports"
 	"opencode-dashboard/internal/runtime"
@@ -48,6 +49,26 @@ const (
 	// shutdownTimeout bounds graceful drain (in-flight API + SSE viewers).
 	shutdownTimeout = 10 * time.Second
 )
+
+// exportMux tries the WAL db first and falls through to pi when the id
+// is unknown there (P6). Both sources report db.ErrNotFound for misses,
+// so unknown ids map to 404 identically; genuine db failures short-
+// circuit and never consult pi.
+type exportMux struct {
+	db hub.ExportSource
+	pi hub.ExportSource
+}
+
+func (m exportMux) SessionExport(ctx context.Context, id string) (model.SessionExport, error) {
+	out, err := m.db.SessionExport(ctx, id)
+	if err == nil {
+		return out, nil
+	}
+	if m.pi != nil && errors.Is(err, db.ErrNotFound) {
+		return m.pi.SessionExport(ctx, id)
+	}
+	return out, err
+}
 
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "probe 127.0.0.1:$PORT/api/healthz and exit 0/1 (container HEALTHCHECK)")
@@ -106,8 +127,11 @@ func run(ctx context.Context) error {
 	// degrades per tick (warn-once) instead of failing startup — an
 	// opencode-only host must boot exactly as before.
 	var piReader ports.PiReader
+	var piExport hub.ExportSource
 	if cfg.PiDataDir != "" {
-		piReader = pi.NewWithWindow(cfg.PiDataDir, cfg.ActiveWindow.Milliseconds())
+		pr := pi.NewWithWindow(cfg.PiDataDir, cfg.ActiveWindow.Milliseconds())
+		piReader = pr
+		piExport = pr
 		slog.Info("pi source enabled", slog.String("pi_data_dir", cfg.PiDataDir))
 	} else {
 		slog.Info("pi source disabled (PI_DATA_DIR empty)")
@@ -133,11 +157,14 @@ func run(ctx context.Context) error {
 		slog.Info("history disabled (HISTORY_DIR empty)")
 	}
 
+	// Export falls through to pi when the id is unknown to the WAL db
+	// (P6). pi.SessionExport reports db.ErrNotFound for misses, so the
+	// hub maps unknown ids to 404 identically for both harnesses.
 	source := runtime.NewSource(runtime.DefaultConfig())
 	srv := hub.NewServer(cfg, hub.NewHub())
 	srv.SetScreenSource(source)
 	srv.SetDetailSource(reader)
-	srv.SetExportSource(reader)
+	srv.SetExportSource(exportMux{db: reader, pi: piExport})
 	if histStore != nil {
 		srv.SetHistorySource(histStore)
 	}

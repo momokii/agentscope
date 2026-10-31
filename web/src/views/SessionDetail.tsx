@@ -636,42 +636,13 @@ export default function SessionDetail({
     );
   }
 
+  // Both harnesses serve export-shaped detail (pi via the P6 translator),
+  // so a null payload means the same thing everywhere: unknown id or an
+  // unreachable API. The Live pane tab still works for pi rows with panes
+  // through the generic path — screen resolution is harness-scoped
+  // server-side — and reports its own 409 empty state when there is no
+  // pane to read.
   if (data === null) {
-    // Pi rows have no export-shaped detail until P6, but their Live pane
-    // works today via the harness-scoped screen route — so the screen tab
-    // renders from the fleet row alone instead of the empty state.
-    if (tab === "screen" && row?.harness === "pi") {
-      return (
-        <div className="session-detail">
-          <a className="stub-back mono" href={buildFleetHash()}>
-            <ArrowLeft aria-hidden="true" size={12} />
-            <span>back to fleet</span>
-          </a>
-          <div className="detail-head">
-            <StatusBadge status={row.status} />
-            <HarnessBadge harness={row.harness} />
-            <span className="detail-title">{row.title}</span>
-            <DataGuide
-          blurb="Pi live pane: this session's terminal text, fetched on view — the live window into pi sessions until transcript drill-down lands (P6)."
-          entries={[
-            {
-              term: "Live pane",
-              definition:
-                "On-demand dump of the zellij pane running this session (harness-scoped, so a shared directory resolves to the right pane). Viewport or full scrollback via ?full=0.",
-            },
-            {
-              term: "DB-only 409",
-              definition:
-                "No live pane exists (or its pane belongs to the named session) — transcript and DB data remain available. Orphans always read this.",
-            },
-          ]}
-        />
-          </div>
-          <DetailTabBar id={id} active={tab} />
-          <ScreenTab sessionId={id} />
-        </div>
-      );
-    }
     return (
       <div className="session-detail">
         <a className="stub-back mono" href={buildFleetHash()}>

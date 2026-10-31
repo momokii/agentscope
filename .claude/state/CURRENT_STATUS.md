@@ -4,7 +4,11 @@
 v1 feature-complete + **Wave 5 multi-harness (opencode + pi)** shipped and
 redeployed (`:8081`, fleet 1966 opencode + 6 pi, all gates green). Still open:
 the human-run **F2 VM truth matrix** (`docs/VM_DEPLOY.md` §3; plan F2 is `[~]`)
-and the P6 pi transcript drill-down (backlog).
+and the human-run **F2 VM truth matrix** (`docs/VM_DEPLOY.md` §3; plan F2 is `[~]`).
+Wave 6 v1.1.0 shipped (alerts, transcript search, export download, CI) and
+redeployed (`:8082`); Wave 7 V2-B fleet history (`#/history`, `GET
+/api/history`) is implemented, and V2-C P6 pi transcripts are implemented
+(`internal/pi/export*.go`, exportMux fallthrough in `cmd/dashboard/main.go`).
 
 ## Completed
 - [x] Collector: 10s poll, batched indexed DB reads, incremental event tail, per-source
@@ -15,8 +19,9 @@ and the P6 pi transcript drill-down (backlog).
   session per (directory,harness) claims the pane; on-demand `dump-screen`.
 - [x] Wave 5 pi harness: `internal/pi` JSONL reader (mtime cache, shared status
   gate), `SessionRow.Harness` (OC/π chips, harness filter URL-serialized),
-  `PI_DATA_DIR`, pi rows deep-link to the Live pane tab (+ SessionDetail pi
-  screen fallback; export-shaped transcript drill-down is P6).
+  `PI_DATA_DIR`, plus P6 export-shaped pi transcripts (toolCall+toolResult
+  merged, thinking/text parts, per-part ids synthesized; `exportMux`
+  falls through db→pi on `ErrNotFound`).
 - [x] APIs: healthz, fleet (+`projects`/KPIs), session detail, tools, export
   (`opencode export` shape for the session + capped children), screen, SSE
   (`Last-Event-ID` resume), hub debug; embedded SPA fallback.
