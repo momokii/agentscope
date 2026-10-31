@@ -257,3 +257,10 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
   `--down` no longer fails on unrelated port squatters; loopback proof
   honors the non-loopback opt-in; proof curls carry explicit `http://`.
   Full gates + redeploy green; README always-build note added.
+
+## 2026-10-26 — Wave 6 shipped as v1.1.0
+- TASK-340: opt-in bell + panel + test, budget input with localStorage, in-app toasts, title badge, per-view... (Wave 5.5: alerts). Secure-context probe proved tailnet HTTP denies Notification — fallback path is load-bearing.
+- TASK-341: transcript search (per-part text extraction, match count, clear).
+- TASK-342: one-click JSON export (fleet snapshot, session detail).
+- TASK-107: `.github/workflows/ci.yml` — exact gate suite, pinned actions, Security Gate greps, dist-freshness check. Run pending a remote.
+- v1.1.0: version bumped (hub, compose, deploy, web, README); redeployed + verified live.

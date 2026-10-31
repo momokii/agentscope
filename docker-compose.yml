@@ -43,7 +43,7 @@
 services:
   dashboard:
     build: .
-    image: opencode-dashboard:1.0.0
+    image: opencode-dashboard:1.1.0
     # Share the host PID namespace: /proc/<pid> liveness reads host PIDs 1:1
     # (Netdata pattern). Lets the runtime join see host opencode procs.
     pid: "host"

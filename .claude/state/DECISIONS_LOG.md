@@ -240,3 +240,12 @@ or basename collisions).
 **Impact:** [What it affects downstream]
 ---
 ```
+
+---
+**Decision:** Alerts are client-only with Notification gated behind explicit opt-in + secure-context check
+**Date:** 2026-10-26
+**Context:** Waiting-input flips and budget crosses are the highest-value signals, but the dashboard must stay read-only and must not mislead on tailnet plain-HTTP (where Notification is denied by the platform).
+**Rationale:** Detection runs per applied snapshot in App (both harnesses); surfacing requires opt-in. Browser Notification only when granted AND isSecureContext; otherwise in-app toasts + tab title badge always fire. Verified live that the tailnet IP context is non-secure.
+**Alternatives Rejected:** Server-side push/SSE-triggered notify (new backend surface for a v1 that forbids it); silent fallback (would look broken with no explanation).
+**Security Implications:** No new network calls, no secrets, no permission prompt before opt-in.
+**Impact:** `web/src/lib/alerts.ts`, `AlertsBell`, `Toasts`, App wiring.

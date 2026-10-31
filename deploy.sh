@@ -15,7 +15,7 @@ set -euo pipefail
 # ---- pinned versions (must match Dockerfile + docs/VM_DEPLOY.md §0) ----
 BAKED_ZELLIJ="0.44.3"   # Dockerfile ARG ZELLIJ_VERSION; socket contract is major-sensitive
 BAKED_GO="1.27.3"       # Dockerfile golang:1.27.3-bookworm + go.mod
-BAKED_IMAGE="opencode-dashboard:1.0.0"
+BAKED_IMAGE="opencode-dashboard:1.1.0"
 
 PORT="${PORT:-8080}"
 DOWN=0

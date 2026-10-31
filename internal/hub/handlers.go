@@ -14,7 +14,7 @@ import (
 )
 
 // Version is the Wave-1 API version reported by /api/healthz.
-const Version = "1.0.0" // v1: multi-harness read-only mission control.
+const Version = "1.1.0" // v1: multi-harness read-only mission control.
 
 // shutdownTimeout bounds graceful drain of listeners and viewers.
 const shutdownTimeout = 5 * time.Second

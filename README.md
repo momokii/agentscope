@@ -36,6 +36,10 @@ You run coding agents in terminal panes and lose track: which one is burning tok
   sessions, and an **Activity log** (`#/activity`) — the full event feed with
   search, harness slice, and paging. The activity ring still accumulates in
   the App shell to feed this view; event rows deep-link to their sessions.
+- **Alerts (opt-in):** bell in the header watches every snapshot for
+  waiting-input flips, 15+ min runs, and a daily budget you set. Browser
+  notifications where secure contexts allow, always-on in-app toasts +
+  tab title badge otherwise. Nothing leaves the browser.
 - **KPI strip:** Active / Waiting / Errors follow the date/bucket/harness/
   search filters; throughput, costs, and live presence stay global
   measurements. Cost cards switch windows with the date filter
@@ -86,7 +90,7 @@ http://127.0.0.1:$PORT` (serve, **never funnel** — see Security).
 | `XDG_RUNTIME_DIR` | host env | `/run/user/<uid>` | Must equal host value — the zellij CLI resolves sockets from it; mismatch = blind dashboard |
 | `HOME` | host env | — | Only used to expand the `:ro` volume sources to your home (home itself is never mounted) |
 
-Pinned at build: Go `1.27.3`, zellij `0.44.3` (major must match host), `gcr.io/distroless/static-debian12:nonroot`, image `opencode-dashboard:1.0.0`.
+Pinned at build: Go `1.27.3`, zellij `0.44.3` (major must match host), `gcr.io/distroless/static-debian12:nonroot`, image `opencode-dashboard:1.1.0`.
 
 ## Architecture
 
@@ -319,10 +323,9 @@ verbatim).
 
 - Pi transcript drill-down (export-shaped pi route feeding all detail tabs).
 - Deferred actions wave (abort/resurrect — blocked on design + threat-model reopen).
-- Notifications + daily cost budget (browser Notification API on waiting-input flips, long turns, budget crossing; client-only, read-only posture unchanged).
-- In-tab transcript search (client-side filter over the loaded export).
 - Multi-host seam (`host_id` across collector/snapshot/UI).
-- Narrow/phone layout; event-tail/dedupe stress tests; CI + automated scans.
+- Narrow/phone layout; event-tail/dedupe stress tests.
+- CI runs on the first push to GitHub (workflow file ships; the run itself needs a remote).
 
 ## Contributing
 

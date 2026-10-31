@@ -1,7 +1,7 @@
 {
   "name": "opencode-dashboard-web",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Embedded SPA for opencode mission control (Wave 2: fleet UI). W2-3 ships transport-only sse.ts; views land in W2-1/W2-2.",
   "scripts": {
