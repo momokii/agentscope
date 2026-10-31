@@ -27,7 +27,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowLeft, ChevronDown } from "lucide-react";
+import { ArrowDown, ArrowLeft, ChevronDown, Download, Search } from "lucide-react";
+import { downloadJson, exportFilename } from "../lib/download";
 
 import StatusBadge from "../components/StatusBadge";
 import DataGuide from "../components/DataGuide";
@@ -43,6 +44,7 @@ import {
   buildTurns,
   computeWindow,
   firstText,
+  flatMessageText,
   flattenTurns,
   isNearBottom,
   messageCost,
@@ -317,6 +319,7 @@ export interface TranscriptTabProps {
 }
 
 export function TranscriptTab({ flat, jumpTarget, onJumped, paletteOpen, inspectorOpen = false }: TranscriptTabProps) {
+  const [query, setQuery] = useState("");
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportH, setViewportH] = useState(600);
@@ -324,7 +327,14 @@ export function TranscriptTab({ flat, jumpTarget, onJumped, paletteOpen, inspect
   const [unseen, setUnseen] = useState(0);
   const [highlight, setHighlight] = useState<string | null>(null);
   const pinnedRef = useRef(false);
-  const prevLenRef = useRef(flat.length);
+  const needle = query.trim().toLowerCase();
+  const shown = useMemo(() => {
+    if (needle === "") return flat;
+    return flat.filter((entry) =>
+      flatMessageText(entry).toLowerCase().includes(needle),
+    );
+  }, [flat, needle]);
+  const prevLenRef = useRef(shown.length);
   pinnedRef.current = pinned;
 
   useEffect(() => {
@@ -339,25 +349,25 @@ export function TranscriptTab({ flat, jumpTarget, onJumped, paletteOpen, inspect
 
   useEffect(() => {
     scrollToBottom();
-    prevLenRef.current = flat.length;
+    prevLenRef.current = shown.length;
     // Mount only: tail-follow starts ON at the live edge.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const prev = prevLenRef.current;
-    prevLenRef.current = flat.length;
-    if (flat.length <= prev) return;
+    prevLenRef.current = shown.length;
+    if (shown.length <= prev) return;
     if (pinnedRef.current) {
-      setUnseen((u) => u + (flat.length - prev));
+      setUnseen((u) => u + (shown.length - prev));
     } else {
       scrollToBottom();
     }
-  }, [flat.length]);
+  }, [shown.length]);
 
   useEffect(() => {
     if (jumpTarget === null) return;
-    const index = flat.findIndex((f) => f.message.info.id === jumpTarget);
+    const index = shown.findIndex((f) => f.message.info.id === jumpTarget);
     if (index < 0) {
       onJumped();
       return;
@@ -369,7 +379,7 @@ export function TranscriptTab({ flat, jumpTarget, onJumped, paletteOpen, inspect
     setPinned(top > 0 && !isNearBottom(top + viewportH, top, viewportH));
     setHighlight(jumpTarget);
     onJumped();
-  }, [jumpTarget, flat, viewportH, onJumped]);
+  }, [jumpTarget, shown, viewportH, onJumped]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -406,12 +416,39 @@ export function TranscriptTab({ flat, jumpTarget, onJumped, paletteOpen, inspect
   };
 
   const { start, end } = useMemo(
-    () => computeWindow(scrollTop, flat.length, viewportH),
-    [scrollTop, flat.length, viewportH],
+    () => computeWindow(scrollTop, shown.length, viewportH),
+    [scrollTop, shown.length, viewportH],
   );
 
   return (
     <div className="transcript-wrap">
+      <div className="transcript-tools">
+        <label className="transcript-search">
+          <Search aria-hidden="true" size={12} />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Filter messages…"
+            aria-label="Filter transcript messages"
+          />
+          {query !== "" && (
+            <button
+              type="button"
+              className="transcript-clear"
+              aria-label="Clear transcript filter"
+              onClick={() => setQuery("")}
+            >
+              ×
+            </button>
+          )}
+        </label>
+        {query.trim() !== "" && (
+          <span className="transcript-match mono" role="status">
+            {`${shown.length} of ${flat.length}`}
+          </span>
+        )}
+      </div>
       <div
         ref={containerRef}
         className="transcript"
@@ -420,12 +457,16 @@ export function TranscriptTab({ flat, jumpTarget, onJumped, paletteOpen, inspect
         tabIndex={0}
         onScroll={onScroll}
       >
-        {flat.length === 0 ? (
-          <div className="empty-state">No messages in this session yet.</div>
+        {shown.length === 0 ? (
+          <div className="empty-state">
+            {flat.length === 0
+              ? "No messages in this session yet."
+              : "No messages match this filter."}
+          </div>
         ) : (
           <>
             <div style={{ height: start * EST_ROW_HEIGHT_PX }} aria-hidden="true" />
-            {flat.slice(start, end).map((entry) => (
+            {shown.slice(start, end).map((entry) => (
               <MessageRow
                 key={entry.message.info.id}
                 entry={entry}
@@ -433,7 +474,7 @@ export function TranscriptTab({ flat, jumpTarget, onJumped, paletteOpen, inspect
               />
             ))}
             <div
-              style={{ height: (flat.length - end) * EST_ROW_HEIGHT_PX }}
+              style={{ height: (shown.length - end) * EST_ROW_HEIGHT_PX }}
               aria-hidden="true"
             />
           </>
@@ -669,6 +710,16 @@ export default function SessionDetail({
         {row !== null && <StatusBadge status={row.status} />}
         {row !== null && <HarnessBadge harness={row.harness} />}
         <span className="detail-title">{data.detail.info.title}</span>
+        <button
+          type="button"
+          className="live-toggle"
+          aria-label="Download this session's detail as JSON"
+          title="Download the loaded detail + children (same shape as the export endpoint)"
+          onClick={() => downloadJson(exportFilename(`session-${id}`), data)}
+        >
+          <Download aria-hidden="true" size={12} />
+          <span>Export</span>
+        </button>
         <DataGuide
           blurb="One session, six ways to read it. Tabs share the same live export; pick the lens that answers your question."
           entries={[

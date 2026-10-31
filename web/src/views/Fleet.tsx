@@ -8,7 +8,7 @@
  */
 
 import { Fragment, useMemo, useState } from "react";
-import { Pause, Pin, Play, Search } from "lucide-react";
+import { Download, Pause, Pin, Play, Search } from "lucide-react";
 
 import type { SessionRow, Snapshot } from "../lib/sse";
 import type { ConnectionPhase } from "../lib/sse";
@@ -41,6 +41,7 @@ import { formatAge, formatCompact, formatUSD } from "../lib/format";
 import { resolveProjectHeader } from "../lib/projects";
 import HarnessBadge from "../components/HarnessBadge";
 import DataGuide from "../components/DataGuide";
+import { downloadJson, exportFilename } from "../lib/download";
 import RefreshButton from "../components/RefreshButton";
 import HarnessFilterBar, {
   HARNESS_FILTER_LABELS,
@@ -642,6 +643,20 @@ export default function Fleet({
           />
         </label>
         <DataGuide />
+        <button
+          type="button"
+          className="live-toggle"
+          aria-label="Download the current fleet snapshot as JSON"
+          title="Download the current fleet snapshot (same shape as /api/fleet)"
+          onClick={() =>
+            snapshot !== null &&
+            downloadJson(exportFilename("fleet"), snapshot)
+          }
+          disabled={snapshot === null}
+        >
+          <Download aria-hidden="true" size={12} />
+          <span>Export</span>
+        </button>
         <RefreshButton onRefresh={onRefresh} refreshing={refreshing} />
         <button
           type="button"

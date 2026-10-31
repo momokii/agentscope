@@ -4,6 +4,7 @@ import {
   buildTurns,
   computeWindow,
   firstText,
+  flatMessageText,
   flattenTurns,
   isNearBottom,
   messageCost,
@@ -226,5 +227,48 @@ describe("tail-follow + windowing math", () => {
     const tail = computeWindow(1_000_000, total, viewport);
     expect(tail.end).toBe(total);
     expect(computeWindow(0, 0, viewport)).toEqual({ start: 0, end: 0 });
+  });
+});
+
+describe("flatMessageText", () => {
+  it("joins role, agent, text, reasoning, and tool fields", () => {
+    const base = {
+      info: {
+        id: "m1",
+        sessionID: "ses",
+        role: "assistant",
+        time: { created: 1 },
+      },
+      parts: [],
+    } as unknown as import("./transcript").ExportMessage;
+    const text = (t: string) => ({
+      type: "text",
+      id: "p",
+      messageID: "m1",
+      sessionID: "ses",
+      text: t,
+    });
+    const withParts = (
+      parts: import("./transcript").ExportMessage["parts"],
+    ): import("./transcript").FlatMessage => ({
+      message: { ...base, parts },
+      sessionId: "ses",
+      agent: "build",
+      lane: "main",
+      timeCreated: 1,
+    });
+    const tool: import("./transcript").ToolPart = {
+      type: "tool",
+      id: "t",
+      messageID: "m1",
+      sessionID: "ses",
+      tool: "bash",
+      callID: "c1",
+      state: { status: "completed", title: "run tests", output: "ok" },
+    };
+    const out = flatMessageText(withParts([text("hello world"), tool]));
+    expect(out).toContain("hello world");
+    expect(out).toContain("bash");
+    expect(out).toContain("run tests");
   });
 });

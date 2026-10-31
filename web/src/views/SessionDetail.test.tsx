@@ -188,6 +188,44 @@ describe("SessionDetail production data seam", () => {
   });
 });
 
+describe("SessionDetail transcript search", () => {
+  it("filters messages by text with a match count", async () => {
+    renderDetail({ id: FIXTURE_MAIN_ID, tab: "transcript" });
+    await screen.findByText("Add dashboard drill-down");
+    fireEvent.change(screen.getByLabelText("Filter transcript messages"), {
+      target: { value: "stale anchor" },
+    });
+    // "stale anchor" appears in two fixture messages (edit + retry).
+    expect(screen.getByText(/2 of \d+/)).toBeDefined();
+    // The session title stays (filtering narrows messages, not chrome).
+    expect(screen.getByText("Add dashboard drill-down")).toBeDefined();
+    // A message without the needle is hidden.
+    expect(screen.queryByText(/tail-follow/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Clear transcript filter" }));
+    expect(screen.getByText("Add dashboard drill-down")).toBeDefined();
+  });
+
+  it("shows an empty state when nothing matches", async () => {
+    renderDetail({ id: FIXTURE_MAIN_ID, tab: "transcript" });
+    await screen.findByText("Add dashboard drill-down");
+    fireEvent.change(screen.getByLabelText("Filter transcript messages"), {
+      target: { value: "zzzz-no-such-text" },
+    });
+    expect(screen.getByText("No messages match this filter.")).toBeDefined();
+  });
+
+  it("matches tool names and outputs, not just prose", async () => {
+    renderDetail({ id: FIXTURE_MAIN_ID, tab: "transcript" });
+    await screen.findByText("Add dashboard drill-down");
+    // The fixture transcript contains bash tool calls (see the tool-row test).
+    fireEvent.change(screen.getByLabelText("Filter transcript messages"), {
+      target: { value: "bash" },
+    });
+    expect(screen.getAllByText("bash").length).toBeGreaterThan(0);
+    expect(screen.getByText(/\d+ of \d+/)).toBeDefined();
+  });
+});
+
 describe("SessionDetail guide", () => {
   it("explains the tabs with view-specific entries", async () => {
     renderDetail({ id: FIXTURE_MAIN_ID, tab: "transcript" });

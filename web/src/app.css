@@ -3289,6 +3289,53 @@ button.tools-row:hover {
   text-transform: uppercase;
 }
 
+.transcript-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: var(--border);
+}
+
+.transcript-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ink-800);
+  border: var(--border);
+  border-radius: var(--radius-chip);
+  padding: 4px 8px;
+  color: var(--ink-400);
+  flex: 1 1 240px;
+  max-width: 420px;
+}
+
+.transcript-search input {
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--ink-100);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  width: 100%;
+}
+
+.transcript-clear {
+  background: none;
+  border: none;
+  color: var(--ink-400);
+  cursor: pointer;
+  font-size: var(--fs-13);
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.transcript-match {
+  color: var(--ink-400);
+  font-size: var(--fs-12);
+  white-space: nowrap;
+}
+
 .pagination-size select {
   background: var(--ink-800);
   border: var(--border);

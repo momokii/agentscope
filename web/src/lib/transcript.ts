@@ -155,6 +155,41 @@ export type Part =
   | CompactionPart
   | UnknownPart;
 
+/**
+ * Searchable text of one flattened message: user/assistant text and
+ * reasoning verbatim, plus tool names, titles, and outputs (so "which
+ * turn called bash?" is answerable). Other part types contribute their
+ * type label. Used by the Transcript tab filter; matching is a
+ * case-insensitive substring on the joined text.
+ */
+export function flatMessageText(entry: FlatMessage): string {
+  const chunks: string[] = [entry.message.info.role, entry.agent];
+  for (const part of entry.message.parts) {
+    switch (part.type) {
+      case "text":
+      case "reasoning":
+        if ("text" in part && typeof part.text === "string") {
+          chunks.push(part.text);
+        }
+        break;
+      case "tool":
+        if ("tool" in part && typeof part.tool === "string") {
+          chunks.push(part.tool);
+        }
+        if ("state" in part && part.state !== null && typeof part.state === "object") {
+          const state = part.state as { title?: unknown; output?: unknown };
+          if (typeof state.title === "string") chunks.push(state.title);
+          if (typeof state.output === "string") chunks.push(state.output);
+        }
+        break;
+      default:
+        chunks.push(part.type);
+        break;
+    }
+  }
+  return chunks.join("\n");
+}
+
 export interface ExportMessage {
   info: ExportMessageInfo;
   parts: Part[];
