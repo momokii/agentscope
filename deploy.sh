@@ -86,16 +86,24 @@ else
 fi
 
 # ---------------- teardown mode ----------------
+# Port-agnostic: --down without --port tears down whatever is running.
+# A squatted port held by ANOTHER process is not our failure (the old
+# raw-port check failed teardowns for unrelated squatters) — fail only if
+# the dashboard's own listener or containers survive.
 if [ "$DOWN" -eq 1 ]; then
   log "tearing down (docker compose down)…"
   docker compose down
-  if port_in_use "$PORT"; then
-    fail "port $PORT still LISTENs after down. Fix: ss -tlnp | grep $PORT  then stop the squatter"
-  fi
   if [ -n "$(docker compose ps -q 2>/dev/null || true)" ]; then
     fail "'docker compose ps -q' still lists containers. Fix: docker compose ps ; docker compose down --remove-orphans"
   fi
-  log "clean: nothing on :$PORT (ss empty), no containers (compose ps empty). Bye."
+  if ss -tlnp 2>/dev/null | grep -q 'dashboard'; then
+    fail "a dashboard-owned listener survived down. Fix: ss -tlnp | grep dashboard  then stop that process"
+  fi
+  if port_in_use "$PORT"; then
+    log "note: :$PORT still LISTENs, but no dashboard container or listener remains — an unrelated squatter holds it (not our stack). Bye."
+  else
+    log "clean: nothing on :$PORT (ss empty), no containers (compose ps empty). Bye."
+  fi
   exit 0
 fi
 
@@ -107,34 +115,26 @@ if port_in_use "$PORT"; then
 fi
 export PORT
 
-# ---------------- idempotent re-runs: healthy already? skip rebuild ----------------
-CID="$(docker compose ps -q dashboard 2>/dev/null || true)"
-if [ -n "$CID" ]; then
-  HST="$(docker inspect --format '{{.State.Health.Status}}' "$CID" 2>/dev/null || echo none)"
-  if [ "$HST" = "healthy" ]; then
-    log "container $CID reports healthy — reusing image, skipping rebuild (config changes like --port still recreate via 'up'; --down first for a fully clean rebuild)."
-    SKIP_BUILD=1
-  fi
-fi
-
 # ---------------- web/dist: build if missing OR stale (committed dist is the fallback) ----------------
 # Staleness rule: any web/src/** newer than web/dist/index.html → rebuild.
-if [ "${SKIP_BUILD:-0}" -ne 1 ]; then
-  NEED_BUILD=0
-  if [ ! -f web/dist/index.html ]; then
-    NEED_BUILD=1; log "web/dist missing — will build."
-  elif [ -n "$(find web/src -type f -newer web/dist/index.html -print -quit 2>/dev/null)" ]; then
-    NEED_BUILD=1; log "web/src newer than web/dist — will rebuild (stale dist)."
-  else
-    log "web/dist fresh — reusing committed dist (no Node needed)."
-  fi
-  if [ "$NEED_BUILD" -eq 1 ]; then
-    command -v npm >/dev/null 2>&1 \
-      || fail "web/dist missing/stale but 'npm' not found. Fix: install Node 20+ (https://nodejs.org/) then re-run — or restore committed web/dist via git."
-    log "building SPA: npm --prefix web ci && npm run build --prefix web"
-    npm --prefix web ci
-    npm run build --prefix web
-  fi
+# NOTE: every run rebuilds the image (`up --build` below) — a previous
+# revision skipped rebuilds on healthy stacks, which served stale code
+# after `git pull` and confused verification. Rebuilds are layer-cached,
+# so the no-change case costs seconds, never correctness.
+NEED_BUILD=0
+if [ ! -f web/dist/index.html ]; then
+  NEED_BUILD=1; log "web/dist missing — will build."
+elif [ -n "$(find web/src -type f -newer web/dist/index.html -print -quit 2>/dev/null)" ]; then
+  NEED_BUILD=1; log "web/src newer than web/dist — will rebuild (stale dist)."
+else
+  log "web/dist fresh — reusing committed dist (no Node needed)."
+fi
+if [ "$NEED_BUILD" -eq 1 ]; then
+  command -v npm >/dev/null 2>&1 \
+    || fail "web/dist missing/stale but 'npm' not found. Fix: install Node 20+ (https://nodejs.org/) then re-run — or restore committed web/dist via git."
+  log "building SPA: npm --prefix web ci && npm run build --prefix web"
+  npm --prefix web ci
+  npm run build --prefix web
 fi
 
 # ---------------- up ----------------
@@ -154,12 +154,13 @@ if [ -z "${TZ:-}" ]; then
   fi
   if [ -n "$DETECTED_TZ" ]; then export TZ="$DETECTED_TZ"; fi
 fi
+# Forward the full operator-tunable env so compose picks it up (compose
+# defaults cover direct `docker compose` use; explicit exports win).
+export XDG_RUNTIME_DIR
+if [ -n "${DB_TIMEOUT:-}" ]; then export DB_TIMEOUT; fi
+if [ -n "${ACTIVE_WINDOW:-}" ]; then export ACTIVE_WINDOW; fi
 log "bringing up: UID=$UID GID=$GID PORT=$PORT TZ=${TZ:-unset} (host mode: binds host 127.0.0.1:$PORT directly)"
-if [ "${SKIP_BUILD:-0}" -eq 1 ]; then
-  docker compose up -d
-else
-  docker compose up -d --build
-fi
+docker compose up -d --build
 
 # ---------------- wait for healthy (≤90s) ----------------
 log "waiting for container health (≤90s)…"
@@ -189,7 +190,7 @@ auth_curl() { # usage: auth_curl <curl-args...>
   fi
 }
 log "--- proof: GET /api/healthz ---"
-HEALTHZ="$(auth_curl "127.0.0.1:$PORT/api/healthz" || true)"
+HEALTHZ="$(auth_curl "http://127.0.0.1:$PORT/api/healthz" || true)"
 printf '%s\n' "$HEALTHZ"
 echo "$HEALTHZ" | grep -q '"healthy":true' \
   || {
@@ -197,20 +198,28 @@ echo "$HEALTHZ" | grep -q '"healthy":true' \
     # poll interval, then re-check rather than failing the deploy.
     log "healthz not healthy:true on first read (stale warm-up is normal) — waiting one POLL_INTERVAL and re-checking…"
     sleep "${POLL_INTERVAL:-10s}" 2>/dev/null || sleep 10
-    HEALTHZ="$(auth_curl "127.0.0.1:$PORT/api/healthz" || true)"
+    HEALTHZ="$(auth_curl "http://127.0.0.1:$PORT/api/healthz" || true)"
     printf '%s\n' "$HEALTHZ"
     echo "$HEALTHZ" | grep -q '"healthy":true' \
       || { docker logs --tail 30 "$CID" >&2 || true
            fail "healthz never reached healthy:true (empty/reset = app unreachable on host loopback, NOT warm-up). Logs tailed above. Fix: docker compose logs dashboard | tail -100"; }
   }
 log "--- proof: GET /api/fleet (head -c 300) ---"
-auth_curl "127.0.0.1:$PORT/api/fleet" 2>/dev/null | head -c 300 || true; echo
+auth_curl "http://127.0.0.1:$PORT/api/fleet" 2>/dev/null | head -c 300 || true; echo
 log "--- proof: SPA served at / ---"
-auth_curl -o /dev/null -w 'GET / -> %{http_code}\n' "127.0.0.1:$PORT/" || true
-log "--- proof: loopback-only (want 127.0.0.1, NO 0.0.0.0:$PORT, NO docker-proxy) ---"
-ss -tlnp | grep "$PORT" || fail "ss shows nothing on $PORT?! Fix: docker compose ps ; docker compose logs dashboard | tail -20"
-if ss -tln 2>/dev/null | grep -qE "0\.0\.0\.0:$PORT[[:space:]]"; then
-  fail "port $PORT bound on 0.0.0.0 — loopback-only violated. Fix: ss -tlnp | grep $PORT to find the offender (the dashboard itself can never do this: Go asserts loopback, compose has no ports: stanza)"
+auth_curl -o /dev/null -w 'GET / -> %{http_code}\n' "http://127.0.0.1:$PORT/" || true
+if [ "${BIND_ADDR:-127.0.0.1}" = "127.0.0.1" ] || [ "${BIND_ADDR:-127.0.0.1}" = "::1" ] || [ "${BIND_ADDR:-127.0.0.1}" = "localhost" ]; then
+  log "--- proof: loopback-only (want 127.0.0.1, NO 0.0.0.0:$PORT, NO docker-proxy) ---"
+  ss -tlnp | grep "$PORT" || fail "ss shows nothing on $PORT?! Fix: docker compose ps ; docker compose logs dashboard | tail -20"
+  if ss -tln 2>/dev/null | grep -qE "(0\.0\.0\.0|\*|:::):$PORT[[:space:]]"; then
+    fail "port $PORT bound off-loopback — loopback-only violated. Fix: ss -tlnp | grep $PORT to find the offender (the dashboard itself can never do this: Go asserts loopback, compose has no ports: stanza)"
+  fi
+else
+  # Explicit non-loopback opt-in (binary refuses to serve it without valid
+  # DASHBOARD_AUTH): skip the loopback assertion, keep the docker-proxy
+  # check (host mode must bind the dashboard binary directly).
+  log "--- proof: non-loopback opt-in (BIND_ADDR=$BIND_ADDR, auth-gated) ---"
+  ss -tlnp | grep "$PORT" || fail "ss shows nothing on $PORT?! Fix: docker compose ps ; docker compose logs dashboard | tail -20"
 fi
 if ss -tlnp 2>/dev/null | grep "$PORT" | grep -qi 'docker-proxy'; then
   fail "a docker-proxy holds :$PORT — host mode expects the dashboard binary directly. Fix: docker compose config | grep -E 'network_mode|ports:' must show host mode with no ports: stanza"

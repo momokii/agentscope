@@ -59,14 +59,21 @@ services:
     environment:
       # MUST equal the host value (`echo $XDG_RUNTIME_DIR`): the zellij CLI
       # resolves its sockets from this variable, so path parity matters.
-      # If the host value differs, change BOTH this and the socket volume
-      # source below to that exact path.
-      XDG_RUNTIME_DIR: /run/user/${UID:-1000}
+      # Passed through from the host env (deploy.sh exports it after
+      # verifying non-empty); the fallback matches the systemd default.
+      XDG_RUNTIME_DIR: ${XDG_RUNTIME_DIR:-/run/user/${UID:-1000}}
       # Substituted from the host env; used only for XDG fallback
       # resolution — the home dir itself is NEVER mounted (see allowlist).
       HOME: ${HOME:-/home/hostuser}
       DATA_DIR: /data/opencode
       POLL_INTERVAL: ${POLL_INTERVAL:-10s}
+      # Per-source DB budget per tick (plan: 5–15s window). Forwarded from
+      # host env so operators can raise it past WAL contention; malformed
+      # or non-positive values fall back to 10s in-code. (Previously
+      # documented but never forwarded — the knob was silently ignored.)
+      DB_TIMEOUT: ${DB_TIMEOUT:-10s}
+      # Status recency gate. Same forwarding story as DB_TIMEOUT.
+      ACTIVE_WINDOW: ${ACTIVE_WINDOW:-2m}
       # Host mode has NO port mapping — the container's listen port IS the
       # host port, so the operator's $PORT must flow through here (the old
       # "container side fixed at 8080" model is gone with the `ports:` stanza).
@@ -104,7 +111,10 @@ services:
       # EXITED/resurrect metadata (read-only).
       - ${HOME:-/home/hostuser}/.cache/zellij:/data/zellij-cache:ro
       # Live zellij sockets (0700 — requires user: parity above). Source
-      # path must equal $XDG_RUNTIME_DIR/zellij on the host.
+      # path must equal $XDG_RUNTIME_DIR/zellij on the host; it follows the
+      # same env (with the same fallback) so a non-default XDG value stays
+      # in parity automatically. Container target mirrors XDG_RUNTIME_DIR
+      # because the CLI resolves sockets from that variable, not a path.
       # Read-write is REQUIRED here (no :ro): the zellij CLI creates a
       # per-invocation client socket inside XDG_RUNTIME_DIR to talk to the
       # server, so a read-only mount fails every pane query with EROFS
@@ -112,7 +122,7 @@ services:
       # allow: the dashboard only issues read-only zellij queries
       # (list-sessions, list-panes, dump-screen) — never attach, kill,
       # resurrect, or delete-session — and same-UID parity already holds.
-      - /run/user/${UID:-1000}/zellij:/run/user/${UID:-1000}/zellij
+      - ${XDG_RUNTIME_DIR:-/run/user/${UID:-1000}}/zellij:${XDG_RUNTIME_DIR:-/run/user/${UID:-1000}}/zellij
       # Host timezone (read-only): makes "cost today" boundary the operator's
       # local midnight inside a zone-less container image.
       - /etc/localtime:/etc/localtime:ro
