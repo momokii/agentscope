@@ -59,6 +59,7 @@ import Compare from "./views/Compare";
 import Fleet from "./views/Fleet";
 import ActivityView from "./views/Activity";
 import GlobalTimeline from "./views/GlobalTimeline";
+import HistoryView from "./views/History";
 import Projects from "./views/Projects";
 import SessionDetail from "./views/SessionDetail";
 
@@ -468,6 +469,16 @@ export default function App() {
           >
             Activity
           </a>
+          <a
+            className={
+              route.view === "history"
+                ? "app-nav-link app-nav-link-active"
+                : "app-nav-link"
+            }
+            href="#/history"
+          >
+            History
+          </a>
         </nav>
         <AlertsBell
           config={alertsConfig}
@@ -515,6 +526,8 @@ export default function App() {
             onPageChange={(page) => changeActivityQuery({ page })}
             paused={!live}
           />
+        ) : route.view === "history" ? (
+          <HistoryView />
         ) : route.view === "project" ? (
           <Fleet
             snapshot={snapshot}

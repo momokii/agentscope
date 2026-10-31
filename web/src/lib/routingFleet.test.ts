@@ -175,6 +175,12 @@ describe("recency + paging params", () => {
   });
 });
 
+describe("history route", () => {
+  it("parses the bare history path", () => {
+    expect(parseHash("#/history")).toEqual({ view: "history" });
+  });
+});
+
 describe("harness routing", () => {
   it("parses and builds the harness slice (unknown falls back to all)", () => {
     expect(parseHash("#/?harness=pi")).toEqual({

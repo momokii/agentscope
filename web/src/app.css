@@ -811,6 +811,39 @@ a:focus-visible {
   text-decoration: underline;
 }
 
+/* ---------- history view ---------- */
+
+.history-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--gap);
+}
+
+.history-chart {
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: var(--border);
+}
+
+.history-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-11);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--ink-400);
+  margin-bottom: 4px;
+}
+
+.history-peak {
+  color: var(--ink-200);
+}
+
+.history-projects {
+  padding: 8px 0 0;
+}
+
 /* ---------- SSE dot ---------- */
 
 .sse-dot {

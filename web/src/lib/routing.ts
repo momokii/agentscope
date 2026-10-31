@@ -39,13 +39,15 @@ export type Route =
   | { view: "session"; id: string; tab: SessionTab; messageId?: string }
   | { view: "compare"; ids: string[] }
   | { view: "timeline" }
-  | ({ view: "activity" } & ActivityQuery);
+  | ({ view: "activity" } & ActivityQuery)
+  | { view: "history" };
 
 const SESSION_PREFIX = "/sessions/";
 const PROJECTS_PREFIX = "/projects/";
 const COMPARE_PATH = "/compare";
 const TIMELINE_PATH = "/timeline";
 const ACTIVITY_PATH = "/activity";
+const HISTORY_PATH = "/history";
 const MAX_COMPARE_IDS = 4;
 
 /** Activity log query: text search + page (both URL-serialized). */
@@ -127,6 +129,7 @@ export function parseHash(hash: string): Route {
   if (path === COMPARE_PATH) return { view: "compare", ids: parseIds(query) };
   if (path === TIMELINE_PATH) return { view: "timeline" };
   if (path === ACTIVITY_PATH) return { view: "activity", ...activityQuery(query) };
+  if (path === HISTORY_PATH) return { view: "history" };
   if (path === "/" || path === "") return fleetRoute(query);
   return { view: "fleet" };
 }
