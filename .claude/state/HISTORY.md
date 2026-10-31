@@ -264,3 +264,20 @@ Condensed chronology. Commit hashes are on `main`; older notepads hold the blow-
 - TASK-342: one-click JSON export (fleet snapshot, session detail).
 - TASK-107: `.github/workflows/ci.yml` — exact gate suite, pinned actions, Security Gate greps, dist-freshness check. Run pending a remote.
 - v1.1.0: version bumped (hub, compose, deploy, web, README); redeployed + verified live.
+
+## 2026-10-26 — Wave 6 shipped as v1.1.0
+- TASK-340 (alerts): opt-in bell + panel + budget + test action; in-app toasts
+  + tab title badge always; Notification only when granted + secure context
+  (live-probed: tailnet plain HTTP denies → in-app fallback path covered).
+  Live-verified panel render + persistence shape; browser Notification itself
+  not fire-tested headless (opt-in path is user-driven by design).
+- TASK-341: transcript search box with match count over loaded parts
+  (text/reasoning/tool name+input+output), Esc-safe, unit + view tests green.
+- TASK-342: fleet + session JSON export buttons (timestamped filenames).
+- TASK-107: `.github/workflows/ci.yml` (Go build/vet/test, web lint/test/
+  build, token gate, dist-freshness, SECURITY.md grep gate; pinned
+  setup-go/setup-node; no third-party scanners by design). Every step
+  validated locally; the workflow run itself awaits a GitHub remote.
+- v1.1.0: hub Version + compose image + deploy pin + package.json + README;
+  full gates green; redeploy verified (healthz 1.1.0, bundle byte-identical,
+  live probes pass); tagged v1.1.0.

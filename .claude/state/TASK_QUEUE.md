@@ -267,7 +267,7 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 - **Acceptance:** revert-to-full-scan equality remains proven at larger dummy sizes.
 - **Verify:** `go test -count=1 ./internal/db/ ./internal/collector/`.
 
-### TASK-340: Browser notifications + daily cost budget (DONE 2026-10-26)
+### TASK-340: Browser notifications + daily cost budget (DONE 2026-10-26, deployed v1.1.0)
 - **Evidence:** opt-in bell + panel + test button, in-app toasts, title badge, localStorage prefs; unit + component tests; live probe renders panel; secure-context fallback verified
 - **Priority:** High | **Complexity:** M | **Status:** DONE
 - **Scope:** purely client-side on the existing SSE stream (read-only posture
@@ -287,7 +287,7 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
   still surface alerts inside the dashboard (never fail silently).
 - **Security:** Notification API only; no new network calls, no secrets.
 
-### TASK-342: Export snapshot / session JSON download (DONE 2026-10-26)
+### TASK-342: Export snapshot / session JSON download (DONE 2026-10-26, deployed v1.1.0)
 - **Evidence:** fleet + session Export buttons download loaded data as timestamped JSON; unit tests incl. blob content
 - **Priority:** Low | **Complexity:** S | **Status:** DONE
 - **Scope:** download buttons (fleet snapshot JSON, session export JSON) —
@@ -295,7 +295,7 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 - **Acceptance:** one click downloads valid JSON matching the API shape.
 - **Verify:** web suite green.
 
-### TASK-341: In-tab transcript search/filter (DONE 2026-10-26)
+### TASK-341: In-tab transcript search/filter (DONE 2026-10-26, deployed v1.1.0)
 - **Evidence:** search box + match count + clear in TranscriptTab; flatMessageText unit tests; live probe filters + counts
 - **Priority:** Medium | **Complexity:** S | **Status:** DONE
 - **Scope:** client-only text filter box on the Transcript tab (filters the
@@ -304,7 +304,7 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
   transcripts without jank; no new fetch.
 - **Verify:** web suite green.
 
-### TASK-107: CI + automated security scans (DONE 2026-10-26 — file lands, run on first push)
+### TASK-107: CI + automated security scans (DONE 2026-10-26 — file lands, run on first push; deployed v1.1.0)
 - **Evidence:** `.github/workflows/ci.yml` runs the exact gate suite (Go build/vet/test, web lint/test/build, token gate, dist-freshness, Security Gate greps); every step validated locally; pipeline run itself needs a GitHub remote
 - **Priority:** Medium | **Complexity:** M | **Status:** DONE
 - **Scope:** CI running Go tests/vet/build, web tests/typecheck/build, token gate, secret
