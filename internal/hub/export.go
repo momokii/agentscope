@@ -61,6 +61,24 @@ func (s *Server) handleSessionExport(w http.ResponseWriter, r *http.Request) {
 	if payload.Session.Messages == nil {
 		payload.Session.Messages = []model.ExportMessage{}
 	}
+	// The SPA iterates parts unconditionally; a null array would throw
+	// mid-render. Real turns can be part-less (pi usage-only turns, and
+	// the db path emits the same shape), so normalize both harnesses here.
+	for i := range payload.Session.Messages {
+		if payload.Session.Messages[i].Parts == nil {
+			payload.Session.Messages[i].Parts = []json.RawMessage{}
+		}
+	}
+	for i := range payload.Children {
+		if payload.Children[i].Messages == nil {
+			payload.Children[i].Messages = []model.ExportMessage{}
+		}
+		for j := range payload.Children[i].Messages {
+			if payload.Children[i].Messages[j].Parts == nil {
+				payload.Children[i].Messages[j].Parts = []json.RawMessage{}
+			}
+		}
+	}
 	resp := SessionExportResponse{Session: payload.Session, Children: payload.Children}
 	body, err := json.Marshal(resp)
 	if err != nil {

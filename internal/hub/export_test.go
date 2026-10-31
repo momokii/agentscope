@@ -98,6 +98,28 @@ func Test_SessionExport_shape(t *testing.T) {
 	}
 }
 
+func Test_SessionExport_nil_parts_normalized_to_empty(t *testing.T) {
+	// Given: a payload with part-less messages (pi usage-only turns hit
+	// this; the SPA iterates parts unconditionally).
+	payload := exportFixture()
+	payload.Session.Messages[0].Parts = nil
+	payload.Children[0].Messages = []model.ExportMessage{{Info: model.ExportMessageInfo{ID: "m-c"}}}
+	srv, _, baseURL := testServer(t, defaultTestConfig())
+	srv.SetExportSource(&fakeExport{payload: payload})
+
+	// When
+	var got SessionExportResponse
+	decodeGet(t, baseURL+"/api/sessions/ses_demo1/export", &got)
+
+	// Then: null arrays arrive as [] (never null) for both session and child.
+	if got.Session.Messages[0].Parts == nil {
+		t.Fatalf("session parts = nil, want []")
+	}
+	if got.Children[0].Messages[0].Parts == nil {
+		t.Fatalf("child parts = nil, want []")
+	}
+}
+
 func Test_SessionExport_unknown_id_404(t *testing.T) {
 	// Given
 	srv, _, baseURL := testServer(t, defaultTestConfig())
