@@ -6,7 +6,7 @@ redeployed (`:8081`, fleet 1966 opencode + 6 pi, all gates green). Still open:
 the human-run **F2 VM truth matrix** (`docs/VM_DEPLOY.md` §3; plan F2 is `[~]`)
 and the human-run **F2 VM truth matrix** (`docs/VM_DEPLOY.md` §3; plan F2 is `[~]`).
 Wave 6 v1.1.0 shipped (alerts, transcript search, export download, CI) and
-redeployed (`:8082`); Wave 7 V2-B fleet history (`#/history`, `GET
+redeployed (`:8083` — :8080/8081/8082 squatted on the VM); Wave 7 V2-B fleet history (`#/history`, `GET
 /api/history`) is implemented, and V2-C P6 pi transcripts are implemented
 (`internal/pi/export*.go`, exportMux fallthrough in `cmd/dashboard/main.go`).
 
