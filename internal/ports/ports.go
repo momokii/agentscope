@@ -189,6 +189,13 @@ type Config struct {
 	// is deliberately NOT honored — the dashboard reads one fixed root
 	// (logged at startup) rather than chasing per-process overrides.
 	PiDataDir string
+	// HistoryDir is the dashboard-owned writable directory holding the
+	// local history database (history.db). Env: HISTORY_DIR. Empty after
+	// load means "history disabled": recording is skipped and
+	// /api/history answers 503. Unlike DATA_DIR/PI_DATA_DIR this mount is
+	// read-write (the dashboard is the sole writer; bounded retention
+	// keeps it small).
+	HistoryDir string
 }
 
 // DefaultActiveWindow is the default status recency gate: a session quiet
@@ -196,7 +203,8 @@ type Config struct {
 const DefaultActiveWindow = 2 * time.Minute
 
 // DefaultConfig returns the plan defaults: 10s poll, 127.0.0.1 bind,
-// PORT/8080, and $HOME/.local/share/opencode as the data root.
+// PORT/8080, $HOME/.local/share/opencode as the data root, and
+// $HOME/.local/share/opencode-dashboard as the history root.
 func DefaultConfig() Config {
 	return Config{
 		PollInterval: 10 * time.Second,
@@ -206,14 +214,16 @@ func DefaultConfig() Config {
 		Port:         "8080",
 		DataDir:      defaultDataDir(),
 		PiDataDir:    defaultPiDataDir(),
+		HistoryDir:   defaultHistoryDir(),
 	}
 }
 
 // LoadConfigFromEnv returns DefaultConfig overlaid with PORT, DATA_DIR,
-// PI_DATA_DIR, POLL_INTERVAL, DB_TIMEOUT, ACTIVE_WINDOW, and BIND_ADDR from
-// the environment. Malformed POLL_INTERVAL, DB_TIMEOUT, or ACTIVE_WINDOW falls
-// back to its default; empty PORT/DATA_DIR/BIND_ADDR keep their defaults
-// (unset BIND_ADDR behaves exactly as before: loopback-only).
+// PI_DATA_DIR, HISTORY_DIR, POLL_INTERVAL, DB_TIMEOUT, ACTIVE_WINDOW, and
+// BIND_ADDR from the environment. Malformed POLL_INTERVAL, DB_TIMEOUT, or
+// ACTIVE_WINDOW falls back to its default; empty PORT/DATA_DIR/BIND_ADDR
+// keep their defaults (unset BIND_ADDR behaves exactly as before:
+// loopback-only).
 func LoadConfigFromEnv() Config {
 	cfg := DefaultConfig()
 	if v := os.Getenv("PORT"); v != "" {
@@ -227,6 +237,9 @@ func LoadConfigFromEnv() Config {
 	}
 	if v := os.Getenv("PI_DATA_DIR"); v != "" {
 		cfg.PiDataDir = v
+	}
+	if v := os.Getenv("HISTORY_DIR"); v != "" {
+		cfg.HistoryDir = v
 	}
 	if v := os.Getenv("POLL_INTERVAL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
@@ -261,6 +274,17 @@ func defaultPiDataDir() string {
 		return ".pi/agent/sessions"
 	}
 	return home + "/.pi/agent/sessions"
+}
+
+// defaultHistoryDir resolves $HOME/.local/share/opencode-dashboard, the
+// dashboard-owned writable root (history.db lives inside). Split out so
+// tests can cover the fallback without touching process env beyond HOME.
+func defaultHistoryDir() string {
+	home := os.Getenv("HOME")
+	if home == "" {
+		return ".local/share/opencode-dashboard"
+	}
+	return home + "/.local/share/opencode-dashboard"
 }
 
 // defaultDataDir resolves $HOME/.local/share/opencode. Split out so tests

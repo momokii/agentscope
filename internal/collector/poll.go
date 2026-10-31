@@ -37,6 +37,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"opencode-dashboard/internal/history"
 	"opencode-dashboard/internal/model"
 	"opencode-dashboard/internal/ports"
 )
@@ -96,6 +97,13 @@ type Collector struct {
 	havePublished bool
 	wmUpdateMs    int64
 	wmEventRowID  int64
+	// hist is the optional history store (nil = history disabled).
+	// Recording happens once per metrics refresh worth of ticks
+	// (see maybeRecordHistory) so the fleet tick never pays per-tick
+	// write costs; any failure degrades warn-once and never marks stale.
+	hist          *history.Store
+	histWarned    atomic.Bool
+	lastHistoryAt time.Time
 	// lastPiSig is the signature of the pi rows in the last published
 	// tick (empty when pi is disabled or contributed nothing). The DB
 	// watermark cannot see pi-only activity, so the skip path re-checks
@@ -123,6 +131,38 @@ type Collector struct {
 	lastProjects []model.ProjectSummary
 	haveLastGood bool
 	publishStale bool
+}
+
+// SetHistory wires the optional history store; nil (the default) disables
+// history recording and answers /api/history with 503. Call before Run.
+func (c *Collector) SetHistory(s *history.Store) {
+	c.hist = s
+}
+
+// historyInterval is the minimum gap between history samples. It matches
+// the metrics refresher cadence so every recorded row carries fresh
+// windows; tighter sampling would only duplicate the same window values.
+const historyInterval = 60 * time.Second
+
+// maybeRecordHistory persists one fleet + per-directory sample when the
+// metrics sample is fresh enough to have advanced since the last record.
+// It never fails the tick: errors degrade to a warn-once line and the
+// next tick retries on schedule.
+func (c *Collector) maybeRecordHistory(ctx context.Context, kpis model.KPIs, rows []model.SessionRow, wm ports.WindowMetrics) {
+	if c.hist == nil {
+		return
+	}
+	now := c.clock.Now()
+	if !c.lastHistoryAt.IsZero() && now.Sub(c.lastHistoryAt) < historyInterval {
+		return
+	}
+	if err := c.hist.Record(ctx, now, kpis, rows, wm.BySession); err != nil {
+		if c.histWarned.CompareAndSwap(false, true) {
+			slog.WarnContext(ctx, "collector history record failed; retrying on schedule", slog.Any("err", err))
+		}
+		return
+	}
+	c.lastHistoryAt = now
 }
 
 // NewCollector validates the ports seam (interfaces only — never sibling
@@ -294,6 +334,9 @@ func (c *Collector) Tick(ctx context.Context) (bool, error) {
 	c.seq = snap.Seq
 	c.havePublished = true
 	c.lastPiSig = piSignature(piRows)
+	// History is best-effort and throttled: at most one sample per
+	// metrics interval, after a successful publish, never failing a tick.
+	c.maybeRecordHistory(ctx, kpis, enriched, metrics.windows)
 	if wmErr == nil {
 		c.wmUpdateMs = wmUpdateMs
 		c.wmEventRowID = wmEventRowID

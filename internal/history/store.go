@@ -167,12 +167,11 @@ type Point struct {
 	Directory string  `json:"directory,omitempty"`
 }
 
-// Record persists one tick's fleet + per-directory window: fleet KPIs plus
-// every directory present in the snapshot (session counts/running from the
-// rows, windowed tokens/cost from the per-session map; directories without
-// window activity contribute zeros). It also enforces retention. It never
-// returns ErrDisabled for row-level issues (those are returned unwrapped so
-// callers can distinguish); a dead handle reports ErrDisabled.
+// Record persists one fleet row plus one row per active directory per
+// metrics refresh, then enforces retention. Sessions without window activity
+// contribute presence (sessions/running counts) with zero spend — a quiet
+// directory still shows up. Callers pass the published KPIs, the fleet rows,
+// and the sparse per-session window map; nil maps are treated as empty.
 func (s *Store) Record(ctx context.Context, now time.Time, kpis model.KPIs, rows []model.SessionRow, windows map[string]model.WindowSums) error {
 	if s == nil || s.db == nil {
 		return ErrDisabled

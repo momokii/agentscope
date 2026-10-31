@@ -73,6 +73,9 @@ type Server struct {
 	// export is the on-demand export-shaped backend (see export.go). Nil
 	// until SetExportSource wires it; the export route serves 503 while nil.
 	export ExportSource
+	// history is the read-only history backend (see history.go). Nil until
+	// SetHistorySource wires it; the history route serves 503 while nil.
+	history HistorySource
 }
 
 // NewServer builds a Server reporting Version.
@@ -92,6 +95,7 @@ func NewServerWithVersion(cfg ports.Config, h *Hub, version string) *Server {
 	mux.HandleFunc("GET /api/sessions/{id}/export", s.handleSessionExport)
 	mux.HandleFunc("GET /api/sessions/{id}", s.handleSessionDetail)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
+	mux.HandleFunc("GET /api/history", s.handleHistory)
 	mux.HandleFunc("GET /api/debug/hub", s.handleDebug)
 	s.mux = mux
 	// WriteTimeout is intentionally unset: SSE streams stay open far past
