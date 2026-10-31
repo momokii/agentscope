@@ -24,6 +24,20 @@ import { createSSEClient, normalizeSnapshot } from "./lib/sse";
 import type { Snapshot, StatusEvent } from "./lib/sse";
 import { diffSnapshots, prependEvents } from "./lib/activity";
 import type { ActivityEvent } from "./lib/activity";
+import {
+  LONG_RUN_MS,
+  createAlertTracker,
+  detectAlerts,
+} from "./lib/alerts";
+import type { AlertEvent } from "./lib/alerts";
+import AlertsBell, {
+  loadAlertsConfig,
+  notificationSupport,
+  saveAlertsConfig,
+} from "./components/AlertsBell";
+import type { AlertsConfig } from "./components/AlertsBell";
+import Toasts from "./components/Toasts";
+import type { Toast } from "./components/Toasts";
 import { usePins } from "./lib/pins";
 import {
   buildActivityHash,
@@ -96,6 +110,23 @@ export default function App() {
   const palette = useCommandPalette();
   const snapshotRef = useRef<Snapshot | null>(null);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
+  // Alerts (Wave 6): client-side only, derived from the snapshots the App
+  // already owns. Detection always runs (keeps dedupe memory correct);
+  // surfacing (toast + notification + title badge) requires opt-in.
+  const [alertsConfig, setAlertsConfig] = useState<AlertsConfig>(() =>
+    typeof window === "undefined" ? { enabled: false, budget: null } : loadAlertsConfig(),
+  );
+  const alertsConfigRef = useRef(alertsConfig);
+  alertsConfigRef.current = alertsConfig;
+  const trackerRef = useRef(createAlertTracker());
+  const toastIdRef = useRef(0);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [notifyState, setNotifyState] = useState(() =>
+    typeof window === "undefined" || typeof Notification === "undefined"
+      ? { supported: false as const, permission: "unsupported" as const }
+      : notificationSupport(),
+  );
   const pausedRef = useRef(false);
   const { pins, toggle: togglePin } = usePins();
   const [route, setRoute] = useState<Route>(readRoute);
@@ -117,19 +148,110 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  const dismissToast = useCallback((toastId: number) => {
+    setToasts((list) => list.filter((t) => t.toastId !== toastId));
+  }, []);
+
+  const surfaceAlert = useCallback(
+    (alert: AlertEvent) => {
+      const id = (toastIdRef.current += 1);
+      setToasts((list) => [...list.slice(-4), { ...alert, toastId: id }]);
+      setUnread((n) => n + 1);
+      window.setTimeout(() => dismissToast(id), 8000);
+      // System notification only when explicitly enabled AND the platform
+      // can actually show it (secure contexts only — plain-HTTP tailnet IPs
+      // can never grant permission, so the toast above is the fallback).
+      if (
+        alertsConfigRef.current.enabled &&
+        notifyState.supported &&
+        notifyState.permission === "granted" &&
+        window.isSecureContext
+      ) {
+        try {
+          new Notification(alert.title, { body: alert.body, tag: `ocd-${alert.kind}-${alert.sessionId ?? "fleet"}` });
+        } catch {
+          // Toast already covers it; never let notification infra throw.
+        }
+      }
+    },
+    [dismissToast, notifyState.permission, notifyState.supported],
+  );
+
   // Shared apply path for SSE ticks and manual refreshes: atomic replace
   // (prev holds the last applied tick for KPI deltas), ticker ring diffed
-  // over the same consecutive pair, newest-first.
-  const applySnapshot = useCallback((next: Snapshot) => {
-    const prev = snapshotRef.current;
-    setEvents((ring) =>
-      pausedRef.current ? ring : prependEvents(ring, diffSnapshots(prev, next)),
-    );
-    setPrevSnapshot(prev);
-    snapshotRef.current = next;
-    setSnapshot(next);
-    setReceivedAt(Date.now());
+  // over the same consecutive pair, newest-first. Alerts diff the same
+  // pair (detection always runs; surfacing honors the opt-in).
+  const applySnapshot = useCallback(
+    (next: Snapshot) => {
+      const prev = snapshotRef.current;
+      setEvents((ring) =>
+        pausedRef.current ? ring : prependEvents(ring, diffSnapshots(prev, next)),
+      );
+      const fired = detectAlerts(prev, next, Date.now(), trackerRef.current, {
+        longRunMs: LONG_RUN_MS,
+        budget: alertsConfigRef.current.budget,
+      });
+      if (alertsConfigRef.current.enabled) {
+        for (const alert of fired) surfaceAlert(alert);
+      }
+      setPrevSnapshot(prev);
+      snapshotRef.current = next;
+      setSnapshot(next);
+      setReceivedAt(Date.now());
+    },
+    [surfaceAlert],
+  );
+
+  // Unread badge in the tab title; clears when the tab regains focus.
+  useEffect(() => {
+    document.title =
+      unread > 0 ? `(${unread}) opencode mission control` : "opencode mission control";
+  }, [unread]);
+  useEffect(() => {
+    const clear = () => setUnread(0);
+    window.addEventListener("focus", clear);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) clear();
+    });
+    return () => {
+      window.removeEventListener("focus", clear);
+    };
   }, []);
+
+  const changeAlertsConfig = useCallback((next: AlertsConfig) => {
+    setAlertsConfig(next);
+    saveAlertsConfig(next);
+  }, []);
+
+  const enableNotifications = useCallback(async () => {
+    if (!("Notification" in window)) return;
+    try {
+      const result = await Notification.requestPermission();
+      setNotifyState({ supported: true, permission: result });
+    } catch {
+      // Denied or unavailable: toasts still work.
+    }
+  }, []);
+
+  const testAlert = useCallback(() => {
+    surfaceAlert({
+      kind: "waiting",
+      title: "Test alert: input needed",
+      body: "This is how waiting-input, long runs, and budget crosses reach you.",
+    });
+    if (notifyState.supported && Notification.permission === "default") {
+      void enableNotifications();
+    } else if (notifyState.supported && Notification.permission === "granted" && window.isSecureContext) {
+      try {
+        new Notification("Test alert: input needed", {
+          body: "This is how waiting-input, long runs, and budget crosses reach you.",
+          tag: "ocd-test",
+        });
+      } catch {
+        // Toast already covers it.
+      }
+    }
+  }, [surfaceAlert, notifyState.supported, enableNotifications]);
 
   useEffect(() => {
     if (!live) return;
@@ -347,6 +469,15 @@ export default function App() {
             Activity
           </a>
         </nav>
+        <AlertsBell
+          config={alertsConfig}
+          onChange={changeAlertsConfig}
+          supported={notifyState.supported}
+          permission={notifyState.permission}
+          onEnable={enableNotifications}
+          onTest={testAlert}
+          unread={unread}
+        />
         <span className="seq mono">
           {snapshot ? `seq ${snapshot.seq}` : "no snapshot yet"}
         </span>
@@ -457,6 +588,7 @@ export default function App() {
         onSelect={selectSession}
         onClose={() => palette.setOpen(false)}
       />
+      <Toasts toasts={toasts} onDismiss={dismissToast} />
       <BottomBar paletteOpen={palette.open} live={live} />
     </div>
   );
