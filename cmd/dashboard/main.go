@@ -37,6 +37,7 @@ import (
 	"opencode-dashboard/internal/auth"
 	"opencode-dashboard/internal/collector"
 	"opencode-dashboard/internal/db"
+	"opencode-dashboard/internal/history"
 	"opencode-dashboard/internal/hub"
 	"opencode-dashboard/internal/pi"
 	"opencode-dashboard/internal/ports"
@@ -112,15 +113,39 @@ func run(ctx context.Context) error {
 		slog.Info("pi source disabled (PI_DATA_DIR empty)")
 	}
 
+	// History is best-effort like pi: an empty HistoryDir disables it
+	// (hub answers 503), and an unreadable dir logs once and continues
+	// without history rather than refusing to serve.
+	var histStore *history.Store
+	if cfg.HistoryDir != "" {
+		var err error
+		histStore, err = history.Open(cfg.HistoryDir)
+		if err != nil {
+			slog.Warn("history store unavailable, continuing without history",
+				slog.String("history_dir", cfg.HistoryDir),
+				slog.Any("err", err))
+			histStore = nil
+		} else {
+			defer func() { _ = histStore.Close() }()
+			slog.Info("history store enabled", slog.String("history_dir", cfg.HistoryDir))
+		}
+	} else {
+		slog.Info("history disabled (HISTORY_DIR empty)")
+	}
+
 	source := runtime.NewSource(runtime.DefaultConfig())
 	srv := hub.NewServer(cfg, hub.NewHub())
 	srv.SetScreenSource(source)
 	srv.SetDetailSource(reader)
 	srv.SetExportSource(reader)
+	if histStore != nil {
+		srv.SetHistorySource(histStore)
+	}
 	col, err := collector.NewCollector(reader, source, srv.Hub(), cfg, piReader)
 	if err != nil {
 		return fmt.Errorf("wire collector: %w", err)
 	}
+	col.SetHistory(histStore)
 
 	spa, err := fs.Sub(dashboardweb.Dist, "dist")
 	if err != nil {

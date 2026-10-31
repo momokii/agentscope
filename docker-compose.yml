@@ -103,11 +103,20 @@ services:
       # opencode-only hosts is fine (empty mount → pi merge degrades
       # warn-once per process, fleet identical to before).
       PI_DATA_DIR: /data/pi-sessions
+      # Dashboard-owned history DB root (V2-B). The binary opens
+      # <HISTORY_DIR>/history.db read-write; missing dir fails LOUD at
+      # startup (deploy.sh pre-creates it) rather than silently disabling.
+      HISTORY_DIR: /data/history
     volumes:
       # WAL decision (see header): parent dir :ro keeps -wal/-shm visible.
       - ${HOME:-/home/hostuser}/.local/share/opencode:/data/opencode:ro
       # Pi JSONL session store (read-only).
       - ${HOME:-/home/hostuser}/.pi/agent/sessions:/data/pi-sessions:ro
+      # Dashboard-owned history (read-write): ONLY dashboard-computed rollups
+      # (fleet/project window sums), never agent content or secrets. Bounded
+      # by server-side retention (default 120 days). Writable because the
+      # dashboard itself is the sole writer.
+      - ${HOME:-/home/hostuser}/.local/share/opencode-dashboard:/data/history:rw
       # EXITED/resurrect metadata (read-only).
       - ${HOME:-/home/hostuser}/.cache/zellij:/data/zellij-cache:ro
       # Live zellij sockets (0700 — requires user: parity above). Source
