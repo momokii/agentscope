@@ -70,6 +70,10 @@ need_cmd ss "install iproute2: sudo apt install iproute2"
 need_cmd chmod "install coreutils: sudo apt install coreutils"
 id -u >/dev/null 2>&1 \
   || fail "'id -u' failed — cannot determine UID for compose user: parity. Fix: log in as a real user (not a bare container shell)"
+# Dashboard-owned history dir must exist before compose binds it: docker
+# would otherwise create it as root, and the non-root container user
+# couldn't write history.db (loud startup failure instead of silent no-history).
+mkdir -p "${HOME:-/home/hostuser}/.local/share/opencode-dashboard"
 [ -n "${XDG_RUNTIME_DIR:-}" ] \
   || fail "XDG_RUNTIME_DIR is empty. Fix: export XDG_RUNTIME_DIR=/run/user/\$(id -u)  (verify with: echo \$XDG_RUNTIME_DIR)"
 if command -v zellij >/dev/null 2>&1; then

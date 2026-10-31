@@ -68,6 +68,29 @@ func Test_LoadConfigFromEnv_PiDataDirOverride(t *testing.T) {
 	}
 }
 
+// Given: no HISTORY_DIR in the environment.
+// When: config loads.
+// Then: the $HOME/.local/share/opencode-dashboard default holds.
+func Test_LoadConfigFromEnv_DefaultHistoryDir(t *testing.T) {
+	t.Setenv("HISTORY_DIR", "")
+	t.Setenv("HOME", "/home/u")
+	cfg := LoadConfigFromEnv()
+	if cfg.HistoryDir != "/home/u/.local/share/opencode-dashboard" {
+		t.Fatalf("default HistoryDir = %q", cfg.HistoryDir)
+	}
+}
+
+// Given: HISTORY_DIR set explicitly (including empty to disable).
+// When: config loads.
+// Then: the value flows through unchanged; empty disables history.
+func Test_LoadConfigFromEnv_HistoryDirOverride(t *testing.T) {
+	t.Setenv("HISTORY_DIR", "/data/history")
+	cfg := LoadConfigFromEnv()
+	if cfg.HistoryDir != "/data/history" {
+		t.Fatalf("HistoryDir = %q", cfg.HistoryDir)
+	}
+}
+
 // Given: DB_TIMEOUT set to a valid duration.
 // When: config loads.
 // Then: the value flows through unchanged.

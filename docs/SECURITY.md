@@ -32,6 +32,7 @@ review gate — any mount not on it blocks the F4 release.
 | `~/.local/share/opencode` (parent dir: db + `-wal`/`-shm` + storage) | `/data/opencode` | `:ro` | Read-only WAL snapshot queries (indexed/sliced allowlist, `internal/db`); service active file attachments | Parent-dir mount keeps WAL sidecars visible; 8.2 GB danger: full `part.data LIKE` scans banned; read-only open never disturbs live TUIs |
 | `~/.cache/zellij` | `/data/zellij-cache` | `:ro` | EXITED-session semantics (resurrect re-runs, does not resume) | Dead-pane forensics only |
 | `~/.pi/agent/sessions` | `/data/pi-sessions` | `:ro` | Pi JSONL session store (Wave 5 second harness: status/tokens/cost from message usage) | Mounts ONLY the sessions subdir — `~/.pi/agent/auth.json` (0600 provider OAuth) and the store root never enter |
+| `~/.local/share/opencode-dashboard` | `/data/history` | `:rw` (REQUIRED — the dashboard is the sole writer of its own SQLite history) | Dashboard-owned rollups ONLY: per-tick fleet + per-directory trailing-window sums computed from the live join. Never agent content, never transcripts, never secrets (nothing to leak even if read); bounded by 120-day server-side retention (see `internal/history`). Agent DBs stay `:ro` — the writer/reader split is explicit by mount |
 | `/etc/localtime` | `/etc/localtime` | `:ro` | Local-midnight attribution for `cost_today` | Timezone data only |
 
 **Never mounted, never will be:** `~/.local/share/opencode/auth.json`
@@ -177,10 +178,11 @@ deploy host/VM after `./deploy.sh`; `<container>`/`<image>` are the running
 dashboard container and `opencode-dashboard:1.0.0`):
 
 ```bash
-# 6. Mount allowlist: exact output must equal §2 (no auth.json; data/cache/pi-sessions/localtime :ro, socket dir :rw)
+# 6. Mount allowlist: exact output must equal §2 (no auth.json;
+# opencode/pi-sessions/zellij-cache/localtime :ro, socket dir + history dir :rw)
 docker inspect <container> --format '{{json .Mounts}}' | python3 -m json.tool
-# EXPECTED: only the 5 §2 mounts; opencode/pi-sessions/zellij-cache/localtime
-# "Mode": "ro" / "RW": false, socket dir "RW": true
+# EXPECTED: only the 6 §2 mounts; opencode/pi-sessions/zellij-cache/localtime
+# "Mode": "ro" / "RW": false, socket dir + history dir "RW": true
 
 # 7. No secret baked into image layers
 docker history --no-trunc <image> | grep -i 'auth\|pass\|secret\|token\|credential'
