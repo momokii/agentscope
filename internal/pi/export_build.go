@@ -134,8 +134,19 @@ func (b *sessionBuilder) applyMessage(e piEntry) error {
 		for _, block := range decodeBlocks(m.Content) {
 			switch block.kind {
 			case "text":
+				if block.text == "" {
+					continue
+				}
 				em.msg.Parts = append(em.msg.Parts, rawPart(textPartJSON(b.sessionID, e.ID, block.text)))
 			case "thinking":
+				// Empty thinking blocks are provider-encrypted reasoning
+				// (thinkingSignature with no visible text — 77% of live pi
+				// reasoning parts). A part with no text renders a dead
+				// toggle, so drop it at translation (documented in
+				// docs/COST_METHOD.md parity notes).
+				if block.text == "" {
+					continue
+				}
 				em.msg.Parts = append(em.msg.Parts, rawPart(reasoningPartJSON(b.sessionID, e.ID, block.text)))
 			case "toolCall":
 				tb := &toolCallBuilder{

@@ -43,6 +43,7 @@ import Toasts from "./components/Toasts";
 import type { Toast } from "./components/Toasts";
 import { usePins } from "./lib/pins";
 import {
+  backTargetFor,
   buildActivityHash,
   buildCompareHash,
   buildFleetQueryHash,
@@ -152,8 +153,18 @@ export default function App() {
   liveRef.current = live;
   pausedRef.current = !live;
 
+  // Last non-session hash: session drill-ins return here (project
+  // drill-in → back to project, not fleet). Initialized to the fleet
+  // root so direct session links still have a sane back target.
+  const lastListHashRef = useRef<string>("#/");
   useEffect(() => {
-    const onHashChange = () => setRoute(readRoute());
+    const onHashChange = () => {
+      const next = readRoute();
+      if (next.view !== "session") {
+        lastListHashRef.current = window.location.hash || "#/";
+      }
+      setRoute(next);
+    };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
@@ -524,6 +535,8 @@ export default function App() {
             paletteOpen={palette.open}
             messageId={route.messageId ?? null}
             sessions={snapshot?.sessions ?? []}
+            backHref={backTargetFor(lastListHashRef.current).href}
+            backLabel={backTargetFor(lastListHashRef.current).label}
           />
         ) : route.view === "compare" ? (
           <Compare

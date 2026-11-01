@@ -26,7 +26,7 @@
  * when the command palette is open (`paletteOpen`) or when typing.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowLeft, ChevronDown, Download, Search } from "lucide-react";
 import { downloadJson, exportFilename } from "../lib/download";
 
@@ -37,7 +37,7 @@ import RelativeTime from "../components/RelativeTime";
 import SubagentPanel from "../components/SubagentPanel";
 import { formatCompact, formatUSD } from "../lib/format";
 import { isTypingTarget } from "../lib/useCommandPalette";
-import { buildFleetHash, buildSessionHash } from "../lib/routing";
+import { buildSessionHash } from "../lib/routing";
 import type { SessionTab } from "../lib/routing";
 import type { SessionRow } from "../lib/sse";
 import {
@@ -193,7 +193,10 @@ function ReasoningBlock({ text }: { text: string }) {
   );
 }
 
-function MessageRow({ entry, highlight }: { entry: FlatMessage; highlight: boolean }) {
+// Memoized: scroll position changes must not re-render rows whose entry
+// and highlight are unchanged (the other half of the scroll-stutter fix —
+// entry objects are stable across scroll renders, rebuilt only on ticks).
+const MessageRow = memo(function MessageRow({ entry, highlight }: { entry: FlatMessage; highlight: boolean }) {
   const { message } = entry;
   const role = message.info.role;
   return (
@@ -219,13 +222,15 @@ function MessageRow({ entry, highlight }: { entry: FlatMessage; highlight: boole
                   {"text" in part ? part.text : ""}
                 </p>
               );
-            case "reasoning":
-              return (
-                <ReasoningBlock
-                  key={key}
-                  text={"text" in part ? part.text : ""}
-                />
-              );
+            case "reasoning": {
+              // Empty thinking blocks (pi: provider-encrypted reasoning with
+              // no visible text) would render a dead toggle — skip them for
+              // every source; the translator drops them too (belt and
+              // suspenders: old snapshots and opencode rows pass through).
+              const text = "text" in part ? part.text : "";
+              if (text.trim() === "") return null;
+              return <ReasoningBlock key={key} text={text} />;
+            }
             case "tool": {
               if (!("state" in part) || !("tool" in part)) {
                 return (
@@ -305,7 +310,7 @@ function MessageRow({ entry, highlight }: { entry: FlatMessage; highlight: boole
       </div>
     </article>
   );
-}
+});
 
 /* ---------------- Transcript tab ---------------- */
 
@@ -397,16 +402,31 @@ export function TranscriptTab({ flat, jumpTarget, onJumped, paletteOpen, inspect
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [paletteOpen, inspectorOpen]);
 
+  // Scroll handling is rAF-throttled: raw scroll events fire far faster
+  // than frames, and every unthrottled event re-rendered the whole window
+  // (the stutter on long transcripts). State updates are also gated on
+  // actual change so a quiet scroll position never re-renders.
+  const rafRef = useRef(0);
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== 0) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
   const onScroll = (): void => {
-    const el = containerRef.current;
-    if (el === null) return;
-    setScrollTop(el.scrollTop);
-    if (isNearBottom(el.scrollHeight, el.scrollTop, el.clientHeight)) {
-      setPinned(false);
-      setUnseen(0);
-    } else {
-      setPinned(true);
-    }
+    if (rafRef.current !== 0) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0;
+      const el = containerRef.current;
+      if (el === null) return;
+      const top = el.scrollTop;
+      const nearBottom = isNearBottom(el.scrollHeight, top, el.clientHeight);
+      setScrollTop((prev) => (prev === top ? prev : top));
+      setPinned((prev) => {
+        const next = !nearBottom;
+        return prev === next ? prev : next;
+      });
+      if (nearBottom) setUnseen((prev) => (prev === 0 ? prev : 0));
+    });
   };
 
   const resume = (): void => {
@@ -565,6 +585,13 @@ export interface SessionDetailProps {
   sessions?: readonly SessionRow[];
   /** Data source; production defaults to the live export route. */
   provider?: SessionDataProvider;
+  /**
+   * Where "back" returns to (App remembers the last non-session hash —
+   * project drill-in, compare, activity, history, or fleet). Defaults keep
+   * deep links and tests on the fleet.
+   */
+  backHref?: string;
+  backLabel?: string;
 }
 
 export default function SessionDetail({
@@ -575,6 +602,8 @@ export default function SessionDetail({
   messageId = null,
   sessions = [],
   provider = liveProvider,
+  backHref = "#/",
+  backLabel = "back to fleet",
 }: SessionDetailProps) {
   const [data, setData] = useState<SessionDetailData | null | undefined>(
     undefined,
@@ -625,9 +654,9 @@ export default function SessionDetail({
   if (data === undefined) {
     return (
       <div className="session-detail">
-        <a className="stub-back mono" href={buildFleetHash()}>
+        <a className="stub-back mono" href={backHref}>
           <ArrowLeft aria-hidden="true" size={12} />
-          <span>back to fleet</span>
+          <span>{backLabel}</span>
         </a>
         <div className="empty-state" role="status">
           loading session…
@@ -645,9 +674,9 @@ export default function SessionDetail({
   if (data === null) {
     return (
       <div className="session-detail">
-        <a className="stub-back mono" href={buildFleetHash()}>
+        <a className="stub-back mono" href={backHref}>
           <ArrowLeft aria-hidden="true" size={12} />
-          <span>back to fleet</span>
+          <span>{backLabel}</span>
         </a>
         <div className="empty-state">
           Session “{id}” has no live detail — it may not exist, or the API is
@@ -673,9 +702,9 @@ export default function SessionDetail({
 
   return (
     <div className="session-detail">
-      <a className="stub-back mono" href={buildFleetHash()}>
+      <a className="stub-back mono" href={backHref}>
         <ArrowLeft aria-hidden="true" size={12} />
-        <span>back to fleet</span>
+        <span>{backLabel}</span>
       </a>
       <div className="detail-head">
         {row !== null && <StatusBadge status={row.status} />}

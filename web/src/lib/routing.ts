@@ -333,6 +333,36 @@ export function buildProjectHash(
   );
 }
 
+/** Where a session drill-in returns to: the last non-session hash. */
+export interface BackTarget {
+  href: string;
+  label: string;
+}
+
+/**
+ * Human back-link for a session view. Project drill-ins return to the
+ * project, compare/activity/history return to themselves, everything
+ * else (fleet, unknown, empty) returns to the fleet root.
+ */
+export function backTargetFor(hash: string | null | undefined): BackTarget {
+  if (hash === null || hash === undefined || hash === "") {
+    return { href: "#/", label: "back to fleet" };
+  }
+  const route = parseHash(hash);
+  switch (route.view) {
+    case "project":
+      return { href: hash, label: "back to project" };
+    case "compare":
+      return { href: hash, label: "back to compare" };
+    case "activity":
+      return { href: hash, label: "back to activity" };
+    case "history":
+      return { href: hash, label: "back to history" };
+    default:
+      return { href: "#/", label: "back to fleet" };
+  }
+}
+
 export function buildSessionHash(
   id: string,
   tab: SessionTab = "transcript",

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  backTargetFor,
   buildActivityHash,
   buildFleetHash,
   buildFleetQueryHash,
@@ -172,6 +173,29 @@ describe("recency + paging params", () => {
     expect(buildFleetHash("all", false, { bucket: "old", page: 2 })).toBe(
       "#/?bucket=old&page=2",
     );
+  });
+});
+
+describe("session back target", () => {
+  it("returns to the project after a project drill-in", () => {
+    const href = "#/projects/home%2Fproj?status=all";
+    expect(backTargetFor(href)).toEqual({
+      href,
+      label: "back to project",
+    });
+  });
+  it("returns to compare/activity/history for those origins", () => {
+    expect(backTargetFor("#/compare?ids=a").label).toBe("back to compare");
+    expect(backTargetFor("#/activity").label).toBe("back to activity");
+    expect(backTargetFor("#/history").label).toBe("back to history");
+  });
+  it("falls back to fleet for fleet, empty, and unknown hashes", () => {
+    expect(backTargetFor("#/")).toEqual({ href: "#/", label: "back to fleet" });
+    expect(backTargetFor(null)).toEqual({ href: "#/", label: "back to fleet" });
+    expect(backTargetFor("#/sessions/abc")).toEqual({
+      href: "#/",
+      label: "back to fleet",
+    });
   });
 });
 

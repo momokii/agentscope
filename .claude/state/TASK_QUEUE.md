@@ -224,6 +224,11 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 - **N5 transcript parity:** DONE — pi text/reasoning/tool all first-class; opencode extras simply absent for pi; new `Harness parity` guide entry.
 - **N6 cost tab overflow:** DONE — `.cost-model-label` ellipsis + `title`; test pins the contract.
 
+### TASK-350..: (DONE 2026-11-01) Operator transcript-UX batch — three fixes
+- **T1 reasoning toggle dead:** DONE. Root cause: 512/664 live pi reasoning parts have empty text (encrypted `thinkingSignature`, `"thinking": ""`) — the toggle opened an empty body. Translator drops empty thinking/text blocks; renderer skips empty reasoning for any source. Tests: pi export + TranscriptTab.
+- **T2 transcript scroll stutter:** DONE. rAF-throttled scroll handler, state updates gated on actual change, memoized MessageRow; scroll tests stub rAF synchronously.
+- **T3 back-to-origin:** DONE. App tracks last non-session hash; `backTargetFor` maps project/compare/activity/history → labeled back links; SessionDetail takes `backHref/backLabel` (fleet defaults). Tests: routing + SessionDetail.
+
 ### TASK-206: (DONE 2026-10-26) Wave 5 P6 / V2-C — pi transcript drill-down
 - **Priority:** Medium | **Complexity:** L | **Status:** DONE (this session)
 - **Depends On:** TASK-205

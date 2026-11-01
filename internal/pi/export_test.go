@@ -157,6 +157,34 @@ func Test_SessionExport_merges_tool_call_and_result(t *testing.T) {
 	}
 }
 
+func Test_SessionExport_drops_empty_thinking_and_text(t *testing.T) {
+	dir := t.TempDir()
+	var sb strings.Builder
+	sb.WriteString(`{"type":"session","version":3,"id":"enc-1","timestamp":"2026-10-27T12:00:00.000Z","cwd":"/x"}` + "\n")
+	// Encrypted provider reasoning: empty thinking + signature only.
+	sb.WriteString(`{"type":"message","id":"a","parentId":null,"timestamp":"2026-10-27T12:00:01.000Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"","thinkingSignature":"enc"},{"type":"text","text":""},{"type":"text","text":"visible"}],"provider":"p","model":"m","stopReason":"stop","timestamp":1}}` + "\n")
+	writeExportFile(t, dir, "s", "2026-10-27T12-00-00-000Z_enc-1.jsonl", sb.String())
+	r := New(dir)
+	got, err := r.SessionExport(context.Background(), "enc-1")
+	if err != nil {
+		t.Fatalf("SessionExport: %v", err)
+	}
+	if len(got.Session.Messages) != 1 {
+		t.Fatalf("messages = %d, want 1", len(got.Session.Messages))
+	}
+	parts := got.Session.Messages[0].Parts
+	if len(parts) != 1 {
+		t.Fatalf("parts = %d, want only the visible text part", len(parts))
+	}
+	var part map[string]interface{}
+	if err := json.Unmarshal(parts[0], &part); err != nil {
+		t.Fatal(err)
+	}
+	if part["type"] != "text" || part["text"] != "visible" {
+		t.Fatalf("part = %+v", part)
+	}
+}
+
 func Test_SessionExport_unknown_id_is_not_found(t *testing.T) {
 	dir := t.TempDir()
 	writeExportFile(t, dir, "s", "2026-10-27T12-00-00-000Z_good-1.jsonl",

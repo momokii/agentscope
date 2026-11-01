@@ -230,6 +230,42 @@ describe("SessionDetail transcript tab", () => {
     ).toBeDefined();
   });
 
+  it("uses the origin back link instead of always fleet", async () => {
+    renderDetail({
+      id: FIXTURE_MAIN_ID,
+      tab: "transcript",
+      backHref: "#/projects/home%2Fproj",
+      backLabel: "back to project",
+    });
+    await screen.findByText("Add dashboard drill-down");
+    const link = screen.getByRole("link", { name: "back to project" });
+    expect(link.getAttribute("href")).toBe("#/projects/home%2Fproj");
+  });
+
+  it("skips empty reasoning parts instead of rendering a dead toggle", () => {
+    const emptyReasoning: FlatMessage = {
+      message: {
+        info: {
+          id: "m-empty",
+          sessionID: "s",
+          role: "assistant",
+          time: { created: 1 },
+        },
+        parts: [
+          { type: "reasoning", id: "r", messageID: "m-empty", sessionID: "s", text: "   " },
+        ],
+      },
+      agent: "pi",
+      lane: "main",
+      sessionId: "s",
+      timeCreated: 1,
+    };
+    render(
+      <TranscriptTab flat={[emptyReasoning]} jumpTarget={null} onJumped={() => undefined} paletteOpen={false} />,
+    );
+    expect(screen.queryByText("reasoning")).toBeNull();
+  });
+
   it("collapses reasoning by default with an expander", async () => {
     renderDetail({ id: FIXTURE_MAIN_ID, tab: "transcript" });
     await screen.findByText("Add dashboard drill-down");
@@ -306,6 +342,13 @@ describe("SessionDetail turns tab", () => {
 
 describe("tail-follow, pin pill, Esc", () => {
   function renderPinned(flat: FlatMessage[]) {
+    // The scroll handler is rAF-throttled (production jank fix); run the
+    // frame callback synchronously so pin assertions stay deterministic.
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
     const view = render(
       <TranscriptTab flat={flat} jumpTarget={null} onJumped={() => undefined} paletteOpen={false} />,
     );
