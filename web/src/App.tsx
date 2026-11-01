@@ -26,8 +26,11 @@ import { diffSnapshots, prependEvents } from "./lib/activity";
 import type { ActivityEvent } from "./lib/activity";
 import {
   LONG_RUN_MS,
+  appendAlertLog,
+  clearAlertLog,
   createAlertTracker,
   detectAlerts,
+  loadAlertLog,
 } from "./lib/alerts";
 import type { AlertEvent } from "./lib/alerts";
 import AlertsBell, {
@@ -123,6 +126,12 @@ export default function App() {
   const toastIdRef = useRef(0);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [unread, setUnread] = useState(0);
+  // Alert history: every surfaced trigger with when + why, persisted
+  // across reloads (see alerts.ts). Only surfaced alerts are logged —
+  // detection runs always, but history records what the operator saw.
+  const [alertLog, setAlertLog] = useState<AlertEvent[]>(() =>
+    typeof window === "undefined" ? [] : loadAlertLog(),
+  );
   const [notifyState, setNotifyState] = useState(() =>
     typeof window === "undefined" || typeof Notification === "undefined"
       ? { supported: false as const, permission: "unsupported" as const }
@@ -194,6 +203,7 @@ export default function App() {
       });
       if (alertsConfigRef.current.enabled) {
         for (const alert of fired) surfaceAlert(alert);
+        if (fired.length > 0) setAlertLog((log) => appendAlertLog(log, fired));
       }
       setPrevSnapshot(prev);
       snapshotRef.current = next;
@@ -235,11 +245,25 @@ export default function App() {
   }, []);
 
   const testAlert = useCallback(() => {
+    const now = Date.now();
     surfaceAlert({
       kind: "waiting",
       title: "Test alert: input needed",
       body: "This is how waiting-input, long runs, and budget crosses reach you.",
+      ts: now,
+      why: "manual test from the Alerts panel — no rule fired",
     });
+    setAlertLog((log) =>
+      appendAlertLog(log, [
+        {
+          kind: "waiting",
+          title: "Test alert: input needed",
+          body: "This is how waiting-input, long runs, and budget crosses reach you.",
+          ts: now,
+          why: "manual test from the Alerts panel — no rule fired",
+        },
+      ]),
+    );
     if (notifyState.supported && Notification.permission === "default") {
       void enableNotifications();
     } else if (notifyState.supported && Notification.permission === "granted" && window.isSecureContext) {
@@ -484,6 +508,8 @@ export default function App() {
           onEnable={enableNotifications}
           onTest={testAlert}
           unread={unread}
+          history={alertLog}
+          onClearHistory={() => setAlertLog(clearAlertLog())}
         />
         <span className="seq mono">
           {snapshot ? `seq ${snapshot.seq}` : "no snapshot yet"}

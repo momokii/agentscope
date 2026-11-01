@@ -700,6 +700,7 @@ export default function SessionDetail({
             { term: "Tools", definition: "Every tool call with status, latency, and token cost, plus top error/latency tables and a per-call I/O inspector." },
             { term: "Cost", definition: "Cumulative spend line, input/output bars, cost-by-model donut. Child sessions roll into the totals — see the Subagent panel below the header." },
             { term: "Raw", definition: "The underlying export JSON, collapsible and deep-linkable per message — the ground truth behind every other tab." },
+            { term: "Harness parity", definition: "Opencode rows render the native export (text, reasoning, tool, step-finish, file, patch, compaction). Pi rows render a server-side translation (text, reasoning, tool only) — per-turn tokens/cost come from usage records so Turns/Cost stay exact; part ids are synthesized. See docs/COST_METHOD.md for the counting rules." },
             { term: "Live pane", definition: "The session’s live terminal text, fetched on view (never polled). DB-only 409 means no live pane — the DB tabs above still work." },
           ]}
         />

@@ -846,7 +846,12 @@ export function CostTab({ data, flat }: DetailExtraProps): React.JSX.Element {
                     aria-hidden="true"
                     style={{ background: DONUT_HUES[i % DONUT_HUES.length] }}
                   />
-                  <span>{model}</span>
+                  {/* provider/model labels are long and unbroken — ellipsize
+                      in the box, full label on hover (same pattern as the
+                      donut slice <title>). */}
+                  <span className="cost-model-label" title={model}>
+                    {model}
+                  </span>
                   <span data-pct={pct.toFixed(2)} data-testid={`donut-pct-${i}`}>
                     {pct.toFixed(1)}%
                   </span>

@@ -216,6 +216,14 @@ grep -rE '#[0-9a-fA-F]{6}' web/src        # only src/tokens.css
 - **Acceptance:** container fleet shows both harnesses; Security Gate re-passes.
 - **Verify:** full gate suite + `curl` proofs
 
+### TASK-340..: (DONE 2026-11-01) Operator note batch — six follow-ups
+- **N1 alerts history:** DONE. `AlertEvent` gains `ts` + `why`; `ocd.alerts.log` persists newest-first capped at 100; bell History section + Clear; only surfaced alerts logged.
+- **N2 cost methodology:** DONE. New `docs/COST_METHOD.md` with live-verified evidence; README links.
+- **N3 compare relevance:** DONE — relevant for both harnesses (snapshot-only; cards exact); `Lines` guide now honest about the activity-scaled approximation.
+- **N4 tokens/hr audit:** DONE — message-level, roll-up-immune by construction, documented; tooltip already accurate.
+- **N5 transcript parity:** DONE — pi text/reasoning/tool all first-class; opencode extras simply absent for pi; new `Harness parity` guide entry.
+- **N6 cost tab overflow:** DONE — `.cost-model-label` ellipsis + `title`; test pins the contract.
+
 ### TASK-206: (DONE 2026-10-26) Wave 5 P6 / V2-C — pi transcript drill-down
 - **Priority:** Medium | **Complexity:** L | **Status:** DONE (this session)
 - **Depends On:** TASK-205

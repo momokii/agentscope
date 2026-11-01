@@ -201,6 +201,18 @@ describe("cost tab", () => {
     expect(container.textContent).toContain("toy-provider/toy-model-mini");
   });
 
+  it("ellipsizes long cost-by-model labels with the full label on hover", async () => {
+    const { container } = renderTab("cost");
+    await screen.findByTestId("cost-total");
+    // Unbroken provider/model labels must not escape the panel box:
+    // truncated in place, full text in the title.
+    const labels = container.querySelectorAll(".cost-model-label");
+    expect(labels.length).toBeGreaterThan(0);
+    labels.forEach((el) => {
+      expect(el.getAttribute("title") ?? "").toContain("/");
+    });
+  });
+
   it("rolls up one row per session with info-block totals", async () => {
     const { container } = renderTab("cost");
     await screen.findByTestId("cost-total");

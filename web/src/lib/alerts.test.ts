@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ALERT_LOG_CAP,
   LONG_RUN_MS,
+  appendAlertLog,
+  clearAlertLog,
   createAlertTracker,
   detectAlerts,
+  loadAlertLog,
   localDay,
 } from "./alerts";
 import { buildFixtureSnapshot, makeRow } from "../testutils/fixture";
@@ -91,6 +95,78 @@ describe("detectAlerts", () => {
     expect(fired[0]?.kind).toBe("budget");
     // Same day, still over: quiet.
     expect(detectAlerts(over, over, t1 + 1000, tracker, opts)).toEqual([]);
+  });
+
+  it("stamps every fired alert with when and why", () => {
+    const tracker = createAlertTracker();
+    const idle = snapWith([makeRow({ id: "s", status: "idle" })]);
+    const waiting = snapWith([makeRow({ id: "s", status: "waiting-input" })]);
+    const [fired] = detectAlerts(idle, waiting, 2_000, tracker, {
+      longRunMs: LONG_RUN_MS,
+      budget: null,
+    });
+    expect(fired?.ts).toBe(2_000);
+    expect(fired?.why).toMatch(/waiting-input/);
+    expect(fired?.why).toMatch(/once per waiting spell/);
+  });
+
+  it("explains long runs and budget crosses with value vs threshold", () => {
+    const tracker = createAlertTracker();
+    const running = snapWith([makeRow({ id: "r", status: "running" })]);
+    const opts = { longRunMs: 60_000, budget: null };
+    detectAlerts(null, running, 0, tracker, opts); // seeds the clock silently
+    const [long] = detectAlerts(running, running, 61_000, tracker, opts);
+    expect(long?.kind).toBe("long-run");
+    expect(long?.ts).toBe(61_000);
+    expect(long?.why).toMatch(/1\+ min/);
+    expect(long?.why).toMatch(/1 min threshold/);
+    const t = createAlertTracker();
+    const under = snapWith([], 4.99);
+    const over = snapWith([], 5.01);
+    const bopts = { longRunMs: LONG_RUN_MS, budget: 5 };
+    detectAlerts(under, under, 8_000, t, bopts);
+    const [crossed] = detectAlerts(under, over, 9_000, t, bopts);
+    expect(crossed?.kind).toBe("budget");
+    expect(crossed?.ts).toBe(9_000);
+    expect(crossed?.why).toMatch(/\$5\.01/);
+    expect(crossed?.why).toMatch(/budget \$5\.00/);
+  });
+
+  describe("alert history log", () => {
+    it("persists newest-first, capped, and reloadable", () => {
+      const one = {
+        kind: "waiting" as const,
+        sessionId: "s",
+        title: "t",
+        body: "b",
+        ts: 1,
+        why: "w",
+      };
+      const two = { ...one, ts: 2, title: "t2" };
+      let log = appendAlertLog([], [one]);
+      log = appendAlertLog(log, [two]);
+      expect(log.map((e) => e.ts)).toEqual([2, 1]);
+      expect(loadAlertLog().map((e) => e.ts)).toEqual([2, 1]);
+      // Newest-first in, newest-first kept: input runs 204 down to 100.
+      const many = Array.from({ length: ALERT_LOG_CAP + 5 }, (_, i) => ({
+        ...one,
+        ts: 204 - i,
+      }));
+      log = appendAlertLog([], many);
+      expect(log).toHaveLength(ALERT_LOG_CAP);
+      expect(log[0]?.ts).toBe(204);
+      expect(log[ALERT_LOG_CAP - 1]?.ts).toBe(105);
+      expect(clearAlertLog()).toEqual([]);
+      expect(loadAlertLog()).toEqual([]);
+    });
+
+    it("drops corrupt stored entries instead of crashing", () => {
+      window.localStorage.setItem(
+        "ocd.alerts.log",
+        JSON.stringify([{ kind: "nope" }, null, "x"]),
+      );
+      expect(loadAlertLog()).toEqual([]);
+    });
   });
 
   it("ignores a disabled budget", () => {

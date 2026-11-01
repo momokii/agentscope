@@ -10,6 +10,9 @@
 import { useState } from "react";
 import { Bell, BellRing } from "lucide-react";
 
+import type { AlertEvent } from "../lib/alerts";
+import RelativeTime from "./RelativeTime";
+
 export interface AlertsConfig {
   enabled: boolean;
   budget: number | null;
@@ -23,6 +26,9 @@ export interface AlertsBellProps {
   onEnable: () => void;
   onTest: () => void;
   unread: number;
+  /** Surfaced triggers, newest-first (persisted; see alerts.ts). */
+  history: AlertEvent[];
+  onClearHistory: () => void;
 }
 
 /** localStorage keys (operator-owned, never leaves the browser). */
@@ -75,6 +81,8 @@ export default function AlertsBell({
   onEnable,
   onTest,
   unread,
+  history,
+  onClearHistory,
 }: AlertsBellProps) {
   const [open, setOpen] = useState(false);
   return (
@@ -162,6 +170,33 @@ export default function AlertsBell({
             Budget compares against today's message spend (both harnesses).
             Alerts fire once per session spell / run / day.
           </p>
+          <div className="alerts-history">
+            <div className="alerts-history-head mono">
+              <span>history ({history.length})</span>
+              {history.length > 0 && (
+                <button type="button" className="filter-chip" onClick={onClearHistory}>
+                  <span>Clear</span>
+                </button>
+              )}
+            </div>
+            {history.length === 0 ? (
+              <p className="alerts-note">No alerts surfaced yet this browser.</p>
+            ) : (
+              <ul className="alerts-log">
+                {history.slice(0, 20).map((event) => (
+                  <li key={`${event.ts}-${event.kind}-${event.sessionId ?? "fleet"}`}>
+                    <span className="alerts-log-title">{event.title}</span>
+                    <span className="alerts-log-meta mono">
+                      <RelativeTime updatedRelativeMs={Date.now() - event.ts} />
+                      {" · "}
+                      {event.kind}
+                    </span>
+                    <span className="alerts-log-why">{event.why}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -750,6 +750,58 @@ a:focus-visible {
   line-height: 1.5;
 }
 
+.alerts-history {
+  border-top: var(--border);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.alerts-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--fs-11);
+  color: var(--ink-300);
+}
+
+.alerts-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.alerts-log li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--ink-800);
+  padding-top: 6px;
+}
+
+.alerts-log-title {
+  font-size: var(--fs-12);
+  color: var(--ink-100);
+}
+
+.alerts-log-meta {
+  font-size: var(--fs-11);
+  color: var(--ink-400);
+}
+
+.alerts-log-why {
+  font-size: var(--fs-11);
+  color: var(--ink-300);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .toasts {
   position: fixed;
   right: 12px;
@@ -2630,6 +2682,14 @@ button.tools-row:hover {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.cost-model-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ----- raw ----- */

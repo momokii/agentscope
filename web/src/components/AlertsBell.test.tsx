@@ -15,6 +15,8 @@ const base = {
   config: { enabled: false, budget: null as number | null },
   supported: true,
   permission: "default" as NotificationPermission,
+  history: [],
+  onClearHistory: () => undefined,
 };
 
 describe("AlertsBell", () => {
@@ -49,6 +51,32 @@ describe("AlertsBell", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /alert settings/i }));
     expect(screen.getByText(/not a secure context/i)).toBeDefined();
+  });
+
+  it("lists surfaced triggers with when and why, newest first", () => {
+    const { container } = render(
+      <AlertsBell
+        {...base}
+        history={[
+          {
+            kind: "budget",
+            title: "Daily budget crossed",
+            body: "b",
+            ts: Date.now() - 60_000,
+            why: "cost_today $5.01 ≥ budget $5.00; fires once per local day",
+          },
+        ]}
+        onChange={() => undefined}
+        onEnable={() => undefined}
+        onTest={() => undefined}
+        unread={0}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /alert settings/i }));
+    expect(screen.getByText("history (1)")).toBeDefined();
+    expect(screen.getByText("Daily budget crossed")).toBeDefined();
+    expect(screen.getByText(/cost_today \$5\.01/)).toBeDefined();
+    expect(container.querySelector(".alerts-log")).not.toBeNull();
   });
 
   it("round-trips config through localStorage", () => {

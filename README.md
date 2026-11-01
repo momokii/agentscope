@@ -257,7 +257,7 @@ controls to make things pass. See `CONTRIBUTING.md`.
 | `web/src/testutils/` | Snapshot + `sessionDetail.fixture.ts` (test-only `SessionDataProvider`) |
 | `web/dist/` | Committed SPA build (fallback so containers build without Node) |
 | `web/DESIGN.md` | Design tokens + anti-slop rules (authoritative for color) |
-| `docs/` | `screenshots/` · `DOCKER_VERIFY.md` (rerun playbook) · `VM_DEPLOY.md` (VM runbook + F2 truth matrix) · `SECURITY.md` (threat model + gate checklist) · `ACTIONS_DEFERRED.md` (why v1 is read-only) |
+| `docs/` | `screenshots/` · `DOCKER_VERIFY.md` (rerun playbook) · `VM_DEPLOY.md` (VM runbook + F2 truth matrix) · `SECURITY.md` (threat model + gate checklist) · `ACTIONS_DEFERRED.md` (why v1 is read-only) · `COST_METHOD.md` (how every cost/token number is counted + opencode-vs-pi differences) |
 | `.omo/` | Work plan + research notepads (decisions, issues, runtime-observability findings) |
 
 ## Security (summary)
@@ -320,6 +320,10 @@ verbatim).
   background refresh; read `metrics_age_ms` (ticking live) before trusting them.
 - **Windowed costs need fixed presets.** Custom `from` dates fall back to lifetime
   totals; per-day attribution beyond today/24h/7d/30d is not computed.
+- **How the numbers are counted:** `docs/COST_METHOD.md` — sources per KPI,
+  opencode-vs-pi differences (session-table rollups vs JSONL-summed usage,
+  cache-write, reasoning placement, provider pricing), the `tokens/hr`
+  now-rate formula, and transcript part parity.
 - **F2 VM truth matrix is outstanding.** The manual 3-pane / orphan / EXITED /
   zombie / CWD-mismatch matrix in `docs/VM_DEPLOY.md` §3 (human-run only).
 

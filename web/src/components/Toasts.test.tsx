@@ -21,6 +21,8 @@ describe("Toasts", () => {
             sessionId: "ses_1",
             title: "Input needed: fix bug",
             body: "alpha · waiting on you",
+            ts: 1_700_000_000_000,
+            why: "status flipped to waiting-input; fires once per waiting spell",
           },
         ]}
         onDismiss={() => undefined}
@@ -36,7 +38,16 @@ describe("Toasts", () => {
     const onDismiss = vi.fn();
     render(
       <Toasts
-        toasts={[{ toastId: 7, kind: "budget", title: "t", body: "b" }]}
+        toasts={[
+          {
+            toastId: 7,
+            kind: "budget",
+            title: "t",
+            body: "b",
+            ts: 1_700_000_000_001,
+            why: "cost_today $5.01 ≥ budget $5.00; fires once per local day",
+          },
+        ]}
         onDismiss={onDismiss}
       />,
     );

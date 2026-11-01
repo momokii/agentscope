@@ -20,6 +20,64 @@ export interface AlertEvent {
   sessionId?: string;
   title: string;
   body: string;
+  /** Unix ms when the trigger fired (set by detectAlerts from nowMs). */
+  ts: number;
+  /** Why it fired: the rule, the observed value, and the threshold. */
+  why: string;
+}
+
+/** localStorage key for the persistent alert history (operator-owned). */
+export const ALERT_LOG_KEY = "ocd.alerts.log";
+
+/** Cap: history is a recent-event log, not an archive. */
+export const ALERT_LOG_CAP = 100;
+
+/**
+ * Persistent alert history: every surfaced alert, newest-first, capped.
+ * Survives reloads (same localStorage ownership as the alerts config);
+ * private-mode failures degrade to an in-memory session log.
+ */
+export function loadAlertLog(): AlertEvent[] {
+  try {
+    const raw = window.localStorage.getItem(ALERT_LOG_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isAlertEvent).slice(0, ALERT_LOG_CAP);
+  } catch {
+    return [];
+  }
+}
+
+function isAlertEvent(v: unknown): v is AlertEvent {
+  if (typeof v !== "object" || v === null) return false;
+  const e = v as Record<string, unknown>;
+  return (
+    (e.kind === "waiting" || e.kind === "long-run" || e.kind === "budget") &&
+    typeof e.title === "string" &&
+    typeof e.body === "string" &&
+    typeof e.ts === "number" &&
+    typeof e.why === "string"
+  );
+}
+
+export function appendAlertLog(prev: AlertEvent[], fresh: AlertEvent[]): AlertEvent[] {
+  const next = [...fresh, ...prev].slice(0, ALERT_LOG_CAP);
+  try {
+    window.localStorage.setItem(ALERT_LOG_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore persistence failures; the in-memory list still renders.
+  }
+  return next;
+}
+
+export function clearAlertLog(): AlertEvent[] {
+  try {
+    window.localStorage.removeItem(ALERT_LOG_KEY);
+  } catch {
+    // Ignore; the in-memory list is what renders.
+  }
+  return [];
 }
 
 /**
@@ -106,6 +164,8 @@ export function detectAlerts(
           sessionId: row.id,
           title: `Input needed: ${row.title}`,
           body: `${row.project} · waiting on you — nothing is generating.`,
+          ts: nowMs,
+          why: `status flipped to waiting-input (was: ${was ?? "absent"}); fires once per waiting spell`,
         });
       }
       tracker.longRunSince.delete(row.id);
@@ -128,6 +188,8 @@ export function detectAlerts(
             sessionId: row.id,
             title: `Long turn: ${row.title}`,
             body: `${row.project} · generating for ${Math.round((nowMs - since) / 60000)}+ min — check whether it's stuck.`,
+            ts: nowMs,
+            why: `generating ${Math.round((nowMs - since) / 60000)}+ min ≥ ${Math.round(options.longRunMs / 60000)} min threshold; fires once per run`,
           });
         }
       } else {
@@ -161,6 +223,8 @@ export function detectAlerts(
         kind: "budget",
         title: "Daily budget crossed",
         body: `Today's spend hit $${next.kpis.cost_today.toFixed(2)} (budget $${options.budget.toFixed(2)}).`,
+        ts: nowMs,
+        why: `cost_today $${next.kpis.cost_today.toFixed(2)} ≥ budget $${options.budget.toFixed(2)}; fires once per local day`,
       });
     }
   }

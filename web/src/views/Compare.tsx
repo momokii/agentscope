@@ -121,7 +121,7 @@ export default function Compare({
             {
               term: "Lines",
               definition:
-                "Two panels — cumulative cost and cumulative tokens — each overlaying one line per session on a shared time base (shorter histories are right-aligned). Hue follows selection order: first pick is accent, then ink-100, ok green, warn amber.",
+                "Two panels — cumulative cost and cumulative tokens — each overlaying one line per session on a shared time base (shorter histories are right-aligned). The curve shape follows each session's activity buckets scaled to its lifetime totals — a burn-rate sketch, not audited per-bucket history (compare the Cost tab or #/history for exact numbers). Hue follows selection order: first pick is accent, then ink-100, ok green, warn amber.",
             },
             {
               term: "Picker",
